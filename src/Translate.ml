@@ -220,9 +220,7 @@ let translate_function_to_pure_aux (trans_ctx : trans_ctx)
       loop_ids_map;
       mk_return = None;
       mk_panic = None;
-      mk_continue = None;
-      mk_break = None;
-      return_target = ReturnFromFunction;
+      exit_handlers = [];
       mut_borrow_to_consumed = BorrowId.Map.empty;
       var_id_to_default = Pure.FVarId.Map.empty;
       abs_id_to_info = AbsId.Map.empty;

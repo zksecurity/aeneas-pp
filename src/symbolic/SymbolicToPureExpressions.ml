@@ -250,10 +250,7 @@ let rec translate_expr (e : S.expr) (ctx : bs_ctx) : texpr =
       (* Translate the end of a function (this is introduced when we reach a
          [return] statement), as if we were returning from the function, then
          deliver the output to the return target *)
-      let output =
-        translate_forward_end return_value ectx e back_e
-          { ctx with return_target = ReturnFromFunction }
-      in
+      let output = translate_forward_end return_value ectx e back_e ctx in
       deliver_return ctx output
   | Loop loop -> translate_loop loop ctx
   | Error (span, msg) -> translate_error span msg
@@ -264,8 +261,8 @@ let rec translate_expr (e : S.expr) (ctx : bs_ctx) : texpr =
       translate_continue_break ctx ~continue:false ectx loop_id input_values
         input_abs
   | Let lete -> translate_let ctx lete
-  | Join (ectx, input_values, input_abs) ->
-      translate_join ctx ectx input_values input_abs
+  | Join (join_id, ectx, input_values, input_abs) ->
+      translate_join ctx join_id ectx input_values input_abs
   | TargetDispatch (input_svs, targets) ->
       translate_target_dispatch input_svs targets ctx
 
@@ -1993,7 +1990,7 @@ and translate_loop (loop : S.loop) (ctx0 : bs_ctx) : texpr =
       bind_inputs ctx0 loop.input_abs loop.input_svalues
     in
 
-    (* Update the [mk_panic], [mk_result], etc. functions *)
+    (* Update [mk_panic], [mk_return] and the exit handlers *)
     let continue_ty = List.map (fun (e : texpr) -> e.ty) inputs in
     let continue_ty = mk_simpl_tuple_ty continue_ty in
     let break_ty = output.ty in
@@ -2006,16 +2003,22 @@ and translate_loop (loop : S.loop) (ctx0 : bs_ctx) : texpr =
       mk_loop_result_fail_texpr_with_error_id ctx.span continue_ty break_ty
         error_failure_id
     in
-    let mk_continue ctx output = mk_continue_texpr ctx.span output break_ty in
-    let mk_break ctx output = mk_break_texpr ctx.span continue_ty output in
+    let exit_handlers : exit_handler list =
+      [
+        {
+          target = ExitLoopContinue;
+          payload_ty = continue_ty;
+          deliver = (fun ctx v -> mk_continue_texpr ctx.span v break_ty);
+        };
+        {
+          target = ExitLoopBreak;
+          payload_ty = break_ty;
+          deliver = (fun ctx v -> mk_break_texpr ctx.span continue_ty v);
+        };
+      ]
+    in
     let ctx =
-      {
-        ctx with
-        mk_panic = Some mk_panic;
-        mk_return = None;
-        mk_continue = Some mk_continue;
-        mk_break = Some mk_break;
-      }
+      { ctx with mk_panic = Some mk_panic; mk_return = None; exit_handlers }
     in
 
     (* Translate the body *)
@@ -2074,12 +2077,12 @@ and translate_continue_break (ctx : bs_ctx) ~(continue : bool)
     ^ String.concat "\n\n" (List.map (texpr_to_string ctx) conts)];
   (* Note that the order between the values and the continuations is not the same
      depending on whether we reach a break or a continue *)
-  let outputs, mk =
-    if continue then (conts @ values, ctx.mk_continue)
-    else (values @ conts, ctx.mk_break)
+  let outputs, target =
+    if continue then (conts @ values, S.ExitLoopContinue)
+    else (values @ conts, S.ExitLoopBreak)
   in
   let output = mk_simpl_tuple_texpr ctx.span outputs in
-  Option.get mk ctx output
+  deliver_exit ctx target output
 
 and translate_let (ctx0 : bs_ctx) (lete : S.let_expr) : texpr =
   let ctx = ctx0 in
@@ -2144,16 +2147,71 @@ and translate_let (ctx0 : bs_ctx) (lete : S.let_expr) : texpr =
     ^ "\n\n- translated outputs:\n"
     ^ String.concat "\n" (List.map (tpat_to_string ctx) outputs)];
 
-  (* If the bound expression may return, it evaluates to the sum of the
-     outputs and of the output of the function *)
-  let return_ty = compute_raw_output_ty_from_decomposed ctx.sg.fun_ty in
+  (* The branches of the bound expression which reach the join deliver the
+     outputs. If some branches exit to other targets (see
+     {!SymbolicAst.exit_target}), the bound expression evaluates to the sum of
+     the outputs and of the value delivered to the exit target: the payload,
+     which is itself the (right-nested) sum of the values of the exit targets.
+     The let-binding then forwards the payload to the handler of the exit
+     target in the current context. *)
+  let own = S.ExitJoin lete.join_id in
+  let exits =
+    List.map
+      (fun target ->
+        [%unwrap_with_span] ctx.span
+          (List.find_opt
+             (fun (h : exit_handler) -> h.target = target)
+             ctx.exit_handlers)
+          "No handler for the exit target")
+      lete.exits
+  in
+  let rec payload_ty (exits : exit_handler list) : ty =
+    match exits with
+    | [] -> [%internal_error] ctx.span
+    | [ h ] -> h.payload_ty
+    | h :: exits -> mk_sum_ty h.payload_ty (payload_ty exits)
+  in
   let bound_ty =
-    if lete.can_return then mk_sum_ty output.ty return_ty else output.ty
+    if exits = [] then output.ty else mk_sum_ty output.ty (payload_ty exits)
   in
 
   (* Translate the bound expression *)
   let bound_e =
-    (* Update the [mk_panic], [mk_continue], etc. functions. A return in the
+    let mk_ok (v : texpr) : texpr = mk_result_ok_texpr ctx.span v in
+    let own_handler : exit_handler =
+      if exits = [] then
+        { target = own; payload_ty = output.ty; deliver = (fun _ v -> mk_ok v) }
+      else
+        let payload_ty = payload_ty exits in
+        {
+          target = own;
+          payload_ty = output.ty;
+          deliver =
+            (fun ctx v -> mk_ok (mk_sum_left_texpr ctx.span v payload_ty));
+        }
+    in
+    (* Inject a value in the payload, at the position of the [i]th exit *)
+    let rec inject (i : int) (exits : exit_handler list) (v : texpr) : texpr =
+      match exits with
+      | [] -> [%internal_error] ctx.span
+      | [ _ ] -> v
+      | h :: exits' ->
+          if i = 0 then mk_sum_left_texpr ctx.span v (payload_ty exits')
+          else mk_sum_right_texpr ctx.span h.payload_ty (inject (i - 1) exits' v)
+    in
+    let exit_handlers =
+      List.mapi
+        (fun i (h : exit_handler) ->
+          {
+            h with
+            deliver =
+              (fun ctx v ->
+                mk_ok
+                  (mk_sum_right_texpr ctx.span output.ty (inject i exits v)));
+          })
+        exits
+    in
+    (* Update the [mk_panic] and [mk_return] functions. A return in the
        bound expression is translated as from the function (see
        {!deliver_return}) *)
     let mk_panic =
@@ -2163,12 +2221,9 @@ and translate_let (ctx0 : bs_ctx) (lete : S.let_expr) : texpr =
       {
         ctx with
         mk_panic = Some mk_panic;
-        mk_return = (if lete.can_return then ctx.mk_return else None);
-        mk_continue = None;
-        mk_break = None;
-        return_target =
-          (if lete.can_return then ReturnThroughLet (output.ty, return_ty)
-           else NoReturn);
+        mk_return =
+          (if List.mem S.ExitReturn lete.exits then ctx.mk_return else None);
+        exit_handlers = own_handler :: exit_handlers;
       }
     in
 
@@ -2181,13 +2236,32 @@ and translate_let (ctx0 : bs_ctx) (lete : S.let_expr) : texpr =
   let next_e = translate_expr lete.next_expr ctx in
 
   (* Create the let-binding *)
-  if lete.can_return then (
-    (* [let x <- bound_e in match x with | inl output => next_e | inr v => return v] *)
+  if exits <> [] then (
+    (* [let x <- bound_e in match x with | inl output => next_e | inr p => ...] *)
     let ctx, x = fresh_var None bound_ty ctx in
-    let ctx, v = fresh_var None return_ty ctx in
+    (* Forward the payload to the handlers of the current context *)
+    let rec dispatch (ctx : bs_ctx) (exits : exit_handler list) (p : texpr) :
+        texpr =
+      match exits with
+      | [] -> [%internal_error] ctx.span
+      | [ h ] -> h.deliver ctx p
+      | h :: exits' ->
+          let ctx, v = fresh_var None h.payload_ty ctx in
+          let ctx, p' = fresh_var None (payload_ty exits') ctx in
+          let inl = mk_adt_pat p.ty (Some sum_left_id) [ mk_tpat_from_fvar None v ] in
+          let inr = mk_adt_pat p.ty (Some sum_right_id) [ mk_tpat_from_fvar None p' ] in
+          mk_switch __FILE__ __LINE__ ctx.span p
+            (Match
+               [
+                 close_branch ctx.span inl (h.deliver ctx (mk_texpr_from_fvar v));
+                 close_branch ctx.span inr
+                   (dispatch ctx exits' (mk_texpr_from_fvar p'));
+               ])
+    in
+    let ctx, p = fresh_var None (payload_ty exits) ctx in
     let inl = mk_adt_pat bound_ty (Some sum_left_id) [ output ] in
-    let inr = mk_adt_pat bound_ty (Some sum_right_id) [ mk_tpat_from_fvar None v ] in
-    let exit_e = return_value ctx (mk_texpr_from_fvar v) in
+    let inr = mk_adt_pat bound_ty (Some sum_right_id) [ mk_tpat_from_fvar None p ] in
+    let exit_e = dispatch ctx exits (mk_texpr_from_fvar p) in
     let match_e =
       mk_switch __FILE__ __LINE__ ctx.span (mk_texpr_from_fvar x)
         (Match
@@ -2198,8 +2272,9 @@ and translate_let (ctx0 : bs_ctx) (lete : S.let_expr) : texpr =
       bound_e match_e)
   else [%add_loc] mk_closed_checked_let ctx true output bound_e next_e
 
-and translate_join (ctx : bs_ctx) (ectx : C.eval_ctx)
-    (input_values : V.tvalue list) (input_abs : V.abs list) : texpr =
+and translate_join (ctx : bs_ctx) (join_id : S.symbolic_expr_id)
+    (ectx : C.eval_ctx) (input_values : V.tvalue list) (input_abs : V.abs list)
+    : texpr =
   [%ldebug
     "- input_values:\n"
     ^ String.concat "\n" (List.map (tvalue_to_string ctx) input_values)
@@ -2216,40 +2291,31 @@ and translate_join (ctx : bs_ctx) (ectx : C.eval_ctx)
      depending on whether we reach a break or a continue *)
   let outputs = values @ conts in
   let output = mk_simpl_tuple_texpr ctx.span outputs in
-  let output =
-    match ctx.return_target with
-    | ReturnFromFunction | NoReturn -> output
-    | ReturnThroughLet (_, return_ty) ->
-        mk_sum_left_texpr ctx.span output return_ty
+  deliver_exit ctx (ExitJoin join_id) output
+
+(** Deliver a value to an exit target from the current position *)
+and deliver_exit (ctx : bs_ctx) (target : S.exit_target) (v : texpr) : texpr =
+  let handler =
+    [%unwrap_with_span] ctx.span
+      (List.find_opt
+         (fun (h : exit_handler) -> h.target = target)
+         ctx.exit_handlers)
+      "No handler for the exit target"
   in
-  mk_result_ok_texpr ctx.span output
+  handler.deliver ctx v
 
 (** Deliver the output of the function, computed as if we were returning from
-    the function, to the current return target. *)
+    the function (see {!translate_forward_end}), to the return target. *)
 and deliver_return (ctx : bs_ctx) (output : texpr) : texpr =
-  match ctx.return_target with
-  | ReturnFromFunction -> output
-  | NoReturn -> [%internal_error] ctx.span
-  | ReturnThroughLet (_, return_ty) ->
-      if ctx.sg.fun_ty.fwd_info.effect_info.can_fail then
-        (* The output lives in the error monad: bind it *)
-        let ctx, v = fresh_var None return_ty ctx in
-        [%add_loc] mk_closed_checked_let ctx true
-          (mk_tpat_from_fvar None v)
-          output
-          (return_value ctx (mk_texpr_from_fvar v))
-      else return_value ctx output
-
-(** Return a value of the output type of the function (the value returned by
-    the forward function grouped with the backward functions) to the current
-    return target. *)
-and return_value (ctx : bs_ctx) (v : texpr) : texpr =
-  match ctx.return_target with
-  | ReturnFromFunction ->
-      [%unwrap_with_span] ctx.span ctx.mk_return "Internal error" ctx (Some v)
-  | NoReturn -> [%internal_error] ctx.span
-  | ReturnThroughLet (outputs_ty, _) ->
-      mk_result_ok_texpr ctx.span (mk_sum_right_texpr ctx.span outputs_ty v)
+  if ctx.sg.fun_ty.fwd_info.effect_info.can_fail then
+    (* The output lives in the error monad: bind it *)
+    let return_ty = compute_raw_output_ty_from_decomposed ctx.sg.fun_ty in
+    let ctx, v = fresh_var None return_ty ctx in
+    [%add_loc] mk_closed_checked_let ctx true
+      (mk_tpat_from_fvar None v)
+      output
+      (deliver_exit ctx ExitReturn (mk_texpr_from_fvar v))
+  else deliver_exit ctx ExitReturn output
 
 and translate_substitute_abs_ids (ctx : bs_ctx) (eid : S.symbolic_expr_id)
     (aids : V.abs_id V.AbsId.Map.t) (e : S.expr) : texpr =

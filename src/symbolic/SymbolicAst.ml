@@ -231,9 +231,11 @@ type expr =
   | LoopBreak of (Contexts.eval_ctx[@opaque]) * loop_id * tvalue list * abs list
   | Loop of loop  (** Loop: call to a loop *)
   | Let of let_expr  (** A let binding. See the comments for [let_expr]. *)
-  | Join of (Contexts.eval_ctx[@opaque]) * tvalue list * abs list
-      (** The output of an expression which is bound (this is the result of
-          matching the context at the end of a branch with the joined context).
+  | Join of
+      symbolic_expr_id * (Contexts.eval_ctx[@opaque]) * tvalue list * abs list
+      (** The output of an expression which is bound by the let-binding with
+          the given join id (this is the result of matching the context at the
+          end of a branch with the joined context).
 
           Ex.:
           {[
@@ -309,10 +311,14 @@ and let_expr = {
   out_abs : abs list;
       (** The abstractions introduced in the joined environment (those are
           output by the bound expression) *)
-  can_return : bool;
-      (** Whether some branches of the bound expression return from the
-          function rather than reach the join (they contain [ForwardEnd]
-          nodes): those don't execute [next_expr]. *)
+  join_id : symbolic_expr_id;
+      (** The id of the join: the [Join] nodes of the bound expression which
+          reach it carry this id *)
+  exits : exit_target list;
+      (** Where the branches of the bound expression which don't reach the
+          join go (they don't execute [next_expr]): they return from the
+          function (they contain [ForwardEnd] nodes) or reach the join of an
+          enclosing let-binding (they contain its [Join] nodes) *)
   next_expr : expr;  (** The expression for *after* the let *)
   span : Meta.span;  (** Information about the origin of the expression *)
 }
@@ -330,6 +336,15 @@ and expansion =
   | ExpandInt of integer_type * (integer_value * expr) list * expr
       (** An integer expansion (i.e, a switch over an integer). The last
           expression is for the "otherwise" branch. *)
+
+(** Where the branches of the bound expression of a let-binding which don't
+    reach its join go *)
+and exit_target =
+  | ExitReturn  (** A return from the function *)
+  | ExitJoin of symbolic_expr_id
+      (** The join of an enclosing let-binding *)
+  | ExitLoopContinue  (** The next iteration of the enclosing loop *)
+  | ExitLoopBreak  (** The exit of the enclosing loop *)
 
 (* Remark: this type doesn't have to be mutually recursive with the other
    types, but it makes it easy to generate the visitors *)

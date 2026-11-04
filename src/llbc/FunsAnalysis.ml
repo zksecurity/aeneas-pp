@@ -197,7 +197,10 @@ let analyze_module (m : crate) (funs_map : fun_decl FunDeclId.Map.t) :
             super#visit_Panic env
 
           method! visit_Loop env loop =
-            can_diverge := true;
+            (* A forward scope never iterates (see
+               {!LlbcAstUtils.loop_is_forward_scope}) *)
+            if not (LlbcAstUtils.loop_is_forward_scope loop) then
+              can_diverge := true;
             super#visit_Loop env loop
         end
       in

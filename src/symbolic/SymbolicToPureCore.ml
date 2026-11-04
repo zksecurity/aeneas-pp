@@ -143,21 +143,6 @@ type fun_sigs = {
 
 (** Body synthesis context *)
 
-(** Where a return from the function delivers its output (the value returned
-    by the forward function grouped with the backward functions). *)
-type return_target =
-  | ReturnFromFunction  (** We return the output from the function *)
-  | NoReturn
-      (** We are in the bound expression of a let-binding which doesn't
-          return *)
-  | ReturnThroughLet of ty * ty
-      (** We are in the bound expression of a let-binding whose bound
-          expression may return (see {!SymbolicAst.let_expr}): the bound
-          expression evaluates to the sum of the outputs of the let-binding
-          (the left type) and of the output of the function (the right type),
-          and the let-binding forwards the latter to its own return target. *)
-[@@deriving show]
-
 type bs_ctx = {
   (* TODO: there are a lot of duplications with the various decls ctx *)
   span : Meta.span;  (** The span information about the current declaration *)
@@ -248,10 +233,10 @@ type bs_ctx = {
       (** Small helper: translate a [fail] expression.
 
           We initialize this at [None]. *)
-  mk_continue : (bs_ctx -> texpr -> texpr) option;
-  mk_break : (bs_ctx -> texpr -> texpr) option;
-  return_target : return_target;
-      (** Where a return from the function delivers its output *)
+  exit_handlers : exit_handler list;
+      (** The handlers for the exit targets reachable from the current
+          position: the join and the exits of the innermost let-binding, or
+          the exits of the function or of the loop body. *)
   mut_borrow_to_consumed : texpr V.BorrowId.Map.t;
       (** A map from mutable borrows consumed by region abstractions to consumed
           values.
@@ -327,6 +312,16 @@ type bs_ctx = {
       (** Keep track of the [SymbolicPlaces] meta-information that we already
           inserted, to prevent duplication (there tends to be a *lot* of
           meta-information in the generated expressions. *)
+}
+
+(** How to deliver a value to an exit target (see {!SymbolicAst.exit_target})
+    from the current position: [payload_ty] is the type of the value (the
+    output of the function or the outputs of a join), and [deliver] builds the
+    expression which delivers it. *)
+and exit_handler = {
+  target : S.exit_target;
+  payload_ty : ty;
+  deliver : (bs_ctx -> texpr -> texpr[@opaque]);
 }
 [@@deriving show]
 

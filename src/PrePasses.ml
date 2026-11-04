@@ -487,6 +487,23 @@ exception FoundStatement of statement
       }
       return;
     ]} *)
+(** Whether a block contains a forward scope (see
+    {!LlbcAstUtils.loop_is_forward_scope}) *)
+let block_contains_forward_scope (b : block) : bool =
+  let visitor =
+    object
+      inherit [_] iter_statement as super
+
+      method! visit_Loop env body =
+        if loop_is_forward_scope body then raise Found
+        else super#visit_Loop env body
+    end
+  in
+  try
+    visitor#visit_block () b;
+    false
+  with Found -> true
+
 let update_loops (crate : crate) (f : fun_decl) : fun_decl =
   let f0 = f in
   let span = f.item_meta.span in
@@ -503,16 +520,26 @@ let update_loops (crate : crate) (f : fun_decl) : fun_decl =
            (the reason is that we might have moved some of those statements
            inside the current statement).
       *)
-      method update_statement (depth : int) (st : statement)
+      method update_statement (scopes : bool list) (st : statement)
           (after : statement list) : statement list * statement list =
         match st.kind with
+        | Loop loop when loop_is_forward_scope loop ->
+            (* A forward scope: the control flow can't come back to it, and the
+               interpreter evaluates it once *)
+            ([ { st with kind = self#visit_Loop (false :: scopes) loop } ], after)
         | Loop loop -> (
             (* Recursively update the loop.
 
                Note that doing this will raise an exception if we find a loop with
                an early return. *)
-            try ([ { st with kind = self#visit_Loop (depth + 1) loop } ], after)
+            try ([ { st with kind = self#visit_Loop (true :: scopes) loop } ], after)
             with FoundStatement return_st ->
+              (* The transformations below see all the breaks in the loop as
+                 breaks out of it *)
+              [%cassert] span
+                (not (block_contains_forward_scope loop))
+                "Early returns inside of loops containing forward scopes are \
+                 not supported yet";
               (* An exception was raised: it means we found a return in the loop: attempt
                  to replace it with a break.
 
@@ -539,7 +566,7 @@ let update_loops (crate : crate) (f : fun_decl) : fun_decl =
                 let block_replace (b : block) : block =
                   let visitor =
                     object
-                      inherit [_] map_statement
+                      inherit [_] map_statement as super
                       method! visit_Loop i loop = super#visit_Loop (i + 1) loop
 
                       method! visit_Return i =
@@ -551,8 +578,9 @@ let update_loops (crate : crate) (f : fun_decl) : fun_decl =
                   visitor#visit_block 0 b
                 in
                 let loop = block_replace loop in
-                let loop : statement = { st with kind = Loop loop } in
-                let loop = super#visit_statement depth loop in
+                let loop : statement =
+                  { st with kind = self#visit_Loop (true :: scopes) loop }
+                in
                 let return : statement =
                   {
                     span = st.span;
@@ -618,40 +646,56 @@ let update_loops (crate : crate) (f : fun_decl) : fun_decl =
                 in
 
                 let loop = block_visitor#visit_block 0 loop in
-                let loop : statement = { st with kind = Loop loop } in
-                let loop = super#visit_statement depth loop in
+                let loop : statement =
+                  { st with kind = self#visit_Loop (true :: scopes) loop }
+                in
                 ([ loop; return_st ], []))
-        | _ -> ([ self#visit_statement depth st ], after)
+        | _ -> ([ self#visit_statement scopes st ], after)
 
-      method! visit_block depth (block : block) : block =
+      method! visit_block scopes (block : block) : block =
         let rec update (stl : statement list) : statement list =
           match stl with
           | [] -> []
           | st :: stl ->
-              let stl0, stl1 = self#update_statement depth st stl in
+              let stl0, stl1 = self#update_statement scopes st stl in
               stl0 @ update stl1
         in
         { block with statements = update block.statements }
 
-      method! visit_Break depth i =
-        [%cassert] span (i = 0) "Breaks to outer loops are not supported yet";
-        super#visit_Break depth i
+      (* The environment is the list of the loops enclosing the statement, from
+         the innermost one: [true] for a loop which may iterate, [false] for a
+         forward scope. The [break] and [continue] statements can jump forward
+         out of forward scopes, but not out of a loop which may iterate to an
+         enclosing one. *)
+      method! visit_Break scopes i =
+        [%cassert] span
+          (not (List.exists Fun.id (List.filteri (fun j _ -> j < i) scopes)))
+          "Breaks to outer loops are not supported yet";
+        super#visit_Break scopes i
 
-      method! visit_Continue depth i =
-        [%cassert] span (i = 0) "Continue to outer loops are not supported yet";
-        super#visit_Continue depth i
+      method! visit_Continue scopes i =
+        [%cassert] span
+          ((not (List.exists Fun.id (List.filteri (fun j _ -> j < i) scopes)))
+          && List.nth_opt scopes i = Some true)
+          "Continue to outer loops are not supported yet";
+        super#visit_Continue scopes i
 
-      method! visit_statement depth st =
+      method! visit_statement scopes st =
         match st.kind with
         | Return ->
+            let depth = List.length (List.filter Fun.id scopes) in
             [%cassert] span (depth <= 1)
               "Returns inside of nested loops are not supported yet";
+            [%cassert] span
+              (depth = 0 || List.hd scopes)
+              "Returns inside of forward scopes inside of loops are not \
+               supported yet";
             (* If we are inside a loop we need to get rid of the return.
 
                Note that raising an exception containing the full return
                statement allows us to use its span when moving it after the loop. *)
             if depth = 1 then raise (FoundStatement st) else st
-        | _ -> super#visit_statement depth st
+        | _ -> super#visit_statement scopes st
 
       method! visit_Return _ =
         (* The Return case should have been caught by the [visit_statement] method *)
@@ -663,7 +707,7 @@ let update_loops (crate : crate) (f : fun_decl) : fun_decl =
   let body =
     match f.body with
     | StructuredBody body ->
-        StructuredBody { body with body = visitor#visit_block 0 body.body }
+        StructuredBody { body with body = visitor#visit_block [] body.body }
     | other -> other
   in
 

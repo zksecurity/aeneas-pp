@@ -46,7 +46,22 @@ let translate_fun_decl_body (ctx : bs_ctx) (signature : fun_sig) (body : S.expr)
     let output = mk_simpl_tuple_ty tys in
     mk_output output
   in
-  let ctx = { ctx with mk_return = Some mk_return; mk_panic = Some mk_panic } in
+  (* The returns from the function deliver its output with [mk_return] *)
+  let return_handler : exit_handler =
+    {
+      target = ExitReturn;
+      payload_ty = compute_raw_output_ty_from_decomposed ctx.sg.fun_ty;
+      deliver = (fun ctx v -> mk_return ctx (Some v));
+    }
+  in
+  let ctx =
+    {
+      ctx with
+      mk_return = Some mk_return;
+      mk_panic = Some mk_panic;
+      exit_handlers = [ return_handler ];
+    }
+  in
   let body = translate_expr body ctx in
   (* Sanity check *)
   type_check_texpr ctx body;

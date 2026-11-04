@@ -117,8 +117,8 @@ let rec expr_to_string (env : fmt_env) (indent : string) (indent_incr : string)
   | LoopBreak (ectx, loop_id, values, abs) ->
       loop_continue_break_to_string env indent indent_incr ~is_continue:false
         ectx loop_id values abs
-  | Join (ectx, values, abs) ->
-      join_to_string env indent indent_incr ectx values abs
+  | Join (join_id, ectx, values, abs) ->
+      join_to_string env indent indent_incr join_id ectx values abs
   | Let lete -> let_expr_to_string env indent indent_incr lete
   | Meta (_, next) -> expr_to_string env indent indent_incr next
   | Error (_, error) -> indent ^ "ERROR(" ^ error ^ ")"
@@ -165,8 +165,9 @@ and loop_continue_break_to_string (env : fmt_env) (indent : string)
   ^ "values = [\n" ^ String.concat "" values ^ indent1 ^ "]\n\n" ^ indent1
   ^ "abs = [\n" ^ String.concat "" abs ^ indent1 ^ "]\n" ^ indent ^ "}"
 
-and join_to_string (env : fmt_env) (indent : string) (indent_incr : string) _ctx
-    (values : tvalue list) (abs : abs list) : string =
+and join_to_string (env : fmt_env) (indent : string) (indent_incr : string)
+    (join_id : symbolic_expr_id) _ctx (values : tvalue list) (abs : abs list) :
+    string =
   let indent1 = indent ^ indent_incr in
   let indent2 = indent1 ^ indent_incr in
   let values =
@@ -182,7 +183,9 @@ and join_to_string (env : fmt_env) (indent : string) (indent_incr : string) _ctx
         ^ ",\n")
       abs
   in
-  indent ^ "@join" ^ " {\n" ^ indent1 ^ "values = [\n" ^ String.concat "" values
+  indent ^ "@join@"
+  ^ SymbolicExprId.to_string join_id
+  ^ " {\n" ^ indent1 ^ "values = [\n" ^ String.concat "" values
   ^ indent1 ^ "]\n\n" ^ indent1 ^ "abs = [\n" ^ String.concat "" abs ^ indent1
   ^ "]\n" ^ indent ^ "}"
 
@@ -259,7 +262,18 @@ and let_expr_to_string (env : fmt_env) (indent : string) (indent_incr : string)
   let indent2 = indent1 ^ indent_incr in
   let next_expr = expr_to_string env indent2 indent_incr lete.next_expr in
   let bound_expr = expr_to_string env indent2 indent_incr lete.bound_expr in
-  indent ^ "@let {" ^ "\n" ^ indent1 ^ "out_svalues= "
+  let exit_target_to_string (t : exit_target) : string =
+    match t with
+    | ExitReturn -> "return"
+    | ExitJoin id -> "join@" ^ SymbolicExprId.to_string id
+    | ExitLoopContinue -> "continue"
+    | ExitLoopBreak -> "break"
+  in
+  indent ^ "@let {" ^ "\n" ^ indent1 ^ "join_id= "
+  ^ SymbolicExprId.to_string lete.join_id
+  ^ "\n" ^ indent1 ^ "exits= "
+  ^ Print.list_to_string ~sep:", " exit_target_to_string lete.exits
+  ^ "\n" ^ indent1 ^ "out_svalues= "
   ^ Print.list_to_string ~sep:", "
       (fun (v : symbolic_value) -> SymbolicValueId.to_string v.sv_id)
       lete.out_svalues

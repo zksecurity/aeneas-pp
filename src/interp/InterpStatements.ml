@@ -638,6 +638,59 @@ let eval_global_as_fresh_symbolic_value (span : Meta.span)
       in
       (ctx, mk_tvalue_from_symbolic_value sval, ty, cc)
 
+(** Where [break i] goes: the end of the [i]th enclosing loop, which is a
+    forward scope (see {!LlbcAstUtils.loop_is_forward_scope}) or the innermost
+    loop which may iterate. [None] if the break leaves a loop which may iterate
+    to reach an outer one. *)
+let break_target (config : config) (i : int) : SA.exit_target option =
+  let rec find (scopes : loop_scope list) (i : int) =
+    match (scopes, i) with
+    | ForwardScope id :: _, 0 -> Some (SA.ExitJoin id)
+    | RealLoop :: _, 0 -> Some SA.ExitLoopBreak
+    | ForwardScope _ :: scopes, _ -> find scopes (i - 1)
+    | RealLoop :: _, _ | [], _ -> None
+  in
+  find config.loop_scopes i
+
+(** Where [continue i] goes: the next iteration of the innermost loop which
+    may iterate, if it is the [i]th enclosing loop. *)
+let continue_target (config : config) (i : int) : SA.exit_target option =
+  let rec find (scopes : loop_scope list) (i : int) =
+    match (scopes, i) with
+    | RealLoop :: _, 0 -> Some SA.ExitLoopContinue
+    | ForwardScope _ :: scopes, _ when i > 0 -> find scopes (i - 1)
+    | _ -> None
+  in
+  find config.loop_scopes i
+
+(** Whether we can join the contexts at the end of the branches of a switch:
+    the [break] and [continue] statements exiting the branches must have exit
+    targets (see {!break_target} and {!continue_target}). *)
+let branches_can_join (config : config) (branches : block list) : bool =
+  List.for_all
+    (fun b ->
+      let e = block_control_effects b in
+      Collections.IntSet.for_all
+        (fun i -> Option.is_some (continue_target config i))
+        e.continues
+      && Collections.IntSet.for_all
+           (fun i -> Option.is_some (break_target config i))
+           e.breaks)
+    branches
+
+(** Where a branch which doesn't reach the join of a switch or of a forward
+    scope goes *)
+let exit_target_of_result (config : config) (span : Meta.span)
+    (res : statement_eval_res) : SA.exit_target =
+  let target =
+    match res with
+    | Return -> Some SA.ExitReturn
+    | Break i -> break_target config i
+    | Continue i -> continue_target config i
+    | Unit | Panic -> None
+  in
+  [%unwrap_with_span] span target "Internal error"
+
 (** Evaluate a statement. *)
 let rec eval_statement (config : config) (st : statement) : stl_cm_fun =
  fun ctx ->
@@ -797,8 +850,14 @@ and eval_statement_raw (config : config) (st : statement) : stl_cm_fun =
   | StorageLive _ | Nop ->
       ([ (ctx, Unit) ], cf_singleton __FILE__ __LINE__ st.span)
   | Loop loop_body ->
-      let eval_loop_body = eval_block config loop_body in
-      InterpLoops.eval_loop config st.span eval_loop_body ctx
+      if loop_is_forward_scope loop_body then
+        eval_forward_scope config st.span loop_body ctx
+      else
+        let body_config =
+          { config with loop_scopes = RealLoop :: config.loop_scopes }
+        in
+        let eval_loop_body = eval_block body_config loop_body in
+        InterpLoops.eval_loop config st.span eval_loop_body ctx
   | Switch (data, branches) -> eval_switch config st.span data branches ctx
   | _ ->
       [%craise] st.span ("unsupported statement: " ^ show_statement_kind st.kind)
@@ -905,8 +964,7 @@ and eval_switch_raw (config : config) (span : Meta.span) (data : switch_data)
             in
             (* Check if we should join the states after the if then else *)
             let join =
-              (not (block_has_escaping_break_continue true_block))
-              && not (block_has_escaping_break_continue false_block)
+              branches_can_join config [ true_block; false_block ]
             in
             let resl_true = eval_block config true_block true_ctx in
             let resl_false = eval_block config false_block false_ctx in
@@ -919,7 +977,10 @@ and eval_switch_raw (config : config) (span : Meta.span) (data : switch_data)
               | _ -> [%internal_error] span
             in
             if join then
-              try eval_switch_with_join config span cc ctx0 ctx_resl
+              try
+                eval_switch_with_join config span
+                  (ctx0.fresh_symbolic_expr_id ())
+                  ~always_bind:false cc ctx0 ctx_resl
               with Errors.RFailure ->
                 (* If the join threw a recoverable error we do not join
                    and simply duplicate the code *)
@@ -963,8 +1024,7 @@ and eval_switch_raw (config : config) (span : Meta.span) (data : switch_data)
 
             (* Should we join the contexts after the switch? *)
             let join =
-              (not (List.exists block_has_escaping_break_continue target_blocks))
-              && not (block_has_escaping_break_continue otherwise)
+              branches_can_join config (otherwise :: target_blocks)
             in
             let resl, cf =
               comp_seqs __FILE__ __LINE__ span
@@ -977,7 +1037,10 @@ and eval_switch_raw (config : config) (span : Meta.span) (data : switch_data)
             let cf = cc_comp cc cf in
             if join then
               (* Join the contexts *)
-              try eval_switch_with_join config span cf ctx0 resl
+              try
+                eval_switch_with_join config span
+                  (ctx0.fresh_symbolic_expr_id ())
+                  ~always_bind:false cf ctx0 resl
               with Errors.RFailure ->
                 (* If the join threw a recoverable error we do not join
                    and simply duplicate the code *)
@@ -1030,12 +1093,15 @@ and eval_switch_raw (config : config) (span : Meta.span) (data : switch_data)
             in
             (* Should we join the contexts after the match? *)
             let join =
-              not (List.exists block_has_escaping_break_continue branches)
+              branches_can_join config branches
             in
             let ctx_resl, cf = comp_seqs __FILE__ __LINE__ span resl in
             let cc = cc_comp cf_expand cf in
             if join then (* Join the contexts *)
-              try eval_switch_with_join config span cc ctx0 ctx_resl
+              try
+                eval_switch_with_join config span
+                  (ctx0.fresh_symbolic_expr_id ())
+                  ~always_bind:false cc ctx0 ctx_resl
               with Errors.RFailure ->
                 (* If the join threw a recoverable error we do not join
                    and simply duplicate the code *)
@@ -1063,26 +1129,60 @@ and eval_switch_raw (config : config) (span : Meta.span) (data : switch_data)
       execution because of a panic statement). The continuation expects the
       symbolic expression for what happens at the end of the branch, and
       reconstructs the expression for the full branch. *)
+(** Evaluate a loop which never iterates (see
+    {!LlbcAstUtils.loop_is_forward_scope}): the [break] statements targeting it
+    jump forward to the code after it. We evaluate its body once and join the
+    contexts reaching the end of the scope. *)
+and eval_forward_scope (config : config) (span : Meta.span) (body : block) :
+    stl_cm_fun =
+ fun ctx ->
+  let join_id = ctx.fresh_symbolic_expr_id () in
+  let body_config =
+    { config with loop_scopes = ForwardScope join_id :: config.loop_scopes }
+  in
+  let ctx_resl, cf = eval_block body_config body ctx in
+  (* The [break] statements targeting the scope continue after it; the
+     others target loops enclosing the scope *)
+  let ctx_resl =
+    List.map
+      (fun (ctx, res) ->
+        let res =
+          match res with
+          | Break 0 -> Unit
+          | Break i -> Break (i - 1)
+          | Continue i ->
+              [%sanity_check] span (i > 0);
+              Continue (i - 1)
+          | Return | Panic -> res
+          | Unit -> [%internal_error] span
+        in
+        (ctx, res))
+      ctx_resl
+  in
+  eval_switch_with_join config span join_id ~always_bind:true cf ctx ctx_resl
+
 and eval_switch_with_join (config : config) (span : Meta.span)
+    (join_id : SA.symbolic_expr_id) ~(always_bind : bool)
     (cf : SA.expr list -> SA.expr) (ctx0 : eval_ctx)
     (ctx_resl : (eval_ctx * statement_eval_res) list) :
     (eval_ctx * statement_eval_res) list * (SA.expr list -> SA.expr) =
   (* We join the contexts of the branches which continue after the switch
-     ([Unit]). The branches may also return: those results are transmitted as
-     they are, and the code they lead to is part of the bound expression of the
-     let-binding we generate. Break and continue don't happen as we attempt to
-     join only if the code in the branches doesn't contain break or continue
-     statements exiting the switch. Panics don't produce results: we stop the
-     symbolic execution there (we simply synthesize a panic node in the
-     symbolic AST). *)
-  [%sanity_check] span
-    (List.for_all (fun (_, res) -> res = Unit || res = Return) ctx_resl);
+     ([Unit]). The other branches return or jump forward out of an enclosing
+     forward scope: those results are transmitted as they are, and the code
+     they lead to is part of the bound expression of the let-binding we
+     generate (see {!exit_target_of_result}). Panics don't produce results: we
+     stop the symbolic execution there (we simply synthesize a panic node in
+     the symbolic AST).
+
+     [always_bind]: introduce the let-binding even if there is a single
+     context to join (the joins of forward scopes are the targets of the
+     branches of nested let-bindings which jump out of them). *)
   let ctxl =
     List.filter_map
       (fun (ctx, res) -> if res = Unit then Some ctx else None)
       ctx_resl
   in
-  if List.length ctxl <= 1 then
+  if ctxl = [] || (List.length ctxl = 1 && not always_bind) then
     (* No need to join the contexts: continue with the current context, and
        inline what happens after the switch inside the branching expression. *)
     (ctx_resl, cf)
@@ -1178,7 +1278,7 @@ and eval_switch_with_join (config : config) (span : Meta.span)
       let output_abs = reorder_output_abs output_abs output_abs_ids in
 
       (* Generate the let expression *)
-      cf (SA.Join (ctx, output_values, output_abs))
+      cf (SA.Join (join_id, ctx, output_values, output_abs))
     in
     let resl = List.map match_ctx ctxl in
     let exits = List.filter (fun (_, res) -> res <> Unit) ctx_resl in
@@ -1213,7 +1313,12 @@ and eval_switch_with_join (config : config) (span : Meta.span)
               bound_expr = cf branch_exprs;
               out_svalues = output_svalues;
               out_abs = output_abs;
-              can_return = exits <> [];
+              join_id;
+              exits =
+                List.sort_uniq Stdlib.compare
+                  (List.map
+                     (fun (_, res) -> exit_target_of_result config span res)
+                     exits);
               next_expr;
               span;
             }

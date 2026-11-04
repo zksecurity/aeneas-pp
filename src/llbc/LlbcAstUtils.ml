@@ -191,24 +191,105 @@ let statement_has_break_continue_return (st : statement) : bool =
 
 (** Return true if the block contains a statement which breaks the control flow,
     at the exception of panics (that is: a break, a continue or a return) *)
-(** Whether a block contains a [break] or a [continue] exiting it, that is
-    targeting a loop which encloses the block: the loops inside the block
-    consume their own [break] and [continue] statements. *)
-let block_has_escaping_break_continue (b : block) : bool =
-  let visitor =
-    object (self)
-      inherit [_] iter_statement
+(** How the control flow can leave a block: by completing normally, by a
+    [break] or [continue] to one of the loops enclosing the block (the indices
+    count the enclosing loops from the innermost one, outside of the block), or
+    by a [return]. Panics and unwinding don't leave the block. *)
+type control_effects = {
+  falls_through : bool;
+  breaks : Collections.IntSet.t;
+  continues : Collections.IntSet.t;
+  returns : bool;
+}
 
-      (* The environment is the number of loops entered inside the block *)
-      method! visit_Loop depth body = self#visit_block (depth + 1) body
-      method! visit_Break depth i = if i >= depth then raise Utils.Found
-      method! visit_Continue depth i = if i >= depth then raise Utils.Found
-    end
+let rec block_control_effects (b : block) : control_effects =
+  let module IntSet = Collections.IntSet in
+  List.fold_left
+    (fun (acc : control_effects) (st : statement) ->
+      (* The statements after one which doesn't complete normally are
+         unreachable *)
+      if not acc.falls_through then acc
+      else
+        let e = statement_control_effects st in
+        {
+          falls_through = e.falls_through;
+          breaks = IntSet.union acc.breaks e.breaks;
+          continues = IntSet.union acc.continues e.continues;
+          returns = acc.returns || e.returns;
+        })
+    {
+      falls_through = true;
+      breaks = IntSet.empty;
+      continues = IntSet.empty;
+      returns = false;
+    }
+    b.statements
+
+and statement_control_effects (st : statement) : control_effects =
+  let module IntSet = Collections.IntSet in
+  let exits ?(breaks = IntSet.empty) ?(continues = IntSet.empty)
+      ?(returns = false) () =
+    { falls_through = false; breaks; continues; returns }
   in
-  try
-    visitor#visit_block 0 b;
-    false
-  with Utils.Found -> true
+  match st.kind with
+  | Switch (_, branches) ->
+      let el = List.map block_control_effects branches in
+      {
+        falls_through = List.exists (fun e -> e.falls_through) el;
+        breaks =
+          List.fold_left IntSet.union IntSet.empty
+            (List.map (fun e -> e.breaks) el);
+        continues =
+          List.fold_left IntSet.union IntSet.empty
+            (List.map (fun e -> e.continues) el);
+        returns = List.exists (fun e -> e.returns) el;
+      }
+  | Loop body ->
+      (* The loop completes normally when its body breaks out of it; the
+         breaks and continues targeting enclosing loops are one loop further *)
+      let e = block_control_effects body in
+      let outer s =
+        IntSet.of_list
+          (List.filter_map
+             (fun i -> if i > 0 then Some (i - 1) else None)
+             (IntSet.elements s))
+      in
+      {
+        falls_through = IntSet.mem 0 e.breaks;
+        breaks = outer e.breaks;
+        continues = outer e.continues;
+        returns = e.returns;
+      }
+  | Break i -> exits ~breaks:(IntSet.singleton i) ()
+  | Continue i -> exits ~continues:(IntSet.singleton i) ()
+  | Return -> exits ~returns:true ()
+  | Panic _ | UnwindTerminate | UnwindResume | UndefinedBehavior -> exits ()
+  | Assign _
+  | SetDiscriminant _
+  | StorageLive _
+  | StorageDead _
+  | PlaceMention _
+  | Borrowck _
+  | Drop _
+  | Assert _
+  | InlineAsm _
+  | Call _
+  | Nop ->
+      (* The unwinding blocks don't leave the block either *)
+      {
+        falls_through = true;
+        breaks = IntSet.empty;
+        continues = IntSet.empty;
+        returns = false;
+      }
+
+(** Whether the body of a [loop] statement never iterates: the control flow
+    never reaches its end and it contains no [continue] to the loop. Such loops
+    are scopes [break] statements can jump forward out of (Charon introduces
+    them when it reconstructs control flow without duplicating code). *)
+let loop_is_forward_scope (body : block) : bool =
+  let e = block_control_effects body in
+  (not e.falls_through) && not (Collections.IntSet.mem 0 e.continues)
 
 (** Compute the size of a function body - we count the number of statements and
     blocks *)

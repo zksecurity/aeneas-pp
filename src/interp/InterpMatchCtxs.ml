@@ -415,9 +415,14 @@ module MakeMatcher (M : PrimMatcher) : Matcher = struct
             M.match_shared_loans match_rec ctx0 ctx1 ty id0 id1 sv
         | VMutLoan id0, VMutLoan id1 ->
             M.match_mut_loans match_rec ctx0 ctx1 ty id0 id1
-        | VSharedLoan _, VMutLoan _ | VMutLoan _, VSharedLoan _ ->
-            (* TODO: *)
-            [%craise_recover] M.recover M.span "Unimplemented"
+        | VMutLoan id, VSharedLoan _ ->
+            (* The shared loan becomes an input of the abstraction lending the
+               mutable loan: the shared borrows stay valid *)
+            M.match_mut_loan_with_other match_rec ctx0 ctx1 ~loan_is_left:true
+              ty id v1
+        | VSharedLoan _, VMutLoan id ->
+            M.match_mut_loan_with_other match_rec ctx0 ctx1 ~loan_is_left:false
+              ty id v0
       end
     | VSymbolic sv0, VSymbolic sv1 ->
         [%cassert_recover] M.recover M.span
