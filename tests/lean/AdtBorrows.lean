@@ -149,7 +149,7 @@ def MutWrapper1.create
   {T : Type _} (x : T) :
   Result ((MutWrapper1 T) × (MutWrapper1 T → T))
   := do
-  let back := fun mw => mw.x
+  let back := fun (mw : MutWrapper1 T) => mw.x
   ok ({ x }, back)
 
 /-- [adt_borrows::{adt_borrows::MutWrapper1<'a, T>}::unwrap]:
@@ -198,8 +198,8 @@ def MutWrapper2.create
   {T : Type _} (x : T) (y : T) :
   Result ((MutWrapper2 T) × (MutWrapper2 T → T) × (MutWrapper2 T → T))
   := do
-  let back'a := fun mw => mw.x
-  let back'b := fun mw => mw.y
+  let back'a := fun (mw : MutWrapper2 T) => mw.x
+  let back'b := fun (mw : MutWrapper2 T) => mw.y
   ok ({ x, y }, back'a, back'b)
 
 /-- [adt_borrows::{adt_borrows::MutWrapper2<'a, 'b, T>}::unwrap]:
@@ -219,8 +219,8 @@ def MutWrapper2.id
   Result ((MutWrapper2 T) × (MutWrapper2 T → MutWrapper2 T) × (MutWrapper2
     T → MutWrapper2 T))
   := do
-  let back'a := fun mw => { self with x := mw.x }
-  let back'b := fun mw => { self with y := mw.y }
+  let back'a := fun (mw : MutWrapper2 T) => { self with x := mw.x }
+  let back'b := fun (mw : MutWrapper2 T) => { self with y := mw.y }
   ok (self, back'a, back'b)
 
 /-- [adt_borrows::use_mut_wrapper2]:
@@ -243,8 +243,12 @@ def use_mut_wrapper2_id
     T → MutWrapper2 T))
   := do
   let (mw, id_back, id_back1) ← MutWrapper2.id x
-  let back'a := fun mw1 => { x with x := (id_back { mw with x := mw1.x }).x }
-  let back'b := fun mw1 => { x with y := (id_back1 { mw with y := mw1.y }).y }
+  let back'a :=
+    fun (mw1 : MutWrapper2 T) =>
+      { x with x := (id_back { mw with x := mw1.x }).x }
+  let back'b :=
+    fun (mw1 : MutWrapper2 T) =>
+      { x with y := (id_back1 { mw with y := mw1.y }).y }
   ok (mw, back'a, back'b)
 
 /-- [adt_borrows::array_shared_borrow]:

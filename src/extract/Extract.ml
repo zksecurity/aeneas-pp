@@ -706,6 +706,37 @@ let extract_texpr_errors (fmt : F.formatter) =
   | Lean -> F.pp_print_string fmt "sorry"
   | HOL4 -> F.pp_print_string fmt "(* ERROR: could not generate the code *)"
 
+(** Lean elaborates an anonymous constructor pattern or a field projection
+    only against a known type: a lambda binder of an ADT type which the body
+    destructures or projects needs a type annotation. *)
+let lean_binder_needs_type (x : tpat) (body : texpr) : bool =
+  match (x.pat, x.ty) with
+  | POpen (v, _), TAdt (TAdtId _, _) -> (
+      let is_var (e : texpr) =
+        match e.e with
+        | FVar id -> id = v.id
+        | _ -> false
+      in
+      let visitor =
+        object
+          inherit [_] iter_expr as super
+
+          method! visit_texpr env e =
+            (match e.e with
+            | Let (_, { pat = PAdt _; _ }, bound, _) when is_var bound ->
+                raise Utils.Found
+            | App ({ e = Qualif { id = Proj _; _ }; _ }, arg) when is_var arg
+              -> raise Utils.Found
+            | _ -> ());
+            super#visit_texpr env e
+        end
+      in
+      try
+        visitor#visit_texpr () body;
+        false
+      with Utils.Found -> true)
+  | _ -> false
+
 (** - [inside_do]: [true] if we are inside a do block. In Lean, controls whether
       we can print let-bindings or if we need to insert a [do] first. *)
 let rec extract_texpr (span : Meta.span) (ctx : extraction_ctx)
@@ -1248,16 +1279,18 @@ and extract_Lambda (span : Meta.span) (ctx : extraction_ctx) (fmt : F.formatter)
   (* Print the lambda - note that there should always be at least one variable *)
   [%sanity_check] span (xl <> []);
   F.pp_print_string fmt "fun";
-  let with_type =
+  let with_type (x : tpat) =
     match backend () with
     | Coq -> true
+    | Lean -> lean_binder_needs_type x e
     | _ -> false
   in
   let ctx =
     List.fold_left
       (fun ctx x ->
         F.pp_print_space fmt ();
-        extract_tpat span ctx fmt ~is_let:true ~inside:true ~with_type x)
+        extract_tpat span ctx fmt ~is_let:true ~inside:true
+          ~with_type:(with_type x) x)
       ctx xl
   in
   F.pp_print_space fmt ();

@@ -96,7 +96,7 @@ def IterMut.next
   := do
   let (o, o1, replace_option_mut_back) ← replace_option_mut self.v none
   let back'a :=
-    fun self1 o2 =>
+    fun (self1 : IterMut T) o2 =>
       let o3 :=
         match replace_option_mut_back self1.v o2 with
         | (o4, none) => o4
@@ -148,7 +148,7 @@ def iter_mut_loop_loop
 /-- [nested_borrows::iter_mut_loop]:
     Source: 'tests/src/nested-borrows.rs', lines 85:0-87:1 -/
 def iter_mut_loop {T : Type _} (it : IterMut T) : Result (IterMut T) := do
-  let back ← iter_mut_loop_loop (fun im => im.v) it
+  let back ← iter_mut_loop_loop (fun (im : IterMut T) => im.v) it
   ok { v := back }
 
 /-- [nested_borrows::iter_mut_incr]: loop body 0:
@@ -181,7 +181,7 @@ def iter_mut_incr_loop
     Source: 'tests/src/nested-borrows.rs', lines 89:0-93:1 -/
 def iter_mut_incr
   (T : Type _) (it : IterMut Std.U32) : Result (IterMut Std.U32) := do
-  let back ← iter_mut_incr_loop (fun im => im.v) it
+  let back ← iter_mut_incr_loop (fun (im : IterMut Std.U32) => im.v) it
   ok { v := back }
 
 /-- [nested_borrows::List]
@@ -228,7 +228,7 @@ def ListIterMut.next
   match o with
   | none =>
     let back'a :=
-      fun self1 o2 =>
+      fun (self1 : ListIterMut T) o2 =>
         let o3 := take_option_mut_back self1.current none
         ({ current := o3 } : ListIterMut T)
     ok (none, { current := o1 }, back'a)
@@ -236,13 +236,13 @@ def ListIterMut.next
     match l with
     | List.Nil =>
       let back'a :=
-        fun self1 o2 =>
+        fun (self1 : ListIterMut T) o2 =>
           let o3 := take_option_mut_back self1.current o
           ({ current := o3 } : ListIterMut T)
       ok (none, { current := o1 }, back'a)
     | List.Cons value next =>
       let back'a :=
-        fun self1 o2 =>
+        fun (self1 : ListIterMut T) o2 =>
           let l1 := match self1.current with
                     | some l2 => l2
                     | _ => next
@@ -285,7 +285,8 @@ def incr_list_loop
     Source: 'tests/src/nested-borrows.rs', lines 130:0-135:1 -/
 def incr_list (l : List Std.U32) : Result (List Std.U32) := do
   let (it, iter_mut_back) ← List.iter_mut l
-  let back ← incr_list_loop (fun lim => lim.current) it
+  let back ←
+    incr_list_loop (fun (lim : ListIterMut Std.U32) => lim.current) it
   ok (iter_mut_back { current := back })
 
 /-- [nested_borrows::next1]:

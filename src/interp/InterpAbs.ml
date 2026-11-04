@@ -297,18 +297,18 @@ let convert_value_to_output_avalues (span : Meta.span) (ctx : eval_ctx)
             value = EAdt { borrow_proj = true; variant_id; fields = outputs };
             ty = proj_ty;
           } )
-    | VBorrow bc, TRef (rid, ref_ty, kind) ->
+    | VBorrow bc, TRef (rid, ref_ty, _) ->
         [%cassert] span (ty_no_regions ref_ty)
           "Nested borrows are not supported yet";
         if keep_region rid then
           match bc with
           | VSharedBorrow (bid, sid) ->
-              (* Push a region abstraction for this borrow *)
-              let rid = ctx.fresh_region_id () in
-              let ty = TRef (RVar (Free rid), ref_ty, kind) in
+              (* The borrow belongs to the abstraction: it has the projection
+                 type, whose region the abstraction owns *)
               let value = ABorrow (ASharedBorrow (pm, bid, sid)) in
-              let value : tavalue = { value; ty } in
-              let ev = mk_etuple ~borrow_proj:true [] in
+              let value : tavalue = { value; ty = proj_ty } in
+              (* Nothing is given back through a shared borrow *)
+              let ev = mk_eignored (Some (ctx.env, v)) proj_ty in
               ([ value ], ev)
           | VMutBorrow (bid, bv) ->
               (* We don't support nested borrows for now *)
