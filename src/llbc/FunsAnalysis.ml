@@ -295,7 +295,9 @@ let analyze_module (m : crate) (funs_map : fun_decl FunDeclId.Map.t) :
                declaration group:\n" ^ decls ^ "\n\nInitial error:\n"
             ^ error.msg));
         analyze_decl_groups decls'
-    | MixedGroup ids :: _ ->
+    | MixedGroup ids :: decls' ->
+        (* The functions of the group get no information: only the functions
+           using them fail, as when analyzing a function group fails *)
         [%save_error_opt_span] None
           ("Mixed declaration groups (which contain both type and function \
             declarations or functions and traits, for instance) are not \
@@ -303,7 +305,8 @@ let analyze_module (m : crate) (funs_map : fun_decl FunDeclId.Map.t) :
           ^ String.concat ", "
               (List.map Charon.Print.item_id_to_string
                  (Charon.GAstUtils.g_declaration_group_to_list ids))
-          ^ "]")
+          ^ "]");
+        analyze_decl_groups decls'
   in
 
   analyze_decl_groups (Option.get m.declarations);
