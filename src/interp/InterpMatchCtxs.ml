@@ -474,8 +474,8 @@ module MakeMatcher (M : PrimMatcher) : Matcher = struct
        to make explicit the fact that, though we have to pick
        one of the two contexts (ctx0 here) to call value_has_borrows,
        it doesn't matter here. *)
-    let value_has_borrows =
-      ValuesUtils.value_has_borrows (Some span) ctx0.type_ctx.type_infos
+    let value_has_mut_borrows =
+      ValuesUtils.value_has_mut_borrows (Some span) ctx0.type_ctx.type_infos
     in
 
     let match_rec = match_tvalues ctx0 ctx1 in
@@ -549,8 +549,11 @@ module MakeMatcher (M : PrimMatcher) : Matcher = struct
             [%ldebug "shared loans"];
             let sv = match_rec sv0 sv1 in
             let av = match_arec av0 av1 in
+            (* The shared value may contain shared borrows: matching it
+               registered their ids. Mutable borrows below a shared loan are
+               not supported. *)
             [%sanity_check_recover] M.recover M.span
-              (not (value_has_borrows sv.value));
+              (not (value_has_mut_borrows sv.value));
             M.match_ashared_loans match_rec ctx0 ctx1 v0.ty pm0 id0 sv0 av0
               v1.ty pm1 id1 sv1 av1 ty sv av
         | AMutLoan (pm0, id0, av0), AMutLoan (pm1, id1, av1) ->
@@ -560,8 +563,13 @@ module MakeMatcher (M : PrimMatcher) : Matcher = struct
             [%ldebug "mut loans: matched children values"];
             M.match_amut_loans match_rec ctx0 ctx1 v0.ty pm0 id0 av0 v1.ty pm1
               id1 av1 ty av
-        | AIgnoredMutLoan _, AIgnoredMutLoan _
-        | AIgnoredSharedLoan _, AIgnoredSharedLoan _ ->
+        | AIgnoredSharedLoan av0, AIgnoredSharedLoan av1 ->
+            (* A shared loan which belongs to another region abstraction and
+               contains loans of this one (nested borrows): the wrapper is
+               structural. *)
+            let av = match_arec av0 av1 in
+            { value = ALoan (AIgnoredSharedLoan av); ty }
+        | AIgnoredMutLoan _, AIgnoredMutLoan _ ->
             (* Those should have been filtered when destructuring the abstractions -
                they are necessary only when there are nested borrows *)
             [%craise_recover] M.recover M.span "Unreachable"

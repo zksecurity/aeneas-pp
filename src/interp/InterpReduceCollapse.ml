@@ -873,7 +873,8 @@ let reduce_ctx config (span : Meta.span)
 let collapse_ctx_collapse (span : Meta.span)
     (sequence : (abs_id * abs_id * abs_id) list ref option)
     (fresh_abs_kind : abs_kind) ~(with_abs_conts : bool)
-    (merge_funs : merge_duplicates_funcs) (ctx : eval_ctx) : eval_ctx =
+    (merge_funs : merge_duplicates_funcs) (fixed_aids : AbsId.Set.t)
+    (ctx : eval_ctx) : eval_ctx =
   (* Debug *)
   [%ltrace
     "\n- initial ctx:\n" ^ eval_ctx_to_string ~span:(Some span) ctx ^ "\n"];
@@ -886,8 +887,6 @@ let collapse_ctx_collapse (span : Meta.span)
     | PLeft -> PRight
     | PRight -> PLeft
   in
-
-  let fixed_aids = ctx_get_frozen_abs_set ctx in
 
   (* Merge all the mergeable abs where the same element is present in both abs,
      but with left and right markers respectively.
@@ -1104,21 +1103,9 @@ let collapse_ctx_aux config (span : Meta.span)
     (shared_borrows_seq :
       (abs_id * int * proj_marker * borrow_or_proj * ty) list ref option)
     (fresh_abs_kind : abs_kind) ~(with_abs_conts : bool)
-    (merge_funs : merge_duplicates_funcs) (ctx0 : eval_ctx) : eval_ctx =
+    (merge_funs : merge_duplicates_funcs) (fixed_aids : AbsId.Set.t)
+    (ctx0 : eval_ctx) : eval_ctx =
   [%ldebug "ctx0:\n" ^ eval_ctx_to_string ctx0];
-  let fixed_aids =
-    (* We forbid modifying the abs which are frozen or which don't have any markers *)
-    let frozen = ctx_get_frozen_abs_set ctx0 in
-    let abs = AbsId.Map.values (ctx_get_abs ctx0) in
-    let no_markers =
-      List.filter_map
-        (fun (abs : abs) ->
-          if abs_has_markers abs then None else Some abs.abs_id)
-        abs
-    in
-    AbsId.Set.add_list no_markers frozen
-  in
-
   [%ldebug "fixed_aids: " ^ AbsId.Set.to_string None fixed_aids];
 
   let ctx =
@@ -1128,7 +1115,7 @@ let collapse_ctx_aux config (span : Meta.span)
   [%ldebug "ctx after reduce:\n" ^ eval_ctx_to_string ctx];
   let ctx =
     collapse_ctx_collapse span ~with_abs_conts sequence fresh_abs_kind
-      merge_funs ctx
+      merge_funs fixed_aids ctx
   in
   [%ldebug "ctx after reduce and collapse:\n" ^ eval_ctx_to_string ctx];
 
@@ -1323,16 +1310,29 @@ let merge_into_first_abstraction (span : Meta.span) (abs_kind : abs_kind)
   InterpAbs.merge_into_first_abstraction span abs_kind ~can_end ~with_abs_conts
     (Some merge_funs) ctx aid0 aid1
 
-(** Check whether a non-frozen region abstraction contains a shared loan whose
-    shared value contains concrete borrows.
+(** The region abstractions the collapse never modifies: the frozen ones and
+    the ones without markers. An abstraction without markers is the same in all
+    the joined contexts: the reduction leaves it untouched, and the collapse
+    only merges abstractions which contain marked elements. *)
+let collapse_fixed_abs_ids (ctx : eval_ctx) : AbsId.Set.t =
+  let frozen = ctx_get_frozen_abs_set ctx in
+  let no_markers =
+    List.filter_map
+      (fun (abs : abs) -> if abs_has_markers abs then None else Some abs.abs_id)
+      (AbsId.Map.values (ctx_get_abs ctx))
+  in
+  AbsId.Set.add_list no_markers frozen
+
+(** Check whether a region abstraction outside of [fixed] contains a shared loan
+    whose shared value contains concrete borrows.
 
     The collapse doesn't support this case: when computing the maps from
     abstractions to borrows/loans (see
     {!InterpMatchCtxs.compute_abs_borrows_loans_maps}) we can't register such
     borrows. We use this function to fail early with a recoverable error in
     {!collapse_ctx}. *)
-let ctx_has_borrows_in_shared_loans_of_non_frozen_abs (ctx : eval_ctx) : bool =
-  let frozen = ctx_get_frozen_abs_set ctx in
+let ctx_has_borrows_in_shared_loans_of_abs (fixed : AbsId.Set.t)
+    (ctx : eval_ctx) : bool =
   let has_borrows =
     object
       inherit [_] iter_tvalue
@@ -1353,7 +1353,7 @@ let ctx_has_borrows_in_shared_loans_of_non_frozen_abs (ctx : eval_ctx) : bool =
   try
     env_iter_abs
       (fun abs ->
-        if not (AbsId.Set.mem abs.abs_id frozen) then
+        if not (AbsId.Set.mem abs.abs_id fixed) then
           List.iter (visitor#visit_tavalue ()) abs.avalues)
       ctx.env;
     false
@@ -1370,8 +1370,9 @@ let collapse_ctx config (span : Meta.span)
      borrows in the abstractions it may modify: we check this here so that the
      error is recoverable (if it is allowed, the caller can then decide not to
      join, for instance by duplicating the code after a branching). *)
+  let fixed_aids = collapse_fixed_abs_ids ctx in
   [%cassert_recover] recoverable span
-    (not (ctx_has_borrows_in_shared_loans_of_non_frozen_abs ctx))
+    (not (ctx_has_borrows_in_shared_loans_of_abs fixed_aids ctx))
     "Joining region abstractions containing shared loans whose shared value \
      contains borrows is not supported yet";
   let merge_funs =
@@ -1380,7 +1381,7 @@ let collapse_ctx config (span : Meta.span)
   in
   try
     collapse_ctx_aux config span ~with_abs_conts sequence shared_borrows_seq
-      fresh_abs_kind merge_funs ctx
+      fresh_abs_kind merge_funs fixed_aids ctx
   with ValueMatchFailure _ -> [%internal_error] span
 
 let add_shared_borrows (span : Meta.span)

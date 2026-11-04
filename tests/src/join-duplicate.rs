@@ -33,9 +33,8 @@ fn join_nested_shared_in_loop(b: bool, n: u32) -> i32 {
 //
 // The input contains nested shared borrows. Before the first `if`, preparing
 // the switch introduces a region abstraction containing a shared loan whose
-// shared value is itself a shared borrow: the collapse performed by the join
-// doesn't support this. The join must then fail with a *recoverable* error so
-// that we fall back to duplicating the code after the branching.
+// shared value is itself a shared borrow. It is the same in both branches: the
+// join keeps it unchanged, and the code after the branching is not duplicated.
 pub struct NestedStaticRef(pub &'static &'static u8);
 
 pub fn join_nested_shared_input(_m: NestedStaticRef, a: bool) {
