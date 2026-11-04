@@ -63,7 +63,8 @@ def Ck.swap (self : Ck) : Result (Ck × (Ck → Ck)) := do
 def helper
   (ck : Ck) (x : Std.U32) : Result (Std.U32 × Ck × (Ck → Ck)) := do
   let (i, ck1, push_both_back) ← Ck.push_both ck x
-  let back := fun ck2 => { push_both_back ck2 with e := ck.e }
+  let back := fun ck2 => let c := push_both_back ck2
+                         { c with e := ck.e }
   ok (i, ck1, back)
 
 /-- [nested_mut_borrow_joins::Mk]
@@ -93,14 +94,17 @@ def helper_in_one_branch
     then
       do
       let (r1, ck1, helper_back) ← helper { t, e, s } 1#u32
-      ok (ck1, r1, fun c => ((helper_back c).t, (helper_back c).s))
+      ok (ck1, r1, fun c => let c1 := helper_back c
+                            (c1.t, c1.s))
     else
       ok (({ t, e, s } : Ck), 2#u32,
         fun (c : Ck) => let ⟨ v, _, v1 ⟩ := c
                         (v, v1))
   let (i, c, helper_back) ← helper ck r
-  let (t1, v) := back { helper_back c with e := ck.e }
-  ok (i, t1, v)
+  let c1 := helper_back c
+  let (t1, _) := back { c1 with e := ck.e }
+  let (_, s1) := back { c1 with e := ck.e }
+  ok (i, t1, s1)
 
 /-- [nested_mut_borrow_joins::method_in_one_branch]:
     Source: 'tests/src/nested-mut-borrow-joins.rs', lines 52:0-56:1
@@ -115,14 +119,17 @@ def method_in_one_branch
     then
       do
       let (r1, ck1, push_both_back) ← Ck.push_both { t, e, s } 1#u32
-      ok (ck1, r1, fun c => ((push_both_back c).t, (push_both_back c).s))
+      ok (ck1, r1, fun c => let c1 := push_both_back c
+                            (c1.t, c1.s))
     else
       ok (({ t, e, s } : Ck), 2#u32,
         fun (c : Ck) => let ⟨ v, _, v1 ⟩ := c
                         (v, v1))
   let (i, c, push_both_back) ← Ck.push_both ck r
-  let (t1, v) := back { push_both_back c with e := ck.e }
-  ok (i, t1, v)
+  let c1 := push_both_back c
+  let (t1, _) := back { c1 with e := ck.e }
+  let (_, s1) := back { c1 with e := ck.e }
+  ok (i, t1, s1)
 
 /-- [nested_mut_borrow_joins::helper_counts_differ]:
     Source: 'tests/src/nested-mut-borrow-joins.rs', lines 58:0-67:1
@@ -137,17 +144,22 @@ def helper_counts_differ
     then
       do
       let (r1, ck1, helper_back) ← helper { t, e, s } 1#u32
-      ok (ck1, r1, fun c => ((helper_back c).t, (helper_back c).s))
+      ok (ck1, r1, fun c => let c1 := helper_back c
+                            (c1.t, c1.s))
     else
       do
       let (a, ck1, helper_back) ← helper { t, e, s } 2#u32
       let (r1, ck2, helper_back1) ← helper ck1 a
       ok (ck2, r1,
-        fun c => ((helper_back { helper_back1 c with e := ck1.e }).t,
-          (helper_back { helper_back1 c with e := ck1.e }).s))
+        fun c =>
+          let c1 := helper_back1 c
+          let c2 := helper_back { c1 with e := ck1.e }
+          (c2.t, c2.s))
   let (i, c, helper_back) ← helper ck r
-  let (t1, v) := back { helper_back c with e := ck.e }
-  ok (i, t1, v)
+  let c1 := helper_back c
+  let (t1, _) := back { c1 with e := ck.e }
+  let (_, s1) := back { c1 with e := ck.e }
+  ok (i, t1, s1)
 
 /-- [nested_mut_borrow_joins::methods_counts_differ]:
     Source: 'tests/src/nested-mut-borrow-joins.rs', lines 69:0-78:1
@@ -162,17 +174,22 @@ def methods_counts_differ
     then
       do
       let (r1, ck1, push_t_back) ← Ck.push_t { t, e, s } 1#u32
-      ok (ck1, r1, fun c => ((push_t_back c).t, (push_t_back c).s))
+      ok (ck1, r1, fun c => let c1 := push_t_back c
+                            (c1.t, c1.s))
     else
       do
       let (a, ck1, push_both_back) ← Ck.push_both { t, e, s } 2#u32
       let (r1, ck2, push_t_back) ← Ck.push_t ck1 a
       ok (ck2, r1,
-        fun c => ((push_both_back { push_t_back c with e := ck1.e }).t,
-          (push_both_back { push_t_back c with e := ck1.e }).s))
+        fun c =>
+          let c1 := push_t_back c
+          let c2 := push_both_back { c1 with e := ck1.e }
+          (c2.t, c2.s))
   let (i, c, push_both_back) ← Ck.push_both ck r
-  let (t1, v) := back { push_both_back c with e := ck.e }
-  ok (i, t1, v)
+  let c1 := push_both_back c
+  let (t1, _) := back { c1 with e := ck.e }
+  let (_, s1) := back { c1 with e := ck.e }
+  ok (i, t1, s1)
 
 /-- [nested_mut_borrow_joins::swap_in_one_branch]:
     Source: 'tests/src/nested-mut-borrow-joins.rs', lines 80:0-86:1
@@ -188,11 +205,14 @@ def swap_in_one_branch
       do
       let (ck, swap_back) ← Ck.swap { t, e, s }
       ok (ck.t, ck.e, ck.s,
-        fun v3 v4 => ((swap_back { ck with t := v3, s := v4 }).t,
-          (swap_back { ck with t := v3, s := v4 }).s))
+        fun v3 v4 => let c := swap_back { ck with t := v3, s := v4 }
+                     (c.t, c.s))
     else ok (t, e, s, fun v3 v4 => (v3, v4))
   let (_, c, push_t_back) ← Ck.push_t { t := v, e := v1, s := v2 } 7#u32
-  ok (back (push_t_back c).t (push_t_back c).s)
+  let c1 := push_t_back c
+  let (t1, _) := back c1.t c1.s
+  let (_, s1) := back c1.t c1.s
+  ok (t1, s1)
 
 /-- [nested_mut_borrow_joins::no_shared_field]:
     Source: 'tests/src/nested-mut-borrow-joins.rs', lines 88:0-94:1
@@ -207,14 +227,41 @@ def no_shared_field
       do
       let (m, mk_helper_back) ← mk_helper { t, s } 1#u32
       ok (m.t, m.s,
-        fun v2 v3 => ((mk_helper_back { t := v2, s := v3 }).t,
-          (mk_helper_back { t := v2, s := v3 }).s))
+        fun v2 v3 => let m1 := mk_helper_back { t := v2, s := v3 }
+                     (m1.t, m1.s))
     else ok (t, s, fun v2 v3 => (v2, v3))
   let (m, mk_helper_back) ← mk_helper { t := v, s := v1 } 2#u32
-  ok (back (mk_helper_back m).t (mk_helper_back m).s)
+  let m1 := mk_helper_back m
+  let (t1, _) := back m1.t m1.s
+  let (_, s1) := back m1.t m1.s
+  ok (t1, s1)
+
+/-- [nested_mut_borrow_joins::chain]:
+    Source: 'tests/src/nested-mut-borrow-joins.rs', lines 98:0-105:1
+    Visibility: public -/
+def chain
+  (t : alloc.vec.Vec Std.U32) (e : alloc.vec.Vec Std.U32)
+  (s : alloc.vec.Vec Std.U32) :
+  Result (Std.U32 × (alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32))
+  := do
+  let (a, ck, push_both_back) ← Ck.push_both { t, e, s } 1#u32
+  let (b, ck1, push_both_back1) ← Ck.push_both ck a
+  let (c, ck2, push_both_back2) ← Ck.push_both ck1 b
+  let (d, ck3, push_both_back3) ← Ck.push_both ck2 c
+  let (i, ck4, push_both_back4) ← Ck.push_both ck3 d
+  let c1 := push_both_back4 ck4
+  let c2 := push_both_back3 { c1 with e := ck3.e }
+  let c3 := push_both_back2 { c2 with e := ck2.e }
+  let c4 := push_both_back1 { c3 with e := ck1.e }
+  let c5 := push_both_back { c4 with e := ck.e }
+  let c6 := push_both_back3 { c1 with e := ck3.e }
+  let c7 := push_both_back2 { c6 with e := ck2.e }
+  let c8 := push_both_back1 { c7 with e := ck1.e }
+  let c9 := push_both_back { c8 with e := ck.e }
+  ok (i, c5.t, c9.s)
 
 /-- [nested_mut_borrow_joins::test_helper_in_one_branch]:
-    Source: 'tests/src/nested-mut-borrow-joins.rs', lines 97:0-105:1
+    Source: 'tests/src/nested-mut-borrow-joins.rs', lines 108:0-116:1
     Visibility: public -/
 def test_helper_in_one_branch : Result Unit := do
   let (i, t, s) ←
@@ -254,7 +301,7 @@ def test_helper_in_one_branch : Result Unit := do
 #guard (test_helper_in_one_branch).reducesTo ()
 
 /-- [nested_mut_borrow_joins::test_methods_counts_differ]:
-    Source: 'tests/src/nested-mut-borrow-joins.rs', lines 108:0-116:1
+    Source: 'tests/src/nested-mut-borrow-joins.rs', lines 119:0-127:1
     Visibility: public -/
 def test_methods_counts_differ : Result Unit := do
   let (_, t, s) ←
@@ -276,7 +323,7 @@ def test_methods_counts_differ : Result Unit := do
 #guard (test_methods_counts_differ).reducesTo ()
 
 /-- [nested_mut_borrow_joins::test_swap_in_one_branch]:
-    Source: 'tests/src/nested-mut-borrow-joins.rs', lines 119:0-128:1
+    Source: 'tests/src/nested-mut-borrow-joins.rs', lines 130:0-139:1
     Visibility: public -/
 def test_swap_in_one_branch : Result Unit := do
   let s ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.U32) 5#u32
@@ -306,8 +353,24 @@ def test_swap_in_one_branch : Result Unit := do
 /- Unit test for [nested_mut_borrow_joins::test_swap_in_one_branch] -/
 #guard (test_swap_in_one_branch).reducesTo ()
 
+/-- [nested_mut_borrow_joins::test_chain]:
+    Source: 'tests/src/nested-mut-borrow-joins.rs', lines 142:0-147:1
+    Visibility: public -/
+def test_chain : Result Unit := do
+  let (i, t, s) ←
+    chain (alloc.vec.Vec.new Std.U32) (alloc.vec.Vec.new Std.U32)
+      (alloc.vec.Vec.new Std.U32)
+  massert (i = 1#u32)
+  let i1 := alloc.vec.Vec.len t
+  massert (i1 = 5#usize)
+  let i2 := alloc.vec.Vec.len s
+  massert (i2 = 5#usize)
+
+/- Unit test for [nested_mut_borrow_joins::test_chain] -/
+#guard (test_chain).reducesTo ()
+
 /-- [nested_mut_borrow_joins::test_no_shared_field]:
-    Source: 'tests/src/nested-mut-borrow-joins.rs', lines 131:0-135:1
+    Source: 'tests/src/nested-mut-borrow-joins.rs', lines 150:0-154:1
     Visibility: public -/
 def test_no_shared_field : Result Unit := do
   let (t, s) ←

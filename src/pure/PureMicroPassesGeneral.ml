@@ -229,6 +229,30 @@ let simplify_decompose_struct_visitor (ctx : ctx) (def : fun_decl) =
                  field.
                  We use the [dest] variable in order not to have to recompute
                  the type of the result of the projection... *)
+            let id_var_pairs =
+              FieldId.mapi (fun fid v -> (fid, v)) adt_pat.fields
+            in
+            let monadic = false in
+            (* Projecting several fields out of a compound scrutinee would
+               duplicate it: we first bind it to a variable *)
+            let scrutinee, bind_scrutinee =
+              let num_used =
+                List.length
+                  (List.filter
+                     (fun (_, pat) -> not (is_ignored_pat pat))
+                     id_var_pairs)
+              in
+              let atomic =
+                is_fvar scrutinee || is_cvar scrutinee || is_global scrutinee
+                || is_const scrutinee
+              in
+              if num_used <= 1 || atomic then (scrutinee, Fun.id)
+              else
+                let fv = mk_fresh_fvar ctx scrutinee.ty in
+                ( mk_texpr_from_fvar fv,
+                  mk_opened_let monadic (mk_tpat_from_fvar None fv) scrutinee
+                )
+            in
             let gen_field_proj (field_id : FieldId.id) (dest : tpat) : texpr =
               let proj_kind = { adt_id = TAdtId adt_id; field_id } in
               let qualif = { id = Proj proj_kind; generics } in
@@ -237,10 +261,6 @@ let simplify_decompose_struct_visitor (ctx : ctx) (def : fun_decl) =
               let proj = { e = proj_e; ty = proj_ty } in
               [%add_loc] mk_app span proj scrutinee
             in
-            let id_var_pairs =
-              FieldId.mapi (fun fid v -> (fid, v)) adt_pat.fields
-            in
-            let monadic = false in
             let e =
               List.fold_right
                 (fun (fid, pat) e ->
@@ -248,7 +268,7 @@ let simplify_decompose_struct_visitor (ctx : ctx) (def : fun_decl) =
                   mk_opened_let monadic pat field_proj e)
                 id_var_pairs next
             in
-            (super#visit_texpr env e).e
+            (super#visit_texpr env (bind_scrutinee e)).e
       | _ -> super#visit_Let env monadic lv scrutinee next
   end
 

@@ -93,6 +93,17 @@ pub fn no_shared_field(t: &mut Vec<u32>, s: &mut Vec<u32>, k: u32) {
     mk_helper(&mut mk, 2);
 }
 
+/// A chain of calls: each backward function gives back a whole `Ck` from
+/// which the next one takes several fields.
+pub fn chain(t: &mut Vec<u32>, e: &Vec<u32>, s: &mut Vec<u32>) -> u32 {
+    let mut ck = Ck { t, e, s };
+    let a = ck.push_both(1);
+    let b = ck.push_both(a);
+    let c = ck.push_both(b);
+    let d = ck.push_both(c);
+    ck.push_both(d)
+}
+
 #[verify::test]
 pub fn test_helper_in_one_branch() {
     let (mut t, e, mut s) = (Vec::new(), Vec::new(), Vec::new());
@@ -125,6 +136,14 @@ pub fn test_swap_in_one_branch() {
     let (mut t, mut s) = (Vec::new(), Vec::new());
     swap_in_one_branch(&mut t, &e, &mut s, 1);
     assert!(t.len() == 1 && s.len() == 0);
+}
+
+#[verify::test]
+pub fn test_chain() {
+    let e = Vec::new();
+    let (mut t, mut s) = (Vec::new(), Vec::new());
+    assert!(chain(&mut t, &e, &mut s) == 1);
+    assert!(t.len() == 5 && s.len() == 5);
 }
 
 #[verify::test]
