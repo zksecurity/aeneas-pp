@@ -1394,6 +1394,16 @@ and extract_lets (span : Meta.span) (ctx : extraction_ctx) (fmt : F.formatter)
               F.pp_print_string fmt "let";
               F.pp_print_space fmt ());
             let ctx = extract_tpat span ctx fmt ~is_let:true ~inside:false lv in
+            (* Lean matches on a sum only once its type is fully known, while
+               the expressions building it often leave one side unknown: we
+               annotate the variable ([let x : ty ← ...]) *)
+            (match (backend (), lv.pat, lv.ty) with
+            | Lean, POpen _, TAdt (TBuiltin TSum, _) ->
+                F.pp_print_space fmt ();
+                F.pp_print_string fmt ":";
+                F.pp_print_space fmt ();
+                extract_ty span ctx fmt TypeDeclId.TreeSet.empty ~inside:false lv.ty
+            | _ -> ());
             F.pp_print_space fmt ();
             let eq =
               match backend () with

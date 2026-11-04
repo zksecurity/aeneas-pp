@@ -172,6 +172,9 @@ let passes :
     ( None,
       "simplify_aggregates_unchanged_fields",
       simplify_aggregates_unchanged_fields );
+    (* Simplify the matches whose branches are all the same (introduced by the
+       let-bindings which may return, once the aggregates are simplified) *)
+    (None, "simplify_constant_matches", simplify_constant_matches);
     (* Simplify the lambdas again *)
     (None, "simplify_lambdas (pass 2)", simplify_lambdas);
     (* Simplify the let-bindings - some simplifications may have been unlocked by

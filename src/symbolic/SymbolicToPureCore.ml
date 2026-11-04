@@ -142,6 +142,22 @@ type fun_sigs = {
 [@@deriving show]
 
 (** Body synthesis context *)
+
+(** Where a return from the function delivers its output (the value returned
+    by the forward function grouped with the backward functions). *)
+type return_target =
+  | ReturnFromFunction  (** We return the output from the function *)
+  | NoReturn
+      (** We are in the bound expression of a let-binding which doesn't
+          return *)
+  | ReturnThroughLet of ty * ty
+      (** We are in the bound expression of a let-binding whose bound
+          expression may return (see {!SymbolicAst.let_expr}): the bound
+          expression evaluates to the sum of the outputs of the let-binding
+          (the left type) and of the output of the function (the right type),
+          and the let-binding forwards the latter to its own return target. *)
+[@@deriving show]
+
 type bs_ctx = {
   (* TODO: there are a lot of duplications with the various decls ctx *)
   span : Meta.span;  (** The span information about the current declaration *)
@@ -234,6 +250,8 @@ type bs_ctx = {
           We initialize this at [None]. *)
   mk_continue : (bs_ctx -> texpr -> texpr) option;
   mk_break : (bs_ctx -> texpr -> texpr) option;
+  return_target : return_target;
+      (** Where a return from the function delivers its output *)
   mut_borrow_to_consumed : texpr V.BorrowId.Map.t;
       (** A map from mutable borrows consumed by region abstractions to consumed
           values.

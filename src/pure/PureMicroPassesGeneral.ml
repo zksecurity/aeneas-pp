@@ -2186,6 +2186,44 @@ let simplify_aggregates_unchanged_fields =
   lift_expr_map_visitor_with_state simplify_aggregates_unchanged_fields_visitor
     { expand_map = ExprMap.empty; expanded = [] }
 
+(** Simplify the matches whose branches are all the same expression, which
+    doesn't use the variables bound by the patterns.
+
+    Ex.:
+    {[
+      match x with
+      | inl _ => ok x
+      | inr _ => ok x
+
+        ~~>
+
+      ok x
+    ]}
+
+    Such expressions are introduced when a let-binding whose bound expression
+    may return directly forwards the output of a nested one (see
+    {!SymbolicToPureExpressions.translate_let}). *)
+let simplify_constant_matches_visitor (_ctx : ctx) (_def : fun_decl) =
+  object
+    inherit [_] map_expr as super
+
+    method! visit_Switch env scrut switch =
+      match super#visit_Switch env scrut switch with
+      | Switch (_, Match (b0 :: branches)) as e ->
+          let is_constant (b : match_branch) =
+            b.branch = b0.branch
+            && FVarId.Set.disjoint (tpat_get_fvars b.pat)
+                 (texpr_get_fvars b.branch)
+          in
+          if is_constant b0 && List.for_all is_constant branches then
+            b0.branch.e
+          else e
+      | e -> e
+  end
+
+let simplify_constant_matches =
+  lift_expr_map_visitor simplify_constant_matches_visitor
+
 (** Convert the unit variables to [()] if they are used as right-values or [_]
     if they are used as left values in patterns. *)
 let unit_vars_to_unit (ctx : ctx) (def : fun_decl) : fun_decl =

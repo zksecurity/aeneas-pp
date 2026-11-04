@@ -77,8 +77,25 @@ def str_eq_then_branch (a : Str) (c : Bool) : Result Std.U32 := do
 def str_match_then_branches
   (kind : Str) (n : Std.U32) : Result (Option Std.U32) := do
   let b ← Str.Insts.CoreCmpPartialEqStr.eq kind (toStr "type")
-  if b
-  then
+  let s : _root_.Sum Std.U32 (Option Std.U32) ←
+    if b
+    then ok (Sum.inl 1#u32)
+    else
+      do
+      let b1 ← Str.Insts.CoreCmpPartialEqStr.eq kind (toStr "ctor")
+      if b1
+      then ok (Sum.inl 2#u32)
+      else
+        let b2 ← Str.Insts.CoreCmpPartialEqStr.eq kind (toStr "lift")
+        if b2
+        then ok (Sum.inl 3#u32)
+        else
+          let b3 ← Str.Insts.CoreCmpPartialEqStr.eq kind (toStr "ind")
+          if b3
+          then ok (Sum.inl 4#u32)
+          else ok (Sum.inr none)
+  match s with
+  | Sum.inl base =>
     let b1 ← Str.Insts.CoreCmpPartialEqStr.eq kind (toStr "lift")
     let count ← if b1
                   then ok 2#i32
@@ -87,57 +104,11 @@ def str_match_then_branches
                   then ok n
                   else ok 0#u32
     let scaled ← if n > 10#u32
-                   then 1#u32 * 2#u32
-                   else ok 1#u32
+                   then base * 2#u32
+                   else ok base
     let i ← scaled + extra
     ok (some i)
-  else
-    let b1 ← Str.Insts.CoreCmpPartialEqStr.eq kind (toStr "ctor")
-    if b1
-    then
-      let b2 ← Str.Insts.CoreCmpPartialEqStr.eq kind (toStr "lift")
-      let count ← if b2
-                    then ok 2#i32
-                    else ok 1#i32
-      let extra ← if count = 2#i32
-                    then ok n
-                    else ok 0#u32
-      let scaled ← if n > 10#u32
-                     then 2#u32 * 2#u32
-                     else ok 2#u32
-      let i ← scaled + extra
-      ok (some i)
-    else
-      let b2 ← Str.Insts.CoreCmpPartialEqStr.eq kind (toStr "lift")
-      if b2
-      then
-        let count ← if b2
-                      then ok 2#i32
-                      else ok 1#i32
-        let extra ← if count = 2#i32
-                      then ok n
-                      else ok 0#u32
-        let scaled ← if n > 10#u32
-                       then 3#u32 * 2#u32
-                       else ok 3#u32
-        let i ← scaled + extra
-        ok (some i)
-      else
-        let b3 ← Str.Insts.CoreCmpPartialEqStr.eq kind (toStr "ind")
-        if b3
-        then
-          let count ← if b2
-                        then ok 2#i32
-                        else ok 1#i32
-          let extra ← if count = 2#i32
-                        then ok n
-                        else ok 0#u32
-          let scaled ← if n > 10#u32
-                         then 4#u32 * 2#u32
-                         else ok 4#u32
-          let i ← scaled + extra
-          ok (some i)
-        else ok none
+  | Sum.inr o => ok o
 
 /-- [nested_shared_borrow_joins::ref_eq_then_branch]:
     Source: 'tests/src/nested-shared-borrow-joins.rs', lines 34:0-38:1

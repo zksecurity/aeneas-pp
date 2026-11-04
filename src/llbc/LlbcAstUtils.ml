@@ -191,17 +191,22 @@ let statement_has_break_continue_return (st : statement) : bool =
 
 (** Return true if the block contains a statement which breaks the control flow,
     at the exception of panics (that is: a break, a continue or a return) *)
-let block_has_break_continue_return (st : block) : bool =
+(** Whether a block contains a [break] or a [continue] exiting it, that is
+    targeting a loop which encloses the block: the loops inside the block
+    consume their own [break] and [continue] statements. *)
+let block_has_escaping_break_continue (b : block) : bool =
   let visitor =
-    object
+    object (self)
       inherit [_] iter_statement
-      method! visit_Break _ _ = raise Utils.Found
-      method! visit_Continue _ _ = raise Utils.Found
-      method! visit_Return _ = raise Utils.Found
+
+      (* The environment is the number of loops entered inside the block *)
+      method! visit_Loop depth body = self#visit_block (depth + 1) body
+      method! visit_Break depth i = if i >= depth then raise Utils.Found
+      method! visit_Continue depth i = if i >= depth then raise Utils.Found
     end
   in
   try
-    visitor#visit_block () st;
+    visitor#visit_block 0 b;
     false
   with Utils.Found -> true
 

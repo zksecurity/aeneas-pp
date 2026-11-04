@@ -1179,24 +1179,26 @@ and compute_back_tys_with_info (dsg : Pure.decomposed_fun_type) :
 and compute_back_tys (dsg : Pure.decomposed_fun_type) : ty option list =
   List.map (Option.map snd) (compute_back_tys_with_info dsg)
 
-(** Compute the output type of a function, from a decomposed signature (the
-    output type contains the type of the value returned by the forward function
-    as well as the types of the returned backward functions). *)
-and compute_output_ty_from_decomposed (dsg : Pure.decomposed_fun_type) : ty =
+(** Compute the output type of a function, from a decomposed signature, before
+    wrapping it in the error monad if the function can fail (the output type
+    contains the type of the value returned by the forward function as well as
+    the types of the returned backward functions). *)
+and compute_raw_output_ty_from_decomposed (dsg : Pure.decomposed_fun_type) : ty
+    =
   (* Compute the arrow types for all the backward functions *)
   let back_tys = List.filter_map (fun x -> x) (compute_back_tys dsg) in
-  (* Group the forward output and the types of the backward functions *)
-  let effect_info = dsg.fwd_info.effect_info in
-  let output =
-    (* We might need to ignore the output of the forward function
-       (if it is unit for instance) *)
-    let tys =
-      if dsg.fwd_info.ignore_output then back_tys
-      else dsg.fwd_output :: back_tys
-    in
-    mk_simpl_tuple_ty tys
+  (* Group the forward output and the types of the backward functions.
+     We might need to ignore the output of the forward function (if it is unit
+     for instance) *)
+  let tys =
+    if dsg.fwd_info.ignore_output then back_tys else dsg.fwd_output :: back_tys
   in
-  mk_output_ty_from_effect_info effect_info output
+  mk_simpl_tuple_ty tys
+
+(** Compute the output type of a function, from a decomposed signature. *)
+and compute_output_ty_from_decomposed (dsg : Pure.decomposed_fun_type) : ty =
+  mk_output_ty_from_effect_info dsg.fwd_info.effect_info
+    (compute_raw_output_ty_from_decomposed dsg)
 
 and translate_fun_sig_from_decomposed (dsg : Pure.decomposed_fun_sig) : fun_sig
     =

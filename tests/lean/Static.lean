@@ -944,10 +944,7 @@ def static_error_question_mark
     Visibility: public -/
 def static_error_match
   (x : Std.U32) : Result (core.result.Result Std.U32 StaticError) := do
-  let r ← static_error_parse x
-  match r with
-  | core.result.Result.Ok _ => ok r
-  | core.result.Result.Err _ => ok r
+  static_error_parse x
 
 /-- [static::static_error_with_region]:
     Source: 'tests/src/static.rs', lines 562:0-566:1

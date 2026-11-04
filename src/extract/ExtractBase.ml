@@ -1143,6 +1143,7 @@ let builtin_adts () : (builtin_ty * string) list =
       [
         (TResult, "Result");
         (TLoopResult, "ControlFlow");
+        (TSum, "_root_.Sum");
         (TFuel, "Nat");
         (TArray, "Array");
         (TSlice, "Slice");
@@ -1154,6 +1155,11 @@ let builtin_adts () : (builtin_ty * string) list =
       [
         (TResult, "result");
         (TLoopResult, "control_flow");
+        ( TSum,
+          match backend () with
+          | FStar -> "FStar.Pervasives.either"
+          | Coq -> "Datatypes.sum"
+          | _ -> "sum$sum" );
         (TFuel, if backend () = HOL4 then "num" else "nat");
         (TArray, "array");
         (TSlice, "slice");
@@ -1177,6 +1183,8 @@ let builtin_variants () : (builtin_ty * VariantId.id * string) list =
         (TResult, result_fail_id, "Fail");
         (TLoopResult, loop_result_continue_id, "Cont");
         (TLoopResult, loop_result_break_id, "Done");
+        (TSum, sum_left_id, "FStar.Pervasives.Inl");
+        (TSum, sum_right_id, "FStar.Pervasives.Inr");
         (TError, error_failure_id, "Failure");
         (TError, error_out_of_fuel_id, "OutOfFuel");
         (* No Fuel::Zero on purpose *)
@@ -1188,6 +1196,8 @@ let builtin_variants () : (builtin_ty * VariantId.id * string) list =
         (TResult, result_fail_id, "Fail_");
         (TLoopResult, loop_result_continue_id, "Cont");
         (TLoopResult, loop_result_break_id, "Done");
+        (TSum, sum_left_id, "Datatypes.inl");
+        (TSum, sum_right_id, "Datatypes.inr");
         (TError, error_failure_id, "Failure");
         (TError, error_out_of_fuel_id, "OutOfFuel");
         (TFuel, fuel_zero_id, "O");
@@ -1200,6 +1210,8 @@ let builtin_variants () : (builtin_ty * VariantId.id * string) list =
         (TError, error_failure_id, "panic");
         (TLoopResult, loop_result_continue_id, "cont");
         (TLoopResult, loop_result_break_id, "done");
+        (TSum, sum_left_id, "Sum.inl");
+        (TSum, sum_right_id, "Sum.inr");
         (* No Fuel::Zero on purpose *)
         (* No Fuel::Succ on purpose *)
       ]
@@ -1209,6 +1221,8 @@ let builtin_variants () : (builtin_ty * VariantId.id * string) list =
         (TResult, result_fail_id, "Fail");
         (TLoopResult, loop_result_continue_id, "Cont");
         (TLoopResult, loop_result_break_id, "Done");
+        (TSum, sum_left_id, "sum$INL");
+        (TSum, sum_right_id, "sum$INR");
         (TError, error_failure_id, "Failure");
         (* No Fuel::Zero on purpose *)
         (* No Fuel::Succ on purpose *)

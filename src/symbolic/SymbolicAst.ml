@@ -309,6 +309,10 @@ and let_expr = {
   out_abs : abs list;
       (** The abstractions introduced in the joined environment (those are
           output by the bound expression) *)
+  can_return : bool;
+      (** Whether some branches of the bound expression return from the
+          function rather than reach the join (they contain [ForwardEnd]
+          nodes): those don't execute [next_expr]. *)
   next_expr : expr;  (** The expression for *after* the let *)
   span : Meta.span;  (** Information about the origin of the expression *)
 }

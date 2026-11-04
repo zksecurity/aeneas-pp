@@ -905,8 +905,8 @@ and eval_switch_raw (config : config) (span : Meta.span) (data : switch_data)
             in
             (* Check if we should join the states after the if then else *)
             let join =
-              (not (block_has_break_continue_return true_block))
-              && not (block_has_break_continue_return false_block)
+              (not (block_has_escaping_break_continue true_block))
+              && not (block_has_escaping_break_continue false_block)
             in
             let resl_true = eval_block config true_block true_ctx in
             let resl_false = eval_block config false_block false_ctx in
@@ -963,8 +963,8 @@ and eval_switch_raw (config : config) (span : Meta.span) (data : switch_data)
 
             (* Should we join the contexts after the switch? *)
             let join =
-              (not (List.exists block_has_break_continue_return target_blocks))
-              && not (block_has_break_continue_return otherwise)
+              (not (List.exists block_has_escaping_break_continue target_blocks))
+              && not (block_has_escaping_break_continue otherwise)
             in
             let resl, cf =
               comp_seqs __FILE__ __LINE__ span
@@ -1030,7 +1030,7 @@ and eval_switch_raw (config : config) (span : Meta.span) (data : switch_data)
             in
             (* Should we join the contexts after the match? *)
             let join =
-              not (List.exists block_has_break_continue_return branches)
+              not (List.exists block_has_escaping_break_continue branches)
             in
             let ctx_resl, cf = comp_seqs __FILE__ __LINE__ span resl in
             let cc = cc_comp cf_expand cf in
@@ -1067,27 +1067,25 @@ and eval_switch_with_join (config : config) (span : Meta.span)
     (cf : SA.expr list -> SA.expr) (ctx0 : eval_ctx)
     (ctx_resl : (eval_ctx * statement_eval_res) list) :
     (eval_ctx * statement_eval_res) list * (SA.expr list -> SA.expr) =
-  (* Count the number of contexts to join.
-
-     Note that all evaluation results should be [Unit]: break, continue and
-     return should not happen as we attempt to join only if the code in the
-     branches doesn't contain break, etc. instructions. It can also not be
-     panic as once we reach a panic we stop the symbolic execution (we simply
-     synthesize a panic node in the symbolic AST). *)
-  [%sanity_check] span (List.for_all (fun (_, res) -> res = Unit) ctx_resl);
-  let ctxl = List.map fst ctx_resl in
-  let num_units = List.length ctxl in
-  if num_units = 0 then (
-    ( (* We only have panics: nothing to do *)
-      [],
-      fun el ->
-        [%sanity_check] span (el = []);
-        cf [] ))
-  else if num_units = 1 then
-    (* No need to join the contexts: continue with the current context, and inline
-       what happens inside the loop inside the branching expression. *)
-    let ctx = List.hd ctxl in
-    ([ (ctx, Unit) ], cf)
+  (* We join the contexts of the branches which continue after the switch
+     ([Unit]). The branches may also return: those results are transmitted as
+     they are, and the code they lead to is part of the bound expression of the
+     let-binding we generate. Break and continue don't happen as we attempt to
+     join only if the code in the branches doesn't contain break or continue
+     statements exiting the switch. Panics don't produce results: we stop the
+     symbolic execution there (we simply synthesize a panic node in the
+     symbolic AST). *)
+  [%sanity_check] span
+    (List.for_all (fun (_, res) -> res = Unit || res = Return) ctx_resl);
+  let ctxl =
+    List.filter_map
+      (fun (ctx, res) -> if res = Unit then Some ctx else None)
+      ctx_resl
+  in
+  if List.length ctxl <= 1 then
+    (* No need to join the contexts: continue with the current context, and
+       inline what happens after the switch inside the branching expression. *)
+    (ctx_resl, cf)
   else (
     (* We need to join the contexts *)
     [%ldebug
@@ -1100,11 +1098,7 @@ and eval_switch_with_join (config : config) (span : Meta.span)
                ^ show_statement_eval_res res
                ^ "):\n" ^ eval_ctx_to_string ctx)
              ctx_resl)];
-    let ctx_to_join =
-      List.filter_map
-        (fun (ctx, res) -> if res = Unit then Some ctx else None)
-        ctx_resl
-    in
+    let ctx_to_join = ctxl in
     (* Note that we make the join *recoverable*: if the join fails (because
        it requires supporting some unsupported case) it is possible to recover
        from it, in which case we simply duplicate the code after the switch *)
@@ -1187,30 +1181,48 @@ and eval_switch_with_join (config : config) (span : Meta.span)
       cf (SA.Join (ctx, output_values, output_abs))
     in
     let resl = List.map match_ctx ctxl in
+    let exits = List.filter (fun (_, res) -> res <> Unit) ctx_resl in
 
-    (* We can now call the continuation introduced when branching to group the
-       expressions of the branches into a single branching expression (i.e.,
-       we group the expressions for the [then] and [else] branches into a single
-       [if then else] expression. *)
-    let bound_expr = cf resl in
-
-    (* Generate the let expression *)
+    (* Generate the let expression. The continuation receives the expression
+       for what happens after the switch, then the expressions for the exits.
+       We can then call the continuation introduced when branching to group
+       the expressions of the branches into a single branching expression (for
+       instance, we group the expressions for the [then] and [else] branches
+       into a single [if then else] expression), preserving the order of the
+       branches. *)
     let cf (el : SA.expr list) : SA.expr =
       match el with
-      | [ next_expr ] ->
+      | next_expr :: exit_exprs ->
+          let joined = ref resl in
+          let exited = ref exit_exprs in
+          let pop (l : SA.expr list ref) : SA.expr =
+            match !l with
+            | e :: l' ->
+                l := l';
+                e
+            | [] -> [%internal_error] span
+          in
+          let branch_exprs =
+            List.map
+              (fun (_, res) -> if res = Unit then pop joined else pop exited)
+              ctx_resl
+          in
+          [%sanity_check] span (!joined = [] && !exited = []);
           Let
             {
-              bound_expr;
+              bound_expr = cf branch_exprs;
               out_svalues = output_svalues;
               out_abs = output_abs;
+              can_return = exits <> [];
               next_expr;
               span;
             }
-      | _ -> [%internal_error] span
+      | [] -> [%internal_error] span
     in
 
-    (* Output the joined context *)
-    ([ (joined_ctx, Unit) ], cf))
+    (* Output the joined context, then the contexts of the branches which
+       returned *)
+    ((joined_ctx, Unit) :: exits, cf))
 
 (** Evaluate a function call (auxiliary helper for [eval_statement]) *)
 and eval_function_call (config : config) (span : Meta.span) (call : call)
