@@ -306,6 +306,11 @@ val loop_join_origin_with_continue_ctxs :
       during the match (in the case of loops, this is the list of input
       parameters of the loop).
     - [fixed_ids]
+    - [preserve_common_abs]: the source context is the join of contexts like
+      the target (the branches of a switch). The join kept the abstractions
+      which were the same in all those contexts as they were, so we don't
+      normalize the abstractions which are the same in the source and the
+      target either. Otherwise, we only preserve the fixed abstractions.
     - [src_ctx]
     - [tgt_ctx]
 
@@ -324,6 +329,7 @@ val match_ctx_with_target :
   abs_id list ->
   symbolic_value_id list ->
   recoverable:bool ->
+  preserve_common_abs:bool ->
   eval_ctx ->
   eval_ctx ->
   (eval_ctx * eval_ctx * tvalue SymbolicValueId.Map.t * abs AbsId.Map.t)

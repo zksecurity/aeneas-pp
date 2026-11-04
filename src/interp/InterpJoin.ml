@@ -1349,7 +1349,7 @@ let match_ctx_with_target (config : config) (span : Meta.span)
     (fresh_abs_kind : abs_kind) (fixed_aids : AbsId.Set.t)
     (fixed_dids : DummyVarId.Set.t) (input_abs : AbsId.id list)
     (input_svalues : SymbolicValueId.id list) ~(recoverable : bool)
-    (src_ctx : eval_ctx) (tgt_ctx : eval_ctx) :
+    ~(preserve_common_abs : bool) (src_ctx : eval_ctx) (tgt_ctx : eval_ctx) :
     (eval_ctx * eval_ctx * tvalue SymbolicValueId.Map.t * abs AbsId.Map.t)
     * (SymbolicAst.expr -> SymbolicAst.expr) =
   (* Debug *)
@@ -1399,11 +1399,17 @@ let match_ctx_with_target (config : config) (span : Meta.span)
     "- tgt_ctx after simplify_dummy_values_useless_abs (ii):\n"
     ^ eval_ctx_to_string tgt_ctx];
 
+  let preserved_aids =
+    if preserve_common_abs then
+      AbsId.Set.union fixed_aids (compute_fixed_abs_ids src_ctx tgt_ctx)
+    else fixed_aids
+  in
+
   (* Removed the ended shared loans and destructure the shared loans.
      We destructure the shared loans in the abstractions which appear in
      [tgt_ctx] but not [src_ctx]. TODO: generalize. *)
   let tgt_ctx, cc =
-    comp cc (destructure_shared_loans span fixed_aids tgt_ctx)
+    comp cc (destructure_shared_loans span preserved_aids tgt_ctx)
   in
   [%ltrace
     "- tgt_ctx after simplify_ended_shared_loans:\n"
@@ -1411,7 +1417,7 @@ let match_ctx_with_target (config : config) (span : Meta.span)
 
   (* Reduce the context - TODO: generalize the join so that we don't need to do this *)
   let tgt_ctx =
-    reduce_ctx config span ~with_abs_conts:true fresh_abs_kind fixed_aids
+    reduce_ctx config span ~with_abs_conts:true fresh_abs_kind preserved_aids
       fixed_dids tgt_ctx
   in
   [%ltrace "- tgt_ctx after reduce_ctx:\n" ^ eval_ctx_to_string tgt_ctx];
@@ -1677,4 +1683,5 @@ let loop_match_break_ctx_with_target (config : config) (span : Meta.span)
     ^ eval_ctx_to_string tgt_ctx];
 
   match_ctx_with_target config span WithCont fixed_aids fixed_dids fp_input_abs
-    fp_input_svalues ~recoverable:false src_ctx tgt_ctx
+    fp_input_svalues ~recoverable:false ~preserve_common_abs:false src_ctx
+    tgt_ctx

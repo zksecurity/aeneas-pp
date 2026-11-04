@@ -106,6 +106,46 @@ pub fn holder_branch(h: &Holder<'_>, other: &u32, c: bool) -> u32 {
 }
 
 // ------------------------------------------------------------------
+// A borrow into a structure, then branchings: the region abstractions
+// introduced before the branchings are the same in all the branches, and the
+// branches must be normalized like the join which computed their target.
+// ------------------------------------------------------------------
+
+pub enum Kind {
+    Ind { ctors: Vec<u32> },
+    Other,
+}
+
+pub struct Decl {
+    pub kind: Kind,
+    pub params: Vec<u32>,
+}
+
+pub struct Env {
+    pub decls: Vec<Decl>,
+}
+
+impl Env {
+    pub fn get(&self, i: usize) -> Option<&Decl> {
+        self.decls.get(i)
+    }
+}
+
+pub fn frame_kept_by_branches(env: &Env, k: &str, c: bool) -> Option<u32> {
+    let d = env.get(0)?;
+    let Kind::Ind { ctors } = &d.kind else {
+        return None;
+    };
+    let x = match k {
+        "a" => 1,
+        "b" => 2,
+        _ => 3,
+    };
+    let y = if c { ctors.len() as u32 } else { x };
+    Some(y + x + d.params.len() as u32)
+}
+
+// ------------------------------------------------------------------
 // Executed checks
 // ------------------------------------------------------------------
 

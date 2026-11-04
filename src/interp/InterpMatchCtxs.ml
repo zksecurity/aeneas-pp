@@ -2025,7 +2025,7 @@ struct
       (_ : eval_ctx) ~(loan_is_left : bool) (_ : ety) (_ : loan_id) (_ : tvalue)
       (_ : tvalue) : tvalue =
     let _ = loan_is_left in
-    raise (Distinct "match_mut_loan_with_other")
+    raise (Distinct "match_shared_loan_with_other")
 
   let match_mut_loan_with_other (_ : tvalue_matcher) (_ : eval_ctx)
       (_ : eval_ctx) ~(loan_is_left : bool) (_ : ety) (_ : loan_id) (_ : tvalue)

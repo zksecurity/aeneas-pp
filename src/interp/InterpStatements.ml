@@ -1166,7 +1166,8 @@ and eval_switch_with_join (config : config) (span : Meta.span)
       let (_, ctx, output_values, output_abs), cf =
         InterpJoin.match_ctx_with_target config span WithCont fixed_aids
           fixed_dids output_abs_ids output_svalue_ids
-          ~recoverable:!Config.recover_joins joined_ctx ctx
+          ~recoverable:!Config.recover_joins ~preserve_common_abs:true
+          joined_ctx ctx
       in
 
       let reorder_output_abs (map : abs AbsId.Map.t) (absl : abs_id list) :

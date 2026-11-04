@@ -23,6 +23,26 @@ noncomputable section
 
 namespace nested_shared_borrow_joins
 
+/-- [core::option::{impl core::ops::try_trait::Try for core::option::Option<T>}::branch]:
+    Source: '/rustc/library/core/src/option.rs', lines 2875:4-2875:64
+    Name pattern: [core::option::{core::ops::try_trait::Try<core::option::Option<@T>>}::branch]
+    Visibility: public -/
+@[rust_fun
+  "core::option::{core::ops::try_trait::Try<core::option::Option<@T>>}::branch"]
+axiom core.option.Option.Insts.CoreOpsTry_traitTry.branch
+  {T : Type _} :
+  Option T → Result (core.ops.control_flow.ControlFlow (Option Never) T)
+
+/-- [core::option::{impl core::ops::try_trait::FromResidual<core::option::Option<!>> for core::option::Option<T>}::from_residual]:
+    Source: '/rustc/library/core/src/option.rs', lines 2889:4-2889:49
+    Name pattern: [core::option::{core::ops::try_trait::FromResidual<core::option::Option<@T>, core::option::Option<!>>}::from_residual]
+    Visibility: public -/
+@[rust_fun
+  "core::option::{core::ops::try_trait::FromResidual<core::option::Option<@T>, core::option::Option<!>>}::from_residual"]
+axiom
+  core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
+  (T : Type _) : Option Never → Result (Option T)
+
 /-- [core::str::traits::{impl core::cmp::PartialEq<str> for str}::eq]:
     Source: '/rustc/library/core/src/str/traits.rs', lines 29:4-29:37
     Name pattern: [core::str::traits::{core::cmp::PartialEq<str, str>}::eq]
@@ -207,8 +227,72 @@ def holder_branch
             else ok 0#u32
   x + y
 
+/-- [nested_shared_borrow_joins::Kind]
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 114:0-117:1
+    Visibility: public -/
+@[discriminant isize]
+inductive Kind where
+| Ind : alloc.vec.Vec Std.U32 → Kind
+| Other : Kind
+
+/-- [nested_shared_borrow_joins::Decl]
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 119:0-122:1
+    Visibility: public -/
+structure Decl where
+  kind : Kind
+  params : alloc.vec.Vec Std.U32
+
+/-- [nested_shared_borrow_joins::Env]
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 124:0-126:1
+    Visibility: public -/
+structure Env where
+  decls : alloc.vec.Vec Decl
+
+/-- [nested_shared_borrow_joins::{nested_shared_borrow_joins::Env}::get]:
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 129:4-131:5
+    Visibility: public -/
+def Env.get (self : Env) (i : Std.Usize) : Result (Option Decl) := do
+  let s := alloc.vec.Vec.deref self.decls
+  core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice Decl) s i
+
+/-- [nested_shared_borrow_joins::frame_kept_by_branches]:
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 134:0-146:1
+    Visibility: public -/
+def frame_kept_by_branches
+  (env : Env) (k : Str) (c : Bool) : Result (Option Std.U32) := do
+  let o ← Env.get env 0#usize
+  let cf ← core.option.Option.Insts.CoreOpsTry_traitTry.branch o
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue val =>
+    match val.kind with
+    | Kind.Ind ctors =>
+      let b ← Str.Insts.CoreCmpPartialEqStr.eq k (toStr "a")
+      let y ←
+        if b
+        then ok 1#u32
+        else
+          do
+          let b1 ← Str.Insts.CoreCmpPartialEqStr.eq k (toStr "b")
+          if b1
+          then ok 2#u32
+          else ok 3#u32
+      let y1 ←
+        if c
+        then let i := alloc.vec.Vec.len ctors
+             ok (UScalar.cast .U32 i)
+        else ok y
+      let i ← y1 + y
+      let i1 := alloc.vec.Vec.len val.params
+      let i2 ← lift (UScalar.cast .U32 i1)
+      let i3 ← i + i2
+      ok (some i3)
+    | Kind.Other => ok none
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
+      Std.U32 residual
+
 /-- [nested_shared_borrow_joins::test_ref_eq_then_branch]:
-    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 113:0-117:1
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 153:0-157:1
     Visibility: public -/
 def test_ref_eq_then_branch : Result Unit := do
   let i ← ref_eq_then_branch 3#u32 3#u32 true
@@ -220,7 +304,7 @@ def test_ref_eq_then_branch : Result Unit := do
 #guard (test_ref_eq_then_branch).reducesTo ()
 
 /-- [nested_shared_borrow_joins::test_join_call_and_local]:
-    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 120:0-124:1
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 160:0-164:1
     Visibility: public -/
 def test_join_call_and_local : Result Unit := do
   let i ← join_call_and_local 7#u32 true
@@ -232,7 +316,7 @@ def test_join_call_and_local : Result Unit := do
 #guard (test_join_call_and_local).reducesTo ()
 
 /-- [nested_shared_borrow_joins::test_join_aliased_handles]:
-    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 127:0-131:1
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 167:0-171:1
     Visibility: public -/
 def test_join_aliased_handles : Result Unit := do
   let i ← join_aliased_handles 5#u32 true
@@ -244,7 +328,7 @@ def test_join_aliased_handles : Result Unit := do
 #guard (test_join_aliased_handles).reducesTo ()
 
 /-- [nested_shared_borrow_joins::test_update_across_join]:
-    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 134:0-143:1
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 174:0-183:1
     Visibility: public -/
 def test_update_across_join : Result Unit := do
   let x ← update_across_join 1#u32 1#u32 0#u32 true
@@ -258,7 +342,7 @@ def test_update_across_join : Result Unit := do
 #guard (test_update_across_join).reducesTo ()
 
 /-- [nested_shared_borrow_joins::test_eq_in_branch]:
-    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 146:0-151:1
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 186:0-191:1
     Visibility: public -/
 def test_eq_in_branch : Result Unit := do
   let i ← eq_in_branch 1#u32 1#u32 true
@@ -272,7 +356,7 @@ def test_eq_in_branch : Result Unit := do
 #guard (test_eq_in_branch).reducesTo ()
 
 /-- [nested_shared_borrow_joins::test_holder_branch]:
-    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 154:0-159:1
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 194:0-199:1
     Visibility: public -/
 def test_holder_branch : Result Unit := do
   let i ← holder_branch { r := 5#u32 } 2#u32 true
