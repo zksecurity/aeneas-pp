@@ -147,10 +147,16 @@ let convert_value_to_abstractions (span : Meta.span) (abs_kind : abs_kind)
     | VAdt { variant_id = _; fields } -> List.iter to_abs fields
     | VBorrow bc -> (
         let _, ref_ty, kind = ty_as_ref v.ty in
-        [%cassert] span (ty_no_regions ref_ty)
-          "Nested borrows are not supported yet";
         match bc with
         | VSharedBorrow (bid, sid) ->
+            (* The references inside the shared value (nested shared borrows)
+               don't belong to the abstraction: they get fresh regions *)
+            [%cassert] span
+              (not (ty_has_mut_borrows ctx.type_ctx.type_infos ref_ty))
+              "Nested borrows are not supported yet";
+            let _, ref_ty =
+              ty_refresh_regions (Some span) ctx.fresh_region_id ref_ty
+            in
             (* Push a region abstraction for this borrow *)
             let rid = ctx.fresh_region_id () in
             let ty = TRef (RVar (Free rid), ref_ty, kind) in
@@ -161,6 +167,8 @@ let convert_value_to_abstractions (span : Meta.span) (abs_kind : abs_kind)
             push_abs (RVar (Free rid)) [ value ] ev_out ev_in
         | VMutBorrow (bid, bv) ->
             (* We don't support nested borrows for now *)
+            [%cassert] span (ty_no_regions ref_ty)
+              "Nested borrows are not supported yet";
             [%cassert] span
               (not (value_has_borrows (Some span) ctx bv.value))
               "Nested borrows are not supported yet";
