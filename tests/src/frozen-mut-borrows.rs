@@ -139,7 +139,7 @@ pub fn run_eval_iota(n: usize, k: bool, fill: bool) -> (Result<Option<u32>, u32>
     }
     let mut e = Eval { t: &mut t, env: &env, s: &mut store };
     let r = e.iota(n, k);
-    (r, e.t.len(), e.s.vals.len())
+    (r, t.len(), store.vals.len())
 }
 
 #[verify::test]
@@ -175,6 +175,10 @@ pub fn test_read_then_push() {
     v.push(3);
     let (n, x) = run_read_then_push(&mut v);
     assert!(n == 2 && x == 4);
+    let env = Env { decls: Vec::new() };
+    let mut e = Eng { t: &mut v, env: &env };
+    assert!(read_then_push(&mut e) == 3);
+    assert!(v.len() == 3 && v[2] == 4);
 }
 
 #[verify::test]

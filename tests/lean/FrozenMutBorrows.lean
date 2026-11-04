@@ -438,15 +438,16 @@ def run_eval_iota
       let v2 ← alloc.vec.Vec.push v1 2#u32
       alloc.vec.Vec.push v2 3#u32
     else ok (alloc.vec.Vec.new Std.U32)
-  let (r, e, _) ←
+  let (r, e, iota_back) ←
     Eval.iota
       {
         t := (alloc.vec.Vec.new Std.U32),
         env := { decls := decls1 },
         s := { vals := v }
       } n k
-  let i := alloc.vec.Vec.len e.t
-  let i1 := alloc.vec.Vec.len e.s.vals
+  let e1 := iota_back e
+  let i := alloc.vec.Vec.len e1.t
+  let i1 := alloc.vec.Vec.len e1.s.vals
   ok (r, i, i1)
 
 /-- [frozen_mut_borrows::test_reads]:
@@ -489,19 +490,28 @@ def run_read_then_push
   ok ((n, i1), (read_then_push_back e).t)
 
 /-- [frozen_mut_borrows::test_read_then_push]:
-    Source: 'tests/src/frozen-mut-borrows.rs', lines 173:0-178:1
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 173:0-182:1
     Visibility: public -/
 def test_read_then_push : Result Unit := do
   let v ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.U32) 3#u32
-  let ((n, x), _) ← run_read_then_push v
+  let ((n, x), v1) ← run_read_then_push v
   massert (n = 2#usize)
   massert (x = 4#u32)
+  let (i, e, read_then_push_back) ←
+    read_then_push { t := v1, env := { decls := (alloc.vec.Vec.new Std.U32) } }
+  massert (i = 3#usize)
+  let i1 := alloc.vec.Vec.len (read_then_push_back e).t
+  massert (i1 = 3#usize)
+  let i2 ←
+    alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+      (read_then_push_back e).t 2#usize
+  massert (i2 = 4#u32)
 
 /- Unit test for [frozen_mut_borrows::test_read_then_push] -/
 #guard (test_read_then_push).reducesTo ()
 
 /-- [frozen_mut_borrows::test_iota]:
-    Source: 'tests/src/frozen-mut-borrows.rs', lines 181:0-193:1
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 185:0-197:1
     Visibility: public -/
 def test_iota : Result Unit := do
   let decls ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.U32) 7#u32
@@ -569,7 +579,7 @@ def test_iota : Result Unit := do
 #guard (test_iota).reducesTo ()
 
 /-- [frozen_mut_borrows::test_eval_iota]:
-    Source: 'tests/src/frozen-mut-borrows.rs', lines 196:0-205:1
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 200:0-209:1
     Visibility: public -/
 def test_eval_iota : Result Unit := do
   let (r, t, s) ← run_eval_iota 0#usize true false

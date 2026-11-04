@@ -670,6 +670,9 @@ let expand_symbolic_int (span : Meta.span) (sv : symbolic_value)
 (** Expand all the symbolic values which contain borrows. Allows us to restrict
     ourselves to a simpler model for the projectors over symbolic values.
 
+    We ignore the symbolic values all the regions of which have ended: their
+    borrows can't be used anymore.
+
     Fails if doing this requires to do a branching (because we need to expand an
     enumeration with strictly more than one variant, a slice, etc.) or if we
     need to expand a recursive type (because this leads to looping). *)
@@ -681,9 +684,16 @@ let greedy_expand_symbolics_with_borrows (span : Meta.span) : cm_fun =
       inherit [_] iter_eval_ctx
 
       method! visit_VSymbolic _ sv =
+        let has_live_regions =
+          ty_has_regions_in_pred ctx.type_ctx.type_infos
+            (fun r ->
+              not (Charon.TypesUtils.region_in_set r ctx.ended_regions))
+            sv.sv_ty
+        in
         if
-          ValuesUtils.symbolic_value_is_greedily_expandable (Some span)
-            ctx.type_ctx.type_decls ctx.type_ctx.type_infos sv
+          has_live_regions
+          && ValuesUtils.symbolic_value_is_greedily_expandable (Some span)
+               ctx.type_ctx.type_decls ctx.type_ctx.type_infos sv
         then raise (FoundSymbolicValue sv)
         else ()
     end
