@@ -1299,6 +1299,21 @@ let close_binders (span : Meta.span) (patl : tpat list) (e : texpr) :
   let e = visitor#visit_texpr 0 e in
   (patl, e)
 
+(** Whether an expression refers to variables bound outside of it *)
+let texpr_has_loose_bvars (e : texpr) : bool =
+  let visitor =
+    object
+      inherit [_] scoped_iter_expr
+
+      method! visit_BVar scope (var : bvar) =
+        if var.scope >= scope then raise Utils.Found
+    end
+  in
+  try
+    visitor#visit_texpr 0 e;
+    false
+  with Utils.Found -> true
+
 (** Close a binder in an expression.
 
     Return the close binder (where the free variables have been replaced with

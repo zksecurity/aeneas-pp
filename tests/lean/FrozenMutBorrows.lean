@@ -181,8 +181,276 @@ def Eng.iota
                          { self with t := v1 }
   ok (r1, { t := v, env := e }, back'a)
 
+/-- [frozen_mut_borrows::Store]
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 72:0-74:1
+    Visibility: public -/
+structure Store where
+  vals : alloc.vec.Vec Std.U32
+
+/-- [frozen_mut_borrows::Eval]
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 77:0-81:1
+    Visibility: public -/
+structure Eval where
+  t : alloc.vec.Vec Std.U32
+  env : Env
+  s : Store
+
+/-- [frozen_mut_borrows::{frozen_mut_borrows::Eval<'a>}::decl]:
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 84:4-86:5 -/
+def Eval.decl
+  (self : Eval) (n : Std.Usize) :
+  Result (core.result.Result Std.U32 Std.U32)
+  := do
+  let i := alloc.vec.Vec.len self.env.decls
+  if n < i
+  then
+    let i1 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+        self.env.decls n
+    ok (core.result.Result.Ok i1)
+  else ok (core.result.Result.Err 0#u32)
+
+/-- [frozen_mut_borrows::{frozen_mut_borrows::Eval<'a>}::val]:
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 88:4-90:5 -/
+def Eval.val (self : Eval) (v : Std.U32) : Result Std.U32 := do
+  let i ← lift (UScalar.cast .Usize v)
+  let i1 := alloc.vec.Vec.len self.s.vals
+  if i < i1
+  then
+    let i2 ← lift (UScalar.cast .Usize v)
+    alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+      self.s.vals i2
+  else ok 0#u32
+
+/-- [frozen_mut_borrows::{frozen_mut_borrows::Eval<'a>}::kc]:
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 92:4-95:5 -/
+def Eval.kc
+  (self : Eval) (x : Std.U32) :
+  Result ((core.result.Result (Option Std.U32) Std.U32) × Eval × (Eval →
+    Eval))
+  := do
+  let v ← alloc.vec.Vec.push self.t x
+  let o ← if x > 5#u32
+            then ok (some x)
+            else ok none
+  let back'a := fun self1 => { self1 with env := self.env }
+  ok (core.result.Result.Ok o, { self with t := v }, back'a)
+
+/-- [frozen_mut_borrows::{frozen_mut_borrows::Eval<'a>}::eta]:
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 97:4-100:5 -/
+def Eval.eta
+  (self : Eval) (x : Std.U32) :
+  Result ((core.result.Result Std.U32 Std.U32) × Eval × (Eval → Eval))
+  := do
+  let v ← alloc.vec.Vec.push self.s.vals x
+  let i ← x + 1#u32
+  let back'a := fun self1 => { self1 with env := self.env }
+  ok (core.result.Result.Ok i, { self with s := { vals := v } }, back'a)
+
+/-- [frozen_mut_borrows::{frozen_mut_borrows::Eval<'a>}::whnf]:
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 102:4-105:5 -/
+def Eval.whnf
+  (self : Eval) (x : Std.U32) :
+  Result ((core.result.Result Std.U32 Std.U32) × Eval × (Eval → Eval))
+  := do
+  let v ← alloc.vec.Vec.push self.t x
+  let r ←
+    if x > 100#u32
+    then ok (core.result.Result.Err x)
+    else ok (core.result.Result.Ok x)
+  let back'a := fun self1 => { self1 with env := self.env }
+  ok (r, { self with t := v }, back'a)
+
+/-- [frozen_mut_borrows::{frozen_mut_borrows::Eval<'a>}::iota::{closure}]
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 118:26-118:60 -/
+@[reducible]
+def Eval.iota.closure := Unit
+
+/-- [frozen_mut_borrows::{frozen_mut_borrows::Eval<'a>}::iota::{impl core::ops::function::Fn<(&'_3 frozen_mut_borrows::Eval<'_2>, u32), bool> for frozen_mut_borrows::{frozen_mut_borrows::Eval<'a>}::iota::{closure}<'a, '_1, '_2>}::call]:
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 118:26-118:60 -/
+def Eval.iota.closure.Insts.CoreOpsFunctionFnPairShared2EvalU32Bool.call
+  (c : Eval.iota.closure) (tupled_args : (Eval × Std.U32)) : Result Bool := do
+  let (e, v) := tupled_args
+  let i ← Eval.val e v
+  ok (i = 0#u32)
+
+/-- [frozen_mut_borrows::{frozen_mut_borrows::Eval<'a>}::iota]:
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 109:4-124:5
+    Visibility: public -/
+def Eval.iota
+  (self : Eval) (n : Std.Usize) (k : Bool) :
+  Result ((core.result.Result (Option Std.U32) Std.U32) × Eval × (Eval →
+    Eval))
+  := do
+  let r ← Eval.decl self n
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  let (r1, self1, back) ←
+    match cf with
+    | core.ops.control_flow.ControlFlow.Continue val =>
+      do
+      let s : _root_.Sum (Eval × Std.U32 × (Eval → ((alloc.vec.Vec Std.U32)
+        × Store))) ((core.result.Result (Option Std.U32) Std.U32) ×
+        (alloc.vec.Vec Std.U32) × Env × Store × Std.U32 × (alloc.vec.Vec
+        Std.U32 → Store → ((alloc.vec.Vec Std.U32) × Store))) ←
+        if k
+        then
+          do
+          let (r2, self2, kc_back) ← Eval.kc self val
+          let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r2
+          let s1 : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) ×
+            Eval × (core.ops.control_flow.ControlFlow (core.result.Result
+            Never Std.U32) (Option Std.U32)) × (Eval → ((alloc.vec.Vec
+            Std.U32) × Store))) (Eval × Std.U32 × (Eval → ((alloc.vec.Vec
+            Std.U32) × Store))) ←
+            match cf1 with
+            | core.ops.control_flow.ControlFlow.Continue val1 =>
+              match val1 with
+              | none =>
+                ok (Sum.inl (core.result.Result.Ok none, self2, cf1,
+                  fun e => let e1 := kc_back e
+                           (e1.t, e1.s)))
+              | some c =>
+                ok (Sum.inr (self2, c,
+                  fun e => let e1 := kc_back e
+                           (e1.t, e1.s)))
+            | core.ops.control_flow.ControlFlow.Break residual =>
+              do
+              let r3 ←
+                core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+                  (Option Std.U32) (core.convert.FromSame Std.U32) residual
+              ok (Sum.inl (r3, self2, cf1,
+                fun e => let e1 := kc_back e
+                         (e1.t, e1.s)))
+          match s1 with
+          | Sum.inl (r3, self3, _, back1) =>
+            ok (Sum.inr (r3, self3.t, self3.env, self3.s, val,
+              fun v s2 => back1 { self3 with t := v, s := s2 }))
+          | Sum.inr t => ok (Sum.inl t)
+        else
+          ok (Sum.inl (self, val,
+            fun (e : Eval) => let ⟨ v, _, s1 ⟩ := e
+                              (v, s1)))
+      let s1 : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) ×
+        (alloc.vec.Vec Std.U32) × Env × Store × Std.U32 × (alloc.vec.Vec
+        Std.U32 → Store → ((alloc.vec.Vec Std.U32) × Store)))
+        ((core.result.Result (Option Std.U32) Std.U32) × Eval × Env × (Eval
+        → ((alloc.vec.Vec Std.U32) × Store))) ←
+        match s with
+        | Sum.inl (self2, major, back1) =>
+          do
+          let b ←
+            Eval.iota.closure.Insts.CoreOpsFunctionFnPairShared2EvalU32Bool.call
+              () (self2, major)
+          let s2 : _root_.Sum (Eval × Std.U32 × (Eval → ((alloc.vec.Vec
+            Std.U32) × Store))) ((core.result.Result (Option Std.U32) Std.U32)
+            × Eval × Std.U32 × (Eval → ((alloc.vec.Vec Std.U32) ×
+            Store))) ←
+            if b
+            then
+              ok (Sum.inl (self2, major,
+                fun (e : Eval) => let ⟨ v, _, s3 ⟩ := e
+                                  (v, s3)))
+            else
+              do
+              let (r2, self3, eta_back) ← Eval.eta self2 major
+              let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r2
+              match cf1 with
+              | core.ops.control_flow.ControlFlow.Continue val1 =>
+                ok (Sum.inl (self3, val1,
+                  fun e => let e1 := eta_back e
+                           (e1.t, e1.s)))
+              | core.ops.control_flow.ControlFlow.Break residual =>
+                let r3 ←
+                  core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+                    (Option Std.U32) (core.convert.FromSame Std.U32) residual
+                ok (Sum.inr (r3, self3, major,
+                  fun e => let e1 := eta_back e
+                           (e1.t, e1.s)))
+          let s3 : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) ×
+            Eval × Std.U32 × (Eval → ((alloc.vec.Vec Std.U32) × Store)))
+            ((core.result.Result (Option Std.U32) Std.U32) × Eval × Env ×
+            (Eval → ((alloc.vec.Vec Std.U32) × Store))) ←
+            match s2 with
+            | Sum.inl (self3, major1, back2) =>
+              do
+              let (r2, self4, whnf_back) ← Eval.whnf self3 major1
+              let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r2
+              match cf1 with
+              | core.ops.control_flow.ControlFlow.Continue val1 =>
+                let i ← val1 + val
+                ok (Sum.inr (core.result.Result.Ok (some i), self4, self.env,
+                  fun e =>
+                    let e1 := whnf_back e
+                    let (v, s4) := back2 { e1 with env := self3.env }
+                    back1 { self2 with t := v, s := s4 }))
+              | core.ops.control_flow.ControlFlow.Break residual =>
+                let r3 ←
+                  core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+                    (Option Std.U32) (core.convert.FromSame Std.U32) residual
+                ok (Sum.inl (r3, self4, major1,
+                  fun e =>
+                    let e1 := whnf_back e
+                    back2 { e1 with env := self3.env }))
+            | Sum.inr t => ok (Sum.inl t)
+          match s3 with
+          | Sum.inl (r2, self3, major1, back2) =>
+            ok (Sum.inl (r2, self3.t, self3.env, self3.s, major1,
+              fun v s4 =>
+                let (v1, s5) := back2 { self3 with t := v, s := s4 }
+                back1 { self2 with t := v1, s := s5 }))
+          | Sum.inr t => ok (Sum.inr t)
+        | Sum.inr t => ok (Sum.inl t)
+      match s1 with
+      | Sum.inl (r2, v, e, s2, _, back1) =>
+        ok (r2, ({ t := v, env := e, s := s2 } : Eval),
+          fun (e1 : Eval) => let ⟨ v1, _, s3 ⟩ := e1
+                             back1 v1 s3)
+      | Sum.inr t => ok (let (r2, e, _, f) := t
+                         (r2, e, f))
+    | core.ops.control_flow.ControlFlow.Break residual =>
+      do
+      let r2 ←
+        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+          (Option Std.U32) (core.convert.FromSame Std.U32) residual
+      ok (r2, self, fun (e : Eval) => let ⟨ v, _, s ⟩ := e
+                                      (v, s))
+  let back'a :=
+    fun self2 =>
+      let (v, s) := back { self2 with env := self1.env }
+      { self with t := v, s }
+  ok (r1, self1, back'a)
+
+/-- [frozen_mut_borrows::run_eval_iota]:
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 128:0-143:1
+    Visibility: public -/
+def run_eval_iota
+  (n : Std.Usize) (k : Bool) (fill : Bool) :
+  Result ((core.result.Result (Option Std.U32) Std.U32) × Std.Usize ×
+    Std.Usize)
+  := do
+  let decls ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.U32) 7#u32
+  let decls1 ← alloc.vec.Vec.push decls 2#u32
+  let v ←
+    if fill
+    then
+      do
+      let v1 ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.U32) 1#u32
+      let v2 ← alloc.vec.Vec.push v1 2#u32
+      alloc.vec.Vec.push v2 3#u32
+    else ok (alloc.vec.Vec.new Std.U32)
+  let (r, e, _) ←
+    Eval.iota
+      {
+        t := (alloc.vec.Vec.new Std.U32),
+        env := { decls := decls1 },
+        s := { vals := v }
+      } n k
+  let i := alloc.vec.Vec.len e.t
+  let i1 := alloc.vec.Vec.len e.s.vals
+  ok (r, i, i1)
+
 /-- [frozen_mut_borrows::test_reads]:
-    Source: 'tests/src/frozen-mut-borrows.rs', lines 73:0-88:1
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 146:0-161:1
     Visibility: public -/
 def test_reads : Result Unit := do
   let v ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.U32) 3#u32
@@ -207,7 +475,7 @@ def test_reads : Result Unit := do
 #guard (test_reads).reducesTo ()
 
 /-- [frozen_mut_borrows::run_read_then_push]:
-    Source: 'tests/src/frozen-mut-borrows.rs', lines 92:0-97:1
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 165:0-170:1
     Visibility: public -/
 def run_read_then_push
   (v : alloc.vec.Vec Std.U32) :
@@ -221,7 +489,7 @@ def run_read_then_push
   ok ((n, i1), (read_then_push_back e).t)
 
 /-- [frozen_mut_borrows::test_read_then_push]:
-    Source: 'tests/src/frozen-mut-borrows.rs', lines 100:0-105:1
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 173:0-178:1
     Visibility: public -/
 def test_read_then_push : Result Unit := do
   let v ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.U32) 3#u32
@@ -233,7 +501,7 @@ def test_read_then_push : Result Unit := do
 #guard (test_read_then_push).reducesTo ()
 
 /-- [frozen_mut_borrows::test_iota]:
-    Source: 'tests/src/frozen-mut-borrows.rs', lines 108:0-120:1
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 181:0-193:1
     Visibility: public -/
 def test_iota : Result Unit := do
   let decls ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.U32) 7#u32
@@ -299,5 +567,59 @@ def test_iota : Result Unit := do
 
 /- Unit test for [frozen_mut_borrows::test_iota] -/
 #guard (test_iota).reducesTo ()
+
+/-- [frozen_mut_borrows::test_eval_iota]:
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 196:0-205:1
+    Visibility: public -/
+def test_eval_iota : Result Unit := do
+  let (r, t, s) ← run_eval_iota 0#usize true false
+  let b ←
+    match r with
+    | core.result.Result.Ok o =>
+      match o with
+      | none => ok false
+      | some i => match i with
+                  | 14#uscalar => ok true
+                  | _ => ok false
+    | core.result.Result.Err _ => ok false
+  massert b
+  massert (t = 2#usize)
+  massert (s = 0#usize)
+  let (r1, t1, s1) ← run_eval_iota 1#usize false true
+  let b1 ←
+    match r1 with
+    | core.result.Result.Ok o =>
+      match o with
+      | none => ok false
+      | some i => match i with
+                  | 5#uscalar => ok true
+                  | _ => ok false
+    | core.result.Result.Err _ => ok false
+  massert b1
+  massert (t1 = 1#usize)
+  massert (s1 = 4#usize)
+  let (r2, t2, s2) ← run_eval_iota 1#usize true false
+  let b2 ←
+    match r2 with
+    | core.result.Result.Ok o =>
+      match o with
+      | none => ok true
+      | some _ => ok false
+    | core.result.Result.Err _ => ok false
+  massert b2
+  massert (t2 = 1#usize)
+  massert (s2 = 0#usize)
+  let (r3, _, _) ← run_eval_iota 5#usize true false
+  let b3 ←
+    match r3 with
+    | core.result.Result.Ok _ => ok false
+    | core.result.Result.Err i =>
+      match i with
+      | 0#uscalar => ok true
+      | _ => ok false
+  massert b3
+
+/- Unit test for [frozen_mut_borrows::test_eval_iota] -/
+#guard (test_eval_iota).reducesTo ()
 
 end frozen_mut_borrows

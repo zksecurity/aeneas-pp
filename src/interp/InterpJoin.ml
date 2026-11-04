@@ -1386,6 +1386,32 @@ let match_ctx_with_target (config : config) (span : Meta.span)
     "- tgt_ctx after simplify_dummy_values_useless_abs (ii):\n"
     ^ eval_ctx_to_string tgt_ctx];
 
+  (* The abstractions of the joined context which are fresh with respect to
+     the context before the branching are destructured (see
+     {!InterpAbs.add_abs_cont_to_abs}): when the destructured values of an
+     abstraction of the target context are the values of its counterpart in
+     the joined context, we use them. We keep the continuation of the target
+     abstraction: it refers to its backward function, whose type is fixed. *)
+  let tgt_ctx =
+    if preserve_common_abs then
+      let src_abs = ctx_get_abs src_ctx in
+      ctx_map_abs
+        (fun abs ->
+          match AbsId.Map.find_opt abs.abs_id src_abs with
+          | Some src_abs
+            when not (AbsId.Set.mem abs.abs_id fixed_aids)
+                 && src_abs.avalues <> abs.avalues ->
+              let dabs =
+                destructure_abs span abs.kind ~can_end:abs.can_end
+                  ~destructure_shared_values:true tgt_ctx abs
+              in
+              if dabs.avalues = src_abs.avalues then
+                { abs with avalues = dabs.avalues }
+              else abs
+          | _ -> abs)
+        tgt_ctx
+    else tgt_ctx
+  in
   let preserved_aids =
     if preserve_common_abs then
       AbsId.Set.union fixed_aids (compute_fixed_abs_ids src_ctx tgt_ctx)
@@ -1639,7 +1665,14 @@ let match_ctx_with_target (config : config) (span : Meta.span)
          (fun input_aid ->
            match AbsId.Map.find_opt input_aid aid_map with
            | None -> [%internal_error] span
-           | Some joined_id -> (input_aid, ctx_lookup_abs joined_ctx joined_id))
+           | Some joined_id ->
+               (* The abstractions we preserved come from the target context,
+                  with their own continuations *)
+               let ctx =
+                 if AbsId.Set.mem joined_id preserved_aids then tgt_ctx
+                 else joined_ctx
+               in
+               (input_aid, ctx_lookup_abs ctx joined_id))
          input_abs)
   in
 

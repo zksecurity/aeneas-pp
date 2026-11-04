@@ -1365,13 +1365,23 @@ let simplify_let_branching (ctx : ctx) (def : fun_decl) =
       | _ -> false
     in
 
+    (* The values an output of a branch can be equal to. We don't open the
+       binders of the bound expression: an output referring to variables bound
+       inside it can't be named outside of it. *)
+    let output_values (branchings : fvar_id list TExprMap.t) (e : texpr) :
+        texpr list =
+      if texpr_has_loose_bvars e then [] else e :: get_equal_values branchings e
+    in
+
     (* Explore the bound expression. *)
     let rec explore (branchings : fvar_id list TExprMap.t) (e : texpr) : unit =
       match e.e with
-      | FVar _ | CVar _ | Const _ | StructUpdate _ | Qualif _ | Lambda _ ->
-          [%sanity_check] span (num_outs = 1);
-          push_to_outs 0 (e :: get_equal_values branchings e)
-      | BVar _ -> [%internal_error] span
+      | FVar _ | CVar _ | Const _ | StructUpdate _ | Qualif _ | Lambda _ | BVar _
+        ->
+          (* If there are several outputs, the expression is a tuple whose
+             components we don't know *)
+          if num_outs = 1 then push_to_outs 0 (output_values branchings e)
+          else push_empty_possibilities ()
       | App _ ->
           (* *)
           if is_result_fail e || is_loop_result_fail_break_continue e then ()
@@ -1382,11 +1392,7 @@ let simplify_let_branching (ctx : ctx) (def : fun_decl) =
             | _ -> [%internal_error] span
           else if get_tuple_size e = Some num_outs then
             let args = [%add_loc] destruct_tuple_texpr span e in
-            List.iteri
-              (fun i arg ->
-                let vl = get_equal_values branchings arg in
-                push_to_outs i (arg :: vl))
-              args
+            List.iteri (fun i arg -> push_to_outs i (output_values branchings arg)) args
           else push_empty_possibilities ()
       | Let (_, _, _, next) -> explore branchings next
       | Switch (scrut, switch) -> (

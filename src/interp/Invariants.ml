@@ -30,13 +30,17 @@ type borrow_info = {
 type outer_borrow_info = {
   outer_borrow : bool;  (** true if the value is borrowed *)
   outer_shared : bool;  (** true if the value is borrowed as shared *)
+  frozen : bool;  (** true if the value is below a (live) shared loan *)
 }
 
 let set_outer_mut (info : outer_borrow_info) : outer_borrow_info =
   { info with outer_borrow = true }
 
-let set_outer_shared (_info : outer_borrow_info) : outer_borrow_info =
-  { outer_borrow = true; outer_shared = true }
+let set_outer_shared (info : outer_borrow_info) : outer_borrow_info =
+  { info with outer_borrow = true; outer_shared = true }
+
+let set_frozen (info : outer_borrow_info) : outer_borrow_info =
+  { (set_outer_shared info) with frozen = true }
 
 let ids_reprs_to_string (indent : string) (reprs : BorrowId.id BorrowId.Map.t) :
     string =
@@ -326,7 +330,7 @@ let check_borrowed_values_invariant (span : Meta.span) (ctx : eval_ctx) : unit =
         (* Update the info *)
         let info =
           match lc with
-          | VSharedLoan (_, _) -> set_outer_shared info
+          | VSharedLoan (_, _) -> set_frozen info
           | VMutLoan _ ->
               (* No mutable loan inside a shared loan *)
               [%sanity_check] span (not info.outer_shared);
@@ -345,7 +349,7 @@ let check_borrowed_values_invariant (span : Meta.span) (ctx : eval_ctx) : unit =
               set_outer_shared info
           | VMutBorrow (_, bv) ->
               [%sanity_check] span
-                ((not info.outer_shared)
+                ((not info.frozen)
                 ||
                 match bv.value with
                 | VLoan (VSharedLoan _) -> true
@@ -360,7 +364,7 @@ let check_borrowed_values_invariant (span : Meta.span) (ctx : eval_ctx) : unit =
         let info =
           match lc with
           | AMutLoan (_, _, _) -> set_outer_mut info
-          | ASharedLoan (_, _, _, _) -> set_outer_shared info
+          | ASharedLoan (_, _, _, _) -> set_frozen info
           | AEndedMutLoan { given_back = _; child = _; given_back_meta = _ } ->
               set_outer_mut info
           | AEndedSharedLoan (_, _) -> set_outer_shared info
@@ -389,7 +393,7 @@ let check_borrowed_values_invariant (span : Meta.span) (ctx : eval_ctx) : unit =
   in
 
   (* Explore *)
-  let info = { outer_borrow = false; outer_shared = false } in
+  let info = { outer_borrow = false; outer_shared = false; frozen = false } in
   visitor#visit_eval_ctx info ctx
 
 let check_literal_type (span : Meta.span) (cv : literal) (ty : scalar_type) :

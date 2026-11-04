@@ -628,8 +628,59 @@ def loop_live_borrow
   let i2 ← Array.index_usize a2 0#usize
   ok (i2, a2)
 
+/-- [forward_scopes::push_checked]:
+    Source: 'tests/src/forward-scopes.rs', lines 266:0-272:1 -/
+def push_checked
+  (v : alloc.vec.Vec Std.U32) (x : Std.U32) :
+  Result ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec Std.U32))
+  := do
+  if x > 100#u32
+  then ok (core.result.Result.Err x, v)
+  else
+    let v1 ← alloc.vec.Vec.push v x
+    let i ← x + 1#u32
+    ok (core.result.Result.Ok i, v1)
+
+/-- [forward_scopes::call_then_maybe_call]:
+    Source: 'tests/src/forward-scopes.rs', lines 276:0-282:1
+    Visibility: public -/
+def call_then_maybe_call
+  (v : alloc.vec.Vec Std.U32) (b : Bool) :
+  Result ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec Std.U32))
+  := do
+  let (r, v1) ← push_checked v 0#u32
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  let s : _root_.Sum ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec
+    Std.U32)) ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec Std.U32))
+    ←
+    match cf with
+    | core.ops.control_flow.ControlFlow.Continue val =>
+      if b
+      then
+        do
+        let (r1, v2) ← push_checked v1 val
+        let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
+        match cf1 with
+        | core.ops.control_flow.ControlFlow.Continue val1 =>
+          ok (Sum.inr (core.result.Result.Ok val1, v2))
+        | core.ops.control_flow.ControlFlow.Break residual =>
+          let r2 ←
+            core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+              Std.U32 (core.convert.FromSame Std.U32) residual
+          ok (Sum.inl (r2, v2))
+      else ok (Sum.inr (core.result.Result.Ok val, v1))
+    | core.ops.control_flow.ControlFlow.Break residual =>
+      do
+      let r1 ←
+        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+          Std.U32 (core.convert.FromSame Std.U32) residual
+      ok (Sum.inl (r1, v1))
+  match s with
+  | Sum.inl (r1, v2) => ok (r1, v2)
+  | Sum.inr p => ok p
+
 /-- [forward_scopes::test_let_else_chain]:
-    Source: 'tests/src/forward-scopes.rs', lines 267:0-278:1
+    Source: 'tests/src/forward-scopes.rs', lines 285:0-296:1
     Visibility: public -/
 def test_let_else_chain : Result Unit := do
   let (r, i) ←
@@ -687,7 +738,7 @@ def test_let_else_chain : Result Unit := do
 #guard (test_let_else_chain).reducesTo ()
 
 /-- [forward_scopes::test_all_return]:
-    Source: 'tests/src/forward-scopes.rs', lines 281:0-286:1
+    Source: 'tests/src/forward-scopes.rs', lines 299:0-304:1
     Visibility: public -/
 def test_all_return : Result Unit := do
   let i ← all_return (Val.Neutral (Head.Const 5#u32 Class.Def) 0#u32)
@@ -703,7 +754,7 @@ def test_all_return : Result Unit := do
 #guard (test_all_return).reducesTo ()
 
 /-- [forward_scopes::test_skip_to_outer]:
-    Source: 'tests/src/forward-scopes.rs', lines 289:0-296:1
+    Source: 'tests/src/forward-scopes.rs', lines 307:0-314:1
     Visibility: public -/
 def test_skip_to_outer : Result Unit := do
   let (i, x) ← skip_to_outer (Val.Nat 4#u32) true 0#u32
@@ -719,7 +770,7 @@ def test_skip_to_outer : Result Unit := do
 #guard (test_skip_to_outer).reducesTo ()
 
 /-- [forward_scopes::test_scopes_in_loop]:
-    Source: 'tests/src/forward-scopes.rs', lines 299:0-309:1
+    Source: 'tests/src/forward-scopes.rs', lines 317:0-327:1
     Visibility: public -/
 def test_scopes_in_loop : Result Unit := do
   let s ←
@@ -737,7 +788,7 @@ def test_scopes_in_loop : Result Unit := do
 #guard (test_scopes_in_loop).reducesTo ()
 
 /-- [forward_scopes::test_real_loops]:
-    Source: 'tests/src/forward-scopes.rs', lines 312:0-314:1
+    Source: 'tests/src/forward-scopes.rs', lines 330:0-332:1
     Visibility: public -/
 def test_real_loops : Result Unit := do
   let i ← real_loops 5#u32
@@ -747,7 +798,7 @@ def test_real_loops : Result Unit := do
 #guard (test_real_loops).reducesTo ()
 
 /-- [forward_scopes::test_panic_or_return]:
-    Source: 'tests/src/forward-scopes.rs', lines 317:0-321:1
+    Source: 'tests/src/forward-scopes.rs', lines 335:0-339:1
     Visibility: public -/
 def test_panic_or_return : Result Unit := do
   let i ← panic_or_return (Val.Nat 10#u32) 3#u32
@@ -761,7 +812,7 @@ def test_panic_or_return : Result Unit := do
 #guard (test_panic_or_return).reducesTo ()
 
 /-- [forward_scopes::test_loop_in_scope]:
-    Source: 'tests/src/forward-scopes.rs', lines 324:0-328:1
+    Source: 'tests/src/forward-scopes.rs', lines 342:0-346:1
     Visibility: public -/
 def test_loop_in_scope : Result Unit := do
   let i ← loop_in_scope (Val.Nat 3#u32) 2#u32
@@ -775,7 +826,7 @@ def test_loop_in_scope : Result Unit := do
 #guard (test_loop_in_scope).reducesTo ()
 
 /-- [forward_scopes::test_live_borrow]:
-    Source: 'tests/src/forward-scopes.rs', lines 331:0-339:1
+    Source: 'tests/src/forward-scopes.rs', lines 349:0-357:1
     Visibility: public -/
 def test_live_borrow : Result Unit := do
   let a := Array.repeat 2#usize 0#u32
@@ -802,7 +853,7 @@ def test_live_borrow : Result Unit := do
 #guard (test_live_borrow).reducesTo ()
 
 /-- [forward_scopes::test_live_borrow_rev]:
-    Source: 'tests/src/forward-scopes.rs', lines 342:0-348:1
+    Source: 'tests/src/forward-scopes.rs', lines 360:0-366:1
     Visibility: public -/
 def test_live_borrow_rev : Result Unit := do
   let a := Array.repeat 2#usize 0#u32
@@ -821,7 +872,7 @@ def test_live_borrow_rev : Result Unit := do
 #guard (test_live_borrow_rev).reducesTo ()
 
 /-- [forward_scopes::test_shared_from_call]:
-    Source: 'tests/src/forward-scopes.rs', lines 351:0-358:1
+    Source: 'tests/src/forward-scopes.rs', lines 369:0-376:1
     Visibility: public -/
 def test_shared_from_call : Result Unit := do
   let (i, a) ←
@@ -842,7 +893,7 @@ def test_shared_from_call : Result Unit := do
 #guard (test_shared_from_call).reducesTo ()
 
 /-- [forward_scopes::test_conditional_referent]:
-    Source: 'tests/src/forward-scopes.rs', lines 361:0-365:1
+    Source: 'tests/src/forward-scopes.rs', lines 379:0-383:1
     Visibility: public -/
 def test_conditional_referent : Result Unit := do
   let (i, a) ←
@@ -855,7 +906,7 @@ def test_conditional_referent : Result Unit := do
 #guard (test_conditional_referent).reducesTo ()
 
 /-- [forward_scopes::test_loop_live_borrow]:
-    Source: 'tests/src/forward-scopes.rs', lines 368:0-379:1
+    Source: 'tests/src/forward-scopes.rs', lines 386:0-397:1
     Visibility: public -/
 def test_loop_live_borrow : Result Unit := do
   let a := Array.repeat 2#usize 0#u32
@@ -872,5 +923,35 @@ def test_loop_live_borrow : Result Unit := do
 
 /- Unit test for [forward_scopes::test_loop_live_borrow] -/
 #guard (test_loop_live_borrow).reducesTo ()
+
+/-- [forward_scopes::test_call_then_maybe_call]:
+    Source: 'tests/src/forward-scopes.rs', lines 400:0-406:1
+    Visibility: public -/
+def test_call_then_maybe_call : Result Unit := do
+  let (r, v) ← call_then_maybe_call (alloc.vec.Vec.new Std.U32) true
+  let b ←
+    match r with
+    | core.result.Result.Ok i =>
+      match i with
+      | 2#uscalar => ok true
+      | _ => ok false
+    | core.result.Result.Err _ => ok false
+  massert b
+  let i := alloc.vec.Vec.len v
+  massert (i = 2#usize)
+  let (r1, v1) ← call_then_maybe_call v false
+  let b1 ←
+    match r1 with
+    | core.result.Result.Ok i1 =>
+      match i1 with
+      | 1#uscalar => ok true
+      | _ => ok false
+    | core.result.Result.Err _ => ok false
+  massert b1
+  let i1 := alloc.vec.Vec.len v1
+  massert (i1 = 3#usize)
+
+/- Unit test for [forward_scopes::test_call_then_maybe_call] -/
+#guard (test_call_then_maybe_call).reducesTo ()
 
 end forward_scopes

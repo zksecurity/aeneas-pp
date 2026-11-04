@@ -263,6 +263,24 @@ pub fn loop_live_borrow(a: &mut [u32; 2], vs: &[Val]) -> u32 {
     a[0]
 }
 
+fn push_checked(v: &mut Vec<u32>, x: u32) -> Result<u32, u32> {
+    if x > 100 {
+        return Err(x);
+    }
+    v.push(x);
+    Ok(x + 1)
+}
+
+/// A call, then a call in one branch only: the outputs of the join are
+/// bound inside the branches.
+pub fn call_then_maybe_call(v: &mut Vec<u32>, b: bool) -> Result<u32, u32> {
+    let mut m = push_checked(v, 0)?;
+    if b {
+        m = push_checked(v, m)?;
+    }
+    Ok(m)
+}
+
 #[verify::test]
 pub fn test_let_else_chain() {
     let mut acc = 0;
@@ -376,4 +394,13 @@ pub fn test_loop_live_borrow() {
     ];
     assert!(loop_live_borrow(&mut a, &vs) == 15);
     assert!(a[1] == 4);
+}
+
+#[verify::test]
+pub fn test_call_then_maybe_call() {
+    let mut v = Vec::new();
+    assert!(matches!(call_then_maybe_call(&mut v, true), Ok(2)));
+    assert!(v.len() == 2);
+    assert!(matches!(call_then_maybe_call(&mut v, false), Ok(1)));
+    assert!(v.len() == 3);
 }
