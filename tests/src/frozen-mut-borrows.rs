@@ -142,6 +142,31 @@ pub fn run_eval_iota(n: usize, k: bool, fill: bool) -> (Result<Option<u32>, u32>
     (r, t.len(), store.vals.len())
 }
 
+/// A mutable borrow of a value holding a shared reference, seen through a
+/// shared borrow given to calls.
+pub struct Pair<'a> {
+    pub p: &'a mut (&'a u32, u32),
+}
+
+fn read_pair(e: &Pair<'_>) -> u32 {
+    *e.p.0 + e.p.1
+}
+
+pub fn read_pair_twice(e: &Pair<'_>) -> u32 {
+    read_pair(e) + read_pair(e)
+}
+
+/// A loop reading through the frozen field.
+pub fn sum(e: &Eng<'_>) -> u32 {
+    let mut s = 0;
+    let mut i = 0;
+    while i < e.t.len() {
+        s += e.t[i];
+        i += 1;
+    }
+    s
+}
+
 #[verify::test]
 pub fn test_reads() {
     let mut v = Vec::new();
@@ -206,4 +231,18 @@ pub fn test_eval_iota() {
     assert!(matches!(r, Ok(None)) && t == 1 && s == 0);
     let (r, _, _) = run_eval_iota(5, true, false);
     assert!(matches!(r, Err(0)));
+}
+
+#[verify::test]
+pub fn test_pair_and_sum() {
+    let x = 3;
+    let mut pr = (&x, 4);
+    let e = Pair { p: &mut pr };
+    assert!(read_pair_twice(&e) == 14);
+    let mut v = Vec::new();
+    v.push(3);
+    v.push(4);
+    let env = Env { decls: Vec::new() };
+    let e = Eng { t: &mut v, env: &env };
+    assert!(sum(&e) == 7);
 }

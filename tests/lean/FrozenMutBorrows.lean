@@ -450,8 +450,60 @@ def run_eval_iota
   let i1 := alloc.vec.Vec.len e1.s.vals
   ok (r, i, i1)
 
+/-- [frozen_mut_borrows::Pair]
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 147:0-149:1
+    Visibility: public -/
+structure Pair where
+  p : (Std.U32 × Std.U32)
+
+/-- [frozen_mut_borrows::read_pair]:
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 151:0-153:1 -/
+def read_pair (e : Pair) : Result Std.U32 := do
+  let (i, i1) := e.p
+  i + i1
+
+/-- [frozen_mut_borrows::read_pair_twice]:
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 155:0-157:1
+    Visibility: public -/
+def read_pair_twice (e : Pair) : Result Std.U32 := do
+  let i ← read_pair { p := e.p }
+  i + i
+
+/-- [frozen_mut_borrows::sum]: loop body 0:
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 163:4-166:5
+    Visibility: public -/
+@[rust_loop_body]
+def sum_loop.body
+  (e : Eng) (s : Std.U32) (i : Std.Usize) :
+  Result (ControlFlow (Std.U32 × Std.Usize) Std.U32)
+  := do
+  let i1 := alloc.vec.Vec.len e.t
+  if i < i1
+  then
+    let i2 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) e.t i
+    let s1 ← s + i2
+    let i3 ← i + 1#usize
+    ok (cont (s1, i3))
+  else ok (done s)
+
+/-- [frozen_mut_borrows::sum]: loop 0:
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 163:4-166:5
+    Visibility: public -/
+@[rust_loop]
+def sum_loop (e : Eng) (s : Std.U32) (i : Std.Usize) : Result Std.U32 := do
+  loop
+    (fun (s1, i1) => sum_loop.body e s1 i1)
+    (s, i)
+
+/-- [frozen_mut_borrows::sum]:
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 160:0-168:1
+    Visibility: public -/
+@[reducible] def sum (e : Eng) : Result Std.U32 := do
+               sum_loop e 0#u32 0#usize
+
 /-- [frozen_mut_borrows::test_reads]:
-    Source: 'tests/src/frozen-mut-borrows.rs', lines 146:0-161:1
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 171:0-186:1
     Visibility: public -/
 def test_reads : Result Unit := do
   let v ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.U32) 3#u32
@@ -476,7 +528,7 @@ def test_reads : Result Unit := do
 #guard (test_reads).reducesTo ()
 
 /-- [frozen_mut_borrows::run_read_then_push]:
-    Source: 'tests/src/frozen-mut-borrows.rs', lines 165:0-170:1
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 190:0-195:1
     Visibility: public -/
 def run_read_then_push
   (v : alloc.vec.Vec Std.U32) :
@@ -490,7 +542,7 @@ def run_read_then_push
   ok ((n, i1), (read_then_push_back e).t)
 
 /-- [frozen_mut_borrows::test_read_then_push]:
-    Source: 'tests/src/frozen-mut-borrows.rs', lines 173:0-182:1
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 198:0-207:1
     Visibility: public -/
 def test_read_then_push : Result Unit := do
   let v ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.U32) 3#u32
@@ -511,7 +563,7 @@ def test_read_then_push : Result Unit := do
 #guard (test_read_then_push).reducesTo ()
 
 /-- [frozen_mut_borrows::test_iota]:
-    Source: 'tests/src/frozen-mut-borrows.rs', lines 185:0-197:1
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 210:0-222:1
     Visibility: public -/
 def test_iota : Result Unit := do
   let decls ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.U32) 7#u32
@@ -579,7 +631,7 @@ def test_iota : Result Unit := do
 #guard (test_iota).reducesTo ()
 
 /-- [frozen_mut_borrows::test_eval_iota]:
-    Source: 'tests/src/frozen-mut-borrows.rs', lines 200:0-209:1
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 225:0-234:1
     Visibility: public -/
 def test_eval_iota : Result Unit := do
   let (r, t, s) ← run_eval_iota 0#usize true false
@@ -631,5 +683,19 @@ def test_eval_iota : Result Unit := do
 
 /- Unit test for [frozen_mut_borrows::test_eval_iota] -/
 #guard (test_eval_iota).reducesTo ()
+
+/-- [frozen_mut_borrows::test_pair_and_sum]:
+    Source: 'tests/src/frozen-mut-borrows.rs', lines 237:0-248:1
+    Visibility: public -/
+def test_pair_and_sum : Result Unit := do
+  let i ← read_pair_twice { p := (3#u32, 4#u32) }
+  massert (i = 14#u32)
+  let v ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.U32) 3#u32
+  let v1 ← alloc.vec.Vec.push v 4#u32
+  let i1 ← sum { t := v1, env := { decls := (alloc.vec.Vec.new Std.U32) } }
+  massert (i1 = 7#u32)
+
+/- Unit test for [frozen_mut_borrows::test_pair_and_sum] -/
+#guard (test_pair_and_sum).reducesTo ()
 
 end frozen_mut_borrows

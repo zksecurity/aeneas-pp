@@ -393,14 +393,8 @@ module MakeMatcher (M : PrimMatcher) : Matcher = struct
               in
               VMutBorrow (bid, bv)
           | VFrozenMutBorrow (bid0, sid0), VFrozenMutBorrow (bid1, sid1) ->
-              (* Frozen borrows are shared instances of the same loan: joining
-                 frozen borrows of different loans would require joining the
-                 mutable borrows they observe *)
-              [%cassert_recover] M.recover M.span (bid0 = bid1)
-                "Joins of frozen borrows of different loans are not supported \
-                 yet";
               let bid, sid =
-                M.match_shared_borrows match_rec ctx0 ctx1 ty bid0 sid0 bid1
+                M.match_frozen_mut_borrows match_rec ctx0 ctx1 ty bid0 sid0 bid1
                   sid1
               in
               VFrozenMutBorrow (bid, sid)
@@ -1078,6 +1072,17 @@ module MakeJoinMatcher (S : MatchJoinState) : PrimMatcher = struct
       let sid = ctx0.fresh_shared_borrow_id () in
       (bid2, sid)
 
+
+  let match_frozen_mut_borrows match_rec (ctx0 : eval_ctx) (ctx1 : eval_ctx)
+      (ty : ety) (bid0 : borrow_id) (sid0 : shared_borrow_id)
+      (bid1 : borrow_id) (sid1 : shared_borrow_id) : borrow_id * shared_borrow_id
+      =
+    (* Frozen borrows of the same loan are shared instances of this loan:
+       joining frozen borrows of different loans would require joining the
+       mutable borrows they observe *)
+    [%cassert_recover] S.recover span (bid0 = bid1)
+      "Joins of frozen borrows of different loans are not supported yet";
+    match_shared_borrows match_rec ctx0 ctx1 ty bid0 sid0 bid1 sid1
   let match_mut_borrows (_ : tvalue_matcher) (ctx0 : eval_ctx) (_ : eval_ctx)
       (ty : ety) (bid0 : borrow_id) (bv0 : tvalue) (bid1 : borrow_id)
       (bv1 : tvalue) (bv : tvalue) : borrow_id * tvalue =
@@ -1917,6 +1922,8 @@ struct
     (* The shared borrow id doesn't really matter but it's always safer to refresh it *)
     (bid, ctx0.fresh_shared_borrow_id ())
 
+
+  let match_frozen_mut_borrows = match_shared_borrows
   let match_mut_borrows (_ : tvalue_matcher) (_ : eval_ctx) (_ : eval_ctx)
       (_ty : ety) (bid0 : borrow_id) (_bv0 : tvalue) (bid1 : borrow_id)
       (_bv1 : tvalue) (bv : tvalue) : borrow_id * tvalue =

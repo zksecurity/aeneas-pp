@@ -1222,6 +1222,15 @@ let destructure_shared_loans (span : Meta.span) (fixed_aids : AbsId.Set.t) :
       | VBorrow bc -> (
           match bc with
           | VSharedBorrow _ | VFrozenMutBorrow _ -> (v.value, [])
+          | VMutBorrow (lid, ({ value = VLoan (VSharedLoan (k, w)); _ } as bv))
+            ->
+              (* The shared loan freezes the borrowed value while the mutable
+                 borrow is below a shared loan (see
+                 {!InterpBorrowsCore.ctx_freeze_mut_borrows_in_shared_values}):
+                 it stays there *)
+              let w, avl = destructure_value abs w in
+              let bv = { bv with value = VLoan (VSharedLoan (k, w)) } in
+              (VBorrow (VMutBorrow (lid, bv)), avl)
           | VMutBorrow (lid, v) ->
               let v, avl = destructure_value abs v in
               (VBorrow (VMutBorrow (lid, v)), avl)

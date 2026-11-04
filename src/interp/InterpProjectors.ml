@@ -81,7 +81,13 @@ let rec apply_proj_borrows_on_shared_borrow (span : Meta.span) (ctx : eval_ctx)
           else asb
         in
         asb
-    | VLoan _, _ -> [%craise] span "Unreachable"
+    | VLoan (VSharedLoan (_, sv)), _ ->
+        (* The shared loan freezing the value borrowed by a mutable borrow
+           below a shared borrow (see
+           {!InterpBorrowsCore.ctx_freeze_mut_borrows_in_shared_values}): we
+           observe the value through it *)
+        apply_proj_borrows_on_shared_borrow span ctx regions sv ty
+    | VLoan (VMutLoan _), _ -> [%craise] span "Unreachable"
     | VSymbolic s, _ ->
         [%ldebug "symbolic"];
         (* Check that the projection doesn't contain ended regions *)

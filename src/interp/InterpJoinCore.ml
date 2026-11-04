@@ -162,6 +162,19 @@ module type PrimMatcher = sig
     shared_borrow_id ->
     borrow_id * shared_borrow_id
 
+  (** Match two frozen mutable borrows (see {!Values.VFrozenMutBorrow}): like
+      shared borrows of their loans. *)
+  val match_frozen_mut_borrows :
+    tvalue_matcher ->
+    eval_ctx ->
+    eval_ctx ->
+    ety ->
+    borrow_id ->
+    shared_borrow_id ->
+    borrow_id ->
+    shared_borrow_id ->
+    borrow_id * shared_borrow_id
+
   (** The input parameters are:
       - [match_values]
       - [ty]
