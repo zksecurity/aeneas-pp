@@ -151,6 +151,20 @@ and borrow_content =
             l = Vec::len(move v2); // We use v2 here
             Vec::push(move v1, move l); // v1 gets promoted to a mutable borrow here
           ]} *)
+  | VFrozenMutBorrow of borrow_id * shared_borrow_id
+      (** A mutable borrow seen through a shared borrow, in a copy of the shared
+          value: it gives shared access, and only shared access, to the value
+          of the shared loan [borrow_id].
+
+          The original mutable borrow stays unique, inside the original shared
+          value, and the value it borrows is shared-loaned to its frozen
+          copies, exactly as for a shared reborrow:
+          {[
+            x -> SL l (S { f = MB m (SL k v) })
+            abs { SB l, SL l' (S { f = FMB k }) }
+          ]}
+          Like the [shared_borrow_id] of a shared borrow, the
+          [shared_borrow_id] identifies the copy. *)
 
 and loan_content = VSharedLoan of loan_id * tvalue | VMutLoan of loan_id
 

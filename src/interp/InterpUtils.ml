@@ -797,6 +797,7 @@ let compute_ids () =
 
       method! visit_VSharedBorrow _ bid sid = add_shared_borrow bid sid
       method! visit_VReservedMutBorrow _ bid sid = add_shared_borrow bid sid
+      method! visit_VFrozenMutBorrow _ bid sid = add_shared_borrow bid sid
       method! visit_ASharedBorrow _ _ bid sid = add_shared_borrow bid sid
       method! visit_AsbBorrow _ bid sid = add_shared_borrow bid sid
       method! visit_abs_id _ id = aids := AbsId.Set.add id !aids

@@ -55,7 +55,7 @@ let rec apply_proj_borrows_on_shared_borrow (span : Meta.span) (ctx : eval_ctx)
                 apply_proj_borrows_on_shared_borrow span ctx regions bv ref_ty
               in
               (bid, asb)
-          | VSharedBorrow (bid, _), RShared ->
+          | VSharedBorrow (bid, _), RShared | VFrozenMutBorrow (bid, _), RMut ->
               (* Lookup the shared value *)
               let ek = ek_all in
               let sv = ctx_lookup_loan span ek bid ctx in

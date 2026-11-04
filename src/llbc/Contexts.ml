@@ -750,6 +750,10 @@ let ctx_get_shared_borrow_ids (ctx : eval_ctx) : BorrowId.Set.t =
         add bid;
         super#visit_VReservedMutBorrow env bid sid
 
+      method! visit_VFrozenMutBorrow env bid sid =
+        add bid;
+        super#visit_VFrozenMutBorrow env bid sid
+
       method! visit_ASharedBorrow env pm bid sid =
         add bid;
         super#visit_ASharedBorrow env pm bid sid

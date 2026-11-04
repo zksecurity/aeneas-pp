@@ -215,9 +215,10 @@ let rec project_value (span : Meta.span) (access : projection_access)
       (* Resolve shared dereferences to the loan, not to the borrow's ancestors. *)
       let res : _ path_access_result =
         match bc with
-        | VSharedBorrow _ when not access.lookup_shared_borrows ->
+        | (VSharedBorrow _ | VFrozenMutBorrow _)
+          when not access.lookup_shared_borrows ->
             Error (FailBorrow bc)
-        | VSharedBorrow (bid, _) ->
+        | VSharedBorrow (bid, _) | VFrozenMutBorrow (bid, _) ->
             let sv = shared_loan_value span bid ctx in
             Ok (Some bid, sv, { root = SharedLoanRoot bid; projection = [] })
         | VReservedMutBorrow (bid, sid) ->
@@ -509,7 +510,7 @@ let rec end_loans_at_place (config : config) (span : Meta.span)
 
       method! visit_borrow_content env bc =
         match bc with
-        | VSharedBorrow _ | VMutBorrow (_, _) ->
+        | VSharedBorrow _ | VMutBorrow (_, _) | VFrozenMutBorrow _ ->
             (* Nothing special to do *) super#visit_borrow_content env bc
         | VReservedMutBorrow (bid, sid) ->
             (* We need to activate reserved borrows *)

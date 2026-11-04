@@ -36,36 +36,23 @@ let reborrow_ashared_loans (span : Meta.span) (loop_id : LoopId.id option)
   (* Map from the fresh sids to the original symbolic values *)
   let sid_subst = ref [] in
 
-  (* Return the same value but where:
-     - the shared loans have been removed
-     - the symbolic values have been replaced with fresh symbolic values
-     - the region ids found in the value and belonging to the set [rids] have
-       been substituted with [nrid]
-     - the shared borrows have been given fresh shared borrow ids: as we are
-       duplicating the shared value inside a new shared loan, the shared borrows
-       it contains (nested borrows below a shared borrow) become fresh
-       *instances* of the same loans, exactly as when copying a shared value
-       (see [InterpExpressions.copy_value])
-  *)
+  (* Copy a shared value (see {!InterpBorrowsCore.copy_shared_value}), where
+     the symbolic values are replaced with fresh symbolic values, in which the
+     region ids belonging to the set [rids] are substituted with [nrid] *)
   let mk_value_with_fresh_sids_no_shared_loans (rids : region_set)
       (nrid : RegionId.id) (v : tvalue) : tvalue =
-    (* Remove the shared loans *)
-    let v = value_remove_shared_loans v in
-    (* Substitute the symbolic values and the region *)
-    Substitute.tvalue_subst_ids
-      {
-        (Substitute.no_abs_id_subst span) with
-        r_subst =
-          (fun r -> if RegionSet.mem (RVar (Free r)) rids then nrid else r);
-        ssubst =
-          (fun id ->
-            let nid = ctx.fresh_symbolic_value_id () in
-            let sv = SymbolicValueId.Map.find id absl_id_maps.sids_to_values in
-            sid_subst := (nid, sv) :: !sid_subst;
-            nid);
-        sbsubst = (fun _ -> ctx.fresh_shared_borrow_id ());
-      }
-      v
+    let copy_symbolic (sv : symbolic_value) : symbolic_value =
+      let nid = ctx.fresh_symbolic_value_id () in
+      let sv0 = SymbolicValueId.Map.find sv.sv_id absl_id_maps.sids_to_values in
+      sid_subst := (nid, sv0) :: !sid_subst;
+      let sv_ty =
+        Substitute.ty_subst_rids span
+          (fun r -> if RegionSet.mem (RVar (Free r)) rids then nrid else r)
+          sv.sv_ty
+      in
+      { sv_id = nid; sv_ty }
+    in
+    InterpBorrowsCore.copy_shared_value span ctx copy_symbolic v
   in
 
   let fresh_absl = ref [] in
@@ -583,6 +570,9 @@ let compute_ctx_fresh_ordered_symbolic_values (span : Meta.span)
             | _ -> [%craise] span "Unreachable"
           in
           self#visit_tvalue env v
+
+        method! visit_VFrozenMutBorrow env bid sid =
+          self#visit_VSharedBorrow env bid sid
 
         method! visit_symbolic_value_id _ id =
           if not (SymbolicValueId.Set.mem id !found_sids) then (
@@ -1208,23 +1198,16 @@ let destructure_shared_loans (span : Meta.span) (fixed_aids : AbsId.Set.t) :
  fun ctx ->
   let bindings = ref [] in
 
-  let rec copy_value (v : tvalue) : tvalue =
-    match v.value with
-    | VLiteral _ | VBottom -> v
-    | VAdt { variant_id; fields } ->
-        let fields = List.map copy_value fields in
-        { v with value = VAdt { variant_id; fields } }
-    | VBorrow _ | VLoan _ -> [%craise] span "Not implemented"
-    | VSymbolic sv ->
-        [%cassert] span
-          (not (symbolic_value_has_borrows (Some span) ctx sv))
-          "Not implemented";
-        let sv' =
-          mk_fresh_symbolic_value_opt_span (Some span)
-            ctx.fresh_symbolic_value_id sv.sv_ty
-        in
-        bindings := (sv', v) :: !bindings;
-        { value = VSymbolic sv'; ty = sv.sv_ty }
+  let copy_symbolic (sv : symbolic_value) : symbolic_value =
+    [%cassert] span
+      (not (symbolic_value_has_borrows (Some span) ctx sv))
+      "Not implemented";
+    let sv' =
+      mk_fresh_symbolic_value_opt_span (Some span) ctx.fresh_symbolic_value_id
+        sv.sv_ty
+    in
+    bindings := (sv', mk_tvalue_from_symbolic_value sv) :: !bindings;
+    sv'
   in
 
   let rec destructure_value (abs : abs) (v : tvalue) : tvalue * tavalue list =
@@ -1238,7 +1221,7 @@ let destructure_shared_loans (span : Meta.span) (fixed_aids : AbsId.Set.t) :
           (VAdt { variant_id; fields }, List.flatten avl)
       | VBorrow bc -> (
           match bc with
-          | VSharedBorrow _ -> (v.value, [])
+          | VSharedBorrow _ | VFrozenMutBorrow _ -> (v.value, [])
           | VMutBorrow (lid, v) ->
               let v, avl = destructure_value abs v in
               (VBorrow (VMutBorrow (lid, v)), avl)
@@ -1246,16 +1229,19 @@ let destructure_shared_loans (span : Meta.span) (fixed_aids : AbsId.Set.t) :
       | VLoan lc -> (
           match lc with
           | VSharedLoan (lid, sv) ->
+              (* The loan moves to the abstraction, with a copy of the shared
+                 value: we copy it before destructuring it *)
+              let copy = InterpBorrowsCore.copy_shared_value span ctx copy_symbolic sv in
               let sv, avl = destructure_value abs sv in
-              let ty = sv.ty in
-              [%cassert] span
-                (not
-                   (TypesUtils.ty_has_borrows (Some span)
-                      ctx.type_ctx.type_infos ty))
-                "Not implemented";
+              (* The references inside the shared value (nested borrows) don't
+                 belong to the abstraction: they get fresh regions *)
+              let _, ty =
+                TypesUtils.ty_refresh_regions (Some span) ctx.fresh_region_id
+                  sv.ty
+              in
               let ref_ty = TRef (abs_pick_region span abs, ty, RShared) in
               let child = ValuesUtils.mk_aignored span ty None in
-              let av = ALoan (ASharedLoan (PNone, lid, copy_value sv, child)) in
+              let av = ALoan (ASharedLoan (PNone, lid, copy, child)) in
               let av : tavalue = { value = av; ty = ref_ty } in
               (sv.value, av :: avl)
           | VMutLoan _ -> (v.value, []))
@@ -1310,7 +1296,9 @@ let destructure_shared_loans (span : Meta.span) (fixed_aids : AbsId.Set.t) :
             | AMutBorrow (pm, lid, child) ->
                 let child, avl = destructure_avalue abs child in
                 (AMutBorrow (pm, lid, child), avl)
-            | ASharedBorrow _ -> (bc, [])
+            | ASharedBorrow _ | AProjSharedBorrow _ ->
+                (* No shared values below *)
+                (bc, [])
             | AIgnoredMutBorrow (lid, child) ->
                 let child, avl = destructure_avalue abs child in
                 (AIgnoredMutBorrow (lid, child), avl)
@@ -1318,7 +1306,6 @@ let destructure_shared_loans (span : Meta.span) (fixed_aids : AbsId.Set.t) :
                 (* Shouldn't find ended borrows in live abstractions *)
                 [%internal_error] span
             | AEndedIgnoredMutBorrow _ -> (bc, [])
-            | AProjSharedBorrow _ -> [%craise] span "Not implemented"
           in
           (ABorrow bc, avl)
       | ASymbolic _ | AIgnored _ -> (av.value, [])
@@ -1483,7 +1470,7 @@ let match_ctx_with_target (config : config) (span : Meta.span)
 
   (* Project the context to only preserve the right part, which corresponds to the
      target *)
-  let joined_ctx = project_context span fixed_aids PRight joined_ctx in
+  let joined_ctx = project_context span preserved_aids PRight joined_ctx in
   let joined_symbolic_to_tgt_value =
     SymbolicValueId.Map.map (fun (_, x) -> x) join_info.symbolic_to_value
   in
@@ -1538,10 +1525,10 @@ let match_ctx_with_target (config : config) (span : Meta.span)
 
   (* Reorder the region abstractions in the target context -
      TODO: generalize the match so that we don't have to do this *)
-  let joined_ctx = reorder_fresh_abs span true fixed_aids joined_ctx in
+  let joined_ctx = reorder_fresh_abs span true preserved_aids joined_ctx in
   [%ltrace
-    "After reorder_fresh_abs (fixed_aids: "
-    ^ AbsId.Set.to_string None fixed_aids
+    "After reorder_fresh_abs (preserved_aids: "
+    ^ AbsId.Set.to_string None preserved_aids
     ^ "): joined_ctx:\n"
     ^ eval_ctx_to_string ~span:(Some span) joined_ctx];
 

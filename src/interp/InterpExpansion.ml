@@ -518,6 +518,8 @@ let expand_symbolic_value_borrow (span : Meta.span)
       in
       (* Expand the symbolic avalues *)
       let ctx = apply_symbolic_expansion_to_aevalues span original_sv see ctx in
+      (* The borrow may be below a shared loan *)
+      let ctx = InterpBorrowsCore.ctx_freeze_mut_borrows_in_shared_values ctx in
       (* Apply the continuation *)
       ( ctx,
         fun e ->

@@ -107,7 +107,9 @@ let end_concrete_borrow_get_borrow_core (span : Meta.span)
 
       method! visit_VBorrow (outer : outer) bc =
         match bc with
-        | VSharedBorrow (bid, l') | VReservedMutBorrow (bid, l') ->
+        | VSharedBorrow (bid, l')
+        | VReservedMutBorrow (bid, l')
+        | VFrozenMutBorrow (bid, l') ->
             (* Check if this is the borrow we are looking for *)
             if l = UShared (bid, l') then (
               (* Check if there are outer borrows or if we are inside an abstraction *)
@@ -307,7 +309,7 @@ let end_proj_loan_get_concrete_priority (_span : Meta.span)
 
       method! visit_VBorrow (outer : mut_borrow_or_shared_loan_id option) bc =
         match bc with
-        | VSharedBorrow _ | VReservedMutBorrow _ -> ()
+        | VSharedBorrow _ | VReservedMutBorrow _ | VFrozenMutBorrow _ -> ()
         | VMutBorrow (bid, bv) ->
             let outer = update_outer outer (MutBorrow bid) in
             self#visit_tvalue outer bv
@@ -877,7 +879,10 @@ let give_back_concrete (span : Meta.span) (l : unique_borrow_id)
         (Option.is_some (ctx_lookup_loan_opt span sanity_ek l' ctx));
       (* Update the context *)
       give_back_value span l' tv ctx
-  | Concrete (VSharedBorrow (bid, l') | VReservedMutBorrow (bid, l')) ->
+  | Concrete
+      ( VSharedBorrow (bid, l')
+      | VReservedMutBorrow (bid, l')
+      | VFrozenMutBorrow (bid, l') ) ->
       (* Sanity check *)
       [%sanity_check] span (UShared (bid, l') = l);
       (* Check that the borrow is somewhere - purely a sanity check *)
@@ -1082,6 +1087,9 @@ and end_shared_loan_aux (config : config) (span : Meta.span) ~(snapshots : bool)
 
       method! visit_VReservedMutBorrow _ bid sid =
         (* We raise the same exception as for shared borrows: it doesn't matter *)
+        if bid = l then raise (FoundSharedBorrowId (bid, sid)) else ()
+
+      method! visit_VFrozenMutBorrow _ bid sid =
         if bid = l then raise (FoundSharedBorrowId (bid, sid)) else ()
 
       method! visit_ASharedBorrow _ pm bid sid =
@@ -1421,7 +1429,7 @@ and end_abs_borrows (config : config) (span : Meta.span) ~(snapshots : bool)
           values *)
       method! visit_borrow_content level bc =
         match bc with
-        | VSharedBorrow _ | VMutBorrow (_, _) ->
+        | VSharedBorrow _ | VMutBorrow (_, _) | VFrozenMutBorrow _ ->
             if check_level level then raise (FoundBorrowContent bc)
         | VReservedMutBorrow _ -> [%craise] span "Unreachable"
     end
@@ -1525,7 +1533,7 @@ and end_abs_borrows (config : config) (span : Meta.span) ~(snapshots : bool)
         ^ borrow_content_to_string ~span:(Some span) ctx bc];
       let ctx =
         match bc with
-        | VSharedBorrow (bid, sid) -> (
+        | VSharedBorrow (bid, sid) | VFrozenMutBorrow (bid, sid) -> (
             (* Replace the shared borrow with bottom *)
             match
               end_concrete_borrow_in_abs_get_borrow span abs_id
@@ -1778,7 +1786,7 @@ let replace_reserved_borrow_with_mut_borrow (span : Meta.span) (l : BorrowId.id)
     { enter_shared_loans = false; enter_mut_borrows = false; enter_abs = false }
   in
   match lookup_borrow span ek (UShared (l, bid)) ctx with
-  | Concrete (VSharedBorrow _ | VMutBorrow (_, _)) ->
+  | Concrete (VSharedBorrow _ | VMutBorrow (_, _) | VFrozenMutBorrow _) ->
       [%craise] span "Expected a reserved mutable borrow"
   | Concrete (VReservedMutBorrow _) ->
       (* Update it *)
@@ -1830,7 +1838,7 @@ let find_outer_shared_loan_containing_loan (span : Meta.span) (l : BorrowId.id)
        method! visit_borrow_content env bc =
          match bc with
          | VMutBorrow (_, mv) -> super#visit_tvalue env mv
-         | VSharedBorrow _ | VReservedMutBorrow _ -> ()
+         | VSharedBorrow _ | VReservedMutBorrow _ | VFrozenMutBorrow _ -> ()
 
        method! visit_loan_content _env lc =
          match lc with
@@ -2013,11 +2021,15 @@ let destructure_abs (span : Meta.span) (abs_kind : abs_kind) ~(can_end : bool)
             (* Push the avalues introduced because we decomposed the inner loans
                in the shared value - see the ASharedLoan case *)
             List.iter push avl
+        | AIgnoredSharedLoan child_av ->
+            (* The loan belongs to another abstraction. In the presence of
+               nested borrows the child contains the loans and borrows of this
+               abstraction inside the shared value: keep them. *)
+            list_avalues allow_borrows push child_av
         | AEndedMutLoan
             { child = child_av; given_back = _; given_back_meta = _ }
         | AEndedIgnoredMutLoan
-            { child = child_av; given_back = _; given_back_meta = _ }
-        | AIgnoredSharedLoan child_av ->
+            { child = child_av; given_back = _; given_back_meta = _ } ->
             (* We don't support nested borrows for now *)
             [%cassert] span
               (not
@@ -2119,33 +2131,37 @@ let destructure_abs (span : Meta.span) (abs_kind : abs_kind) ~(can_end : bool)
            meaning we can't read x any more (but we can write to x).
         *)
         ([], v)
-    | VBorrow _ ->
-        (* We don't support nested borrows for now *)
+    | VBorrow (VSharedBorrow _ | VFrozenMutBorrow _) ->
+        (* A shared or frozen borrow inside a shared value (nested borrows): it
+           is part of the shared value *)
+        ([], v)
+    | VBorrow (VMutBorrow _ | VReservedMutBorrow _) ->
+        (* Mutable borrows inside shared values are rejected above *)
         [%craise] span "Unreachable"
     | VLoan lc -> (
         match lc with
         | VSharedLoan (bids, sv) ->
             let avl, sv = list_values sv in
             if destructure_shared_values then (
-              (* Rem.: the shared value can't contain loans nor borrows *)
-              [%cassert] span (ty_no_regions ty)
-                "Nested borrows are not supported yet";
               let av : tavalue =
+                (* The shared value doesn't contain loans anymore, and can only
+                   contain shared and frozen borrows *)
+                [%sanity_check] span (not (value_has_loans sv.value));
                 [%sanity_check] span
-                  (not (value_has_loans_or_borrows (Some span) ctx sv.value));
-                (* We introduce fresh ids for the symbolic values *)
-                let mk_value_with_fresh_sids (v : tvalue) : tvalue =
-                  let visitor =
-                    object
-                      inherit [_] map_tavalue
-
-                      method! visit_symbolic_value_id _ _ =
-                        ctx.fresh_symbolic_value_id ()
-                    end
-                  in
-                  visitor#visit_tvalue () v
+                  (not (value_has_mut_borrows (Some span) ctx sv.value));
+                (* The loan gets a copy of the shared value, with fresh ids for
+                   the symbolic values *)
+                let sv =
+                  copy_shared_value span ctx
+                    (fun sv ->
+                      { sv with sv_id = ctx.fresh_symbolic_value_id () })
+                    sv
                 in
-                let sv = mk_value_with_fresh_sids sv in
+                (* The references inside the shared value don't belong to the
+                   abstraction: they get fresh regions *)
+                let _, ty =
+                  ty_refresh_regions (Some span) ctx.fresh_region_id ty
+                in
                 (* Create the new avalue *)
                 let value =
                   ALoan
@@ -2282,28 +2298,28 @@ let abs_mut_borrows_loans_in_fixed span (ctx : eval_ctx)
     end
   in
 
+  let check_mut_borrow (bid : BorrowId.id) : unit =
+    match fst (ctx_lookup_loan span ek_all bid ctx) with
+    | AbsId abs_id -> if AbsId.Set.mem abs_id fixed_abs_ids then raise Found
+    | LocalId _ | DummyVarId _ -> ()
+  in
   let visit_borrows =
     object
       inherit [_] iter_eval_ctx as super
 
-      method! visit_borrow_content _ _ =
-        (* We can get there through shared loans: let's just ignore it for now
-           (this function should be used to explore abstractions which don't
-           have remaining loans - see its use below) *)
-        [%internal_error] span
+      (* Concrete borrows appear in the shared values of shared loans (nested
+         borrows): only the mutable ones matter. *)
+      method! visit_borrow_content env bc =
+        (match bc with
+        | VMutBorrow (bid, _) -> check_mut_borrow bid
+        | VSharedBorrow _ | VReservedMutBorrow _ | VFrozenMutBorrow _ -> ());
+        super#visit_borrow_content env bc
 
       method! visit_aborrow_content env lc =
         super#visit_aborrow_content env lc;
         match lc with
         | AMutBorrow (_, bid, _) ->
-            (* Lookup the loan *)
-            let abs_or_var, _ = ctx_lookup_loan span ek_all bid ctx in
-            begin
-              match abs_or_var with
-              | AbsId abs_id ->
-                  if AbsId.Set.mem abs_id fixed_abs_ids then raise Found else ()
-              | LocalId _ | DummyVarId _ -> ()
-            end;
+            check_mut_borrow bid;
             super#visit_aborrow_content env lc
         | ASharedBorrow _
         | AIgnoredMutBorrow _
@@ -2418,7 +2434,9 @@ let rec simplify_dummy_values_useless_abs_aux (config : config)
                 if end_borrows && simplify_borrows then
                   (* Check if we can end the borrow, do not enter inside if we can't *)
                   match bc with
-                  | VSharedBorrow (bid, sid) | VReservedMutBorrow (bid, sid) ->
+                  | VSharedBorrow (bid, sid)
+                  | VReservedMutBorrow (bid, sid)
+                  | VFrozenMutBorrow (bid, sid) ->
                       (* We could directly end the borrow actually
                          (replace it with bottom). But it's also good to
                          raise an exception and call [end_borrow], as it

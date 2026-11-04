@@ -121,7 +121,7 @@ let rec tvalue_to_texpr (ctx : bs_ctx) (ectx : C.eval_ctx) (v : V.tvalue) :
         | VMutLoan _ -> [%craise] ctx.span "Unreachable")
     | VBorrow bc -> (
         match bc with
-        | VSharedBorrow (bid, _) ->
+        | VSharedBorrow (bid, _) | VFrozenMutBorrow (bid, _) ->
             (* Lookup the shared value in the context, and continue *)
             let sv =
               InterpBorrowsCore.ctx_lookup_shared_value ctx.span ectx bid

@@ -217,6 +217,11 @@ module Values = struct
           ("RB@" ^ BorrowId.to_string bid ^ "(^"
           ^ SharedBorrowId.to_string sid
           ^ ")")
+    | VFrozenMutBorrow (bid, sid) ->
+        add_borrow_color bid
+          ("FMB@" ^ BorrowId.to_string bid ^ "(^"
+          ^ SharedBorrowId.to_string sid
+          ^ ")")
 
   and loan_content_to_string ?(span : Meta.span option = None) (env : fmt_env)
       (lc : loan_content) : string =

@@ -257,7 +257,8 @@ let check_loans_borrows_relation_invariant (span : Meta.span) (ctx : eval_ctx) :
         (* Register the loan *)
         let _ =
           match bc with
-          | VSharedBorrow (bid, sid) -> register_borrow BShared bid (Some sid)
+          | VSharedBorrow (bid, sid) | VFrozenMutBorrow (bid, sid) ->
+              register_borrow BShared bid (Some sid)
           | VMutBorrow (bid, _) -> register_borrow BMut bid None
           | VReservedMutBorrow (bid, sid) ->
               register_borrow BReserved bid (Some sid)
@@ -308,7 +309,9 @@ let check_loans_borrows_relation_invariant (span : Meta.span) (ctx : eval_ctx) :
 
 (** Check that:
     - borrows/loans can't contain ⊥ or reserved mut borrows
-    - shared loans can't contain mutable loans *)
+    - shared loans can't contain mutable loans
+    - the mutable borrows below shared loans are frozen (see
+      {!InterpBorrowsCore.ctx_freeze_mut_borrows_in_shared_values}) *)
 let check_borrowed_values_invariant (span : Meta.span) (ctx : eval_ctx) : unit =
   let visitor =
     object
@@ -336,11 +339,18 @@ let check_borrowed_values_invariant (span : Meta.span) (ctx : eval_ctx) : unit =
         (* Update the info *)
         let info =
           match bc with
-          | VSharedBorrow _ -> set_outer_shared info
+          | VSharedBorrow _ | VFrozenMutBorrow _ -> set_outer_shared info
           | VReservedMutBorrow _ ->
               [%sanity_check] span (not info.outer_borrow);
               set_outer_shared info
-          | VMutBorrow (_, _) -> set_outer_mut info
+          | VMutBorrow (_, bv) ->
+              [%sanity_check] span
+                ((not info.outer_shared)
+                ||
+                match bv.value with
+                | VLoan (VSharedLoan _) -> true
+                | _ -> false);
+              set_outer_mut info
         in
         (* Continue exploring *)
         super#visit_borrow_content info bc
@@ -497,8 +507,9 @@ let check_typing_invariant_visitor span ctx (lookups : bool) =
       | VBottom, _ -> (* Nothing to check *) ()
       | VBorrow bc, TRef (_, ref_ty, rkind) -> (
           match (bc, rkind) with
-          | VSharedBorrow (bid, _), RShared | VReservedMutBorrow (bid, _), RMut
-            -> (
+          | VSharedBorrow (bid, _), RShared
+          | (VReservedMutBorrow (bid, _) | VFrozenMutBorrow (bid, _)), RMut ->
+            (
               if
                 (* Lookup the borrowed value to check it has the proper type.
                    Note that we ignore the marker: we will check it when

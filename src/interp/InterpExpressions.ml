@@ -199,7 +199,10 @@ let rec copy_value (span : Meta.span) (allow_adt_copy : bool) (config : config)
             fun e -> e )
       | VMutBorrow (_, _) -> [%craise] span "Can't copy a mutable borrow"
       | VReservedMutBorrow _ ->
-          [%craise] span "Can't copy a reserved mut borrow")
+          [%craise] span "Can't copy a reserved mut borrow"
+      | VFrozenMutBorrow _ ->
+          (* The type of a frozen borrow is a mutable reference *)
+          [%craise] span "Can't copy a frozen mutable borrow")
   | VLoan lc -> (
       (* We can only copy shared loans *)
       match lc with
@@ -1243,8 +1246,13 @@ let eval_rvalue_ref (config : config) (span : Meta.span) (p : place)
             (* The value is (directly inside) a shared loan: we do not need to do anything *)
             (lid, v)
         | _ ->
-            (* Not a shared loan: add a wrapper *)
+            (* Not a shared loan: add a wrapper. The mutable borrows below a
+               shared loan are frozen (see
+               {!InterpBorrowsCore.ctx_freeze_mut_borrows_in_shared_values}),
+               including below the loan of a two-phase borrow until it is
+               activated *)
             let bid = ctx.fresh_borrow_id () in
+            let v = InterpBorrowsCore.freeze_mut_borrows_in_shared_value ctx v in
             let v' = VLoan (VSharedLoan (bid, v)) in
             (bid, { v with value = v' })
       in

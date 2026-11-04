@@ -114,7 +114,7 @@ let eval_ctx_to_symbolic_assignments_info (ctx : bs_ctx) (ectx : C.eval_ctx) :
       method! visit_value name v =
         match v with
         | VLiteral _ | VBottom -> ()
-        | VBorrow (VSharedBorrow (bid, _)) ->
+        | VBorrow (VSharedBorrow (bid, _) | VFrozenMutBorrow (bid, _)) ->
             let v = V.BorrowId.Map.find bid shared_loans in
             self#visit_tvalue name v
         | VBorrow (VMutBorrow (_, v)) | VLoan (VSharedLoan (_, v)) ->

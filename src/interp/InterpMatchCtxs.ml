@@ -392,8 +392,22 @@ module MakeMatcher (M : PrimMatcher) : Matcher = struct
                 M.match_mut_borrows match_rec ctx0 ctx1 ty bid0 bv0 bid1 bv1 bv
               in
               VMutBorrow (bid, bv)
+          | VFrozenMutBorrow (bid0, sid0), VFrozenMutBorrow (bid1, sid1) ->
+              (* Frozen borrows are shared instances of the same loan: joining
+                 frozen borrows of different loans would require joining the
+                 mutable borrows they observe *)
+              [%cassert_recover] M.recover M.span (bid0 = bid1)
+                "Joins of frozen borrows of different loans are not supported \
+                 yet";
+              let bid, sid =
+                M.match_shared_borrows match_rec ctx0 ctx1 ty bid0 sid0 bid1
+                  sid1
+              in
+              VFrozenMutBorrow (bid, sid)
           | VReservedMutBorrow _, _
           | _, VReservedMutBorrow _
+          | VFrozenMutBorrow _, _
+          | _, VFrozenMutBorrow _
           | VSharedBorrow _, VMutBorrow _
           | VMutBorrow _, VSharedBorrow _ ->
               (* If we get here, either there is a typing inconsistency, or we are

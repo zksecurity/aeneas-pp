@@ -152,6 +152,7 @@ class virtual ['self] iter_eval_ctx_with_abs_levels =
       | VSharedBorrow (bid, sid) -> self#visit_VSharedBorrow state bid sid
       | VReservedMutBorrow (bid, sid) ->
           self#visit_VReservedMutBorrow state bid sid
+      | VFrozenMutBorrow (bid, sid) -> self#visit_VFrozenMutBorrow state bid sid
       | VMutBorrow (bid, v) -> self#visit_VMutBorrow state bid v
 
     method! visit_VSharedBorrow state bid sid =
@@ -159,6 +160,9 @@ class virtual ['self] iter_eval_ctx_with_abs_levels =
 
     method! visit_VReservedMutBorrow state bid sid =
       super#visit_VReservedMutBorrow state bid sid
+
+    method! visit_VFrozenMutBorrow state bid sid =
+      super#visit_VFrozenMutBorrow state bid sid
 
     method! visit_VMutBorrow state bid v = super#visit_VMutBorrow state bid v
 
@@ -562,6 +566,9 @@ let lookup_loan_opt (span : Meta.span) (ek : exploration_kind) (l : BorrowId.id)
         | VReservedMutBorrow (bid, sid) ->
             (* Nothing specific to do *)
             super#visit_VReservedMutBorrow env bid sid
+        | VFrozenMutBorrow (bid, sid) ->
+            (* Nothing specific to do *)
+            super#visit_VFrozenMutBorrow env bid sid
         | VMutBorrow (bid, mv) ->
             (* Control the dive *)
             if ek.enter_mut_borrows then super#visit_VMutBorrow env bid mv
@@ -670,7 +677,7 @@ let update_loan (span : Meta.span) (ek : exploration_kind) (l : BorrowId.id)
 
       method! visit_borrow_content env bc =
         match bc with
-        | VSharedBorrow _ | VReservedMutBorrow _ ->
+        | VSharedBorrow _ | VReservedMutBorrow _ | VFrozenMutBorrow _ ->
             (* Nothing specific to do *)
             super#visit_borrow_content env bc
         | VMutBorrow (bid, mv) ->
@@ -779,7 +786,7 @@ let lookup_borrow_opt (span : Meta.span) (ek : exploration_kind)
             if UShared (bid, uid) = l then
               raise (FoundGBorrowContent (Concrete bc))
             else ()
-        | VReservedMutBorrow (bid, uid) ->
+        | VReservedMutBorrow (bid, uid) | VFrozenMutBorrow (bid, uid) ->
             (* Check the borrow id *)
             if UShared (bid, uid) = l then
               raise (FoundGBorrowContent (Concrete bc))
@@ -896,8 +903,17 @@ let lookup_shared_reserved_borrows (l : loan_id) (ctx : eval_ctx) :
         (* Check the borrow id *)
         if l' = l then borrows := uid :: !borrows else ()
 
+      method! visit_VFrozenMutBorrow _ l' uid =
+        (* Check the borrow id *)
+        if l' = l then borrows := uid :: !borrows else ()
+
       method! visit_ASharedBorrow _ _ l' uid =
         (* Check the borrow id *)
+        if l' = l then borrows := uid :: !borrows else ()
+
+      method! visit_AsbBorrow _ l' uid =
+        (* Projected shared borrows (see {!InterpBorrows.end_shared_loan_aux},
+           which ends them as well) *)
         if l' = l then borrows := uid :: !borrows else ()
     end
   in
@@ -940,6 +956,10 @@ let update_borrow (span : Meta.span) (ek : exploration_kind)
             (* Check the id *)
             if UShared (bid, sid) = l then update ()
             else super#visit_VReservedMutBorrow env bid sid
+        | VFrozenMutBorrow (bid, sid) ->
+            (* Check the id *)
+            if UShared (bid, sid) = l then update ()
+            else super#visit_VFrozenMutBorrow env bid sid
 
       method! visit_loan_content env lc =
         match lc with
@@ -1924,7 +1944,8 @@ let get_max_sub_abs_visitor ?(with_ended = false) ?(with_evalues = false)
 
     method! visit_borrow_content level bc =
       (match bc with
-      | VSharedBorrow _ | VMutBorrow _ | VReservedMutBorrow _ ->
+      | VSharedBorrow _ | VMutBorrow _ | VReservedMutBorrow _
+      | VFrozenMutBorrow _ ->
           save_level level);
       super#visit_borrow_content level bc
 
@@ -2477,3 +2498,86 @@ let normalize_symbolic_proj (regions : region_set) (proj : symbolic_proj) :
   let { sv_id; proj_ty } : symbolic_proj = proj in
   let norm_proj_ty = normalize_proj_ty regions proj_ty in
   { sv_id; norm_proj_ty }
+
+(** Freeze the mutable borrows below the shared loans of a context: the value
+    borrowed by a mutable borrow [MB m v] inside a shared value becomes
+    shared-loaned, [MB m (SL k v)], so that the copies of the shared value can
+    observe it through frozen borrows (see {!Values.VFrozenMutBorrow} and
+    {!copy_shared_value}). This doesn't change the semantics: below a shared
+    borrow, a mutable borrow is frozen and only gives shared access to the value
+    it borrows.
+
+    We maintain this normal form by freezing the mutable borrows whenever they
+    can appear below a shared loan: when introducing a shared loan, and when
+    expanding a symbolic mutable borrow. *)
+let rec ctx_freeze_mut_borrows_in_shared_values (ctx : eval_ctx) : eval_ctx =
+  let visitor =
+    object (self)
+      inherit [_] map_eval_ctx
+
+      method! visit_VSharedLoan _ bid sv =
+        VSharedLoan (bid, freeze_mut_borrows_in_shared_value ctx sv)
+
+      method! visit_ASharedLoan env pm bid sv child =
+        ASharedLoan
+          ( pm,
+            bid,
+            freeze_mut_borrows_in_shared_value ctx sv,
+            self#visit_tavalue env child )
+    end
+  in
+  visitor#visit_eval_ctx () ctx
+
+(** Freeze the mutable borrows in a shared value: see
+    {!ctx_freeze_mut_borrows_in_shared_values} *)
+and freeze_mut_borrows_in_shared_value (ctx : eval_ctx) (sv : tvalue) : tvalue
+    =
+  let visitor =
+    object
+      inherit [_] map_tvalue as super
+
+      method! visit_VMutBorrow env bid bv =
+        let bv = super#visit_tvalue env bv in
+        match bv.value with
+        | VLoan (VSharedLoan _) -> VMutBorrow (bid, bv)
+        | _ ->
+            let loan = VLoan (VSharedLoan (ctx.fresh_borrow_id (), bv)) in
+            VMutBorrow (bid, { value = loan; ty = bv.ty })
+    end
+  in
+  visitor#visit_tvalue () sv
+
+(** Copy a shared value, for instance to put the copy in a fresh shared loan
+    reborrowing the original one. The shared borrows and the frozen borrows of
+    the copy are fresh instances of the same loans, the mutable borrows become
+    frozen borrows of the values they borrow (which are frozen, see
+    {!ctx_freeze_mut_borrows_in_shared_values}), and the shared loans disappear.
+    [copy_symbolic] copies the symbolic values. *)
+let copy_shared_value (span : Meta.span) (ctx : eval_ctx)
+    (copy_symbolic : symbolic_value -> symbolic_value) (v : tvalue) : tvalue =
+  let rec copy (v : tvalue) : tvalue =
+    match v.value with
+    | VLiteral _ | VBottom -> v
+    | VAdt adt ->
+        { v with value = VAdt { adt with fields = List.map copy adt.fields } }
+    | VBorrow bc ->
+        let bc =
+          match bc with
+          | VSharedBorrow (bid, _) ->
+              VSharedBorrow (bid, ctx.fresh_shared_borrow_id ())
+          | VFrozenMutBorrow (bid, _)
+          | VMutBorrow (_, { value = VLoan (VSharedLoan (bid, _)); _ }) ->
+              VFrozenMutBorrow (bid, ctx.fresh_shared_borrow_id ())
+          | VMutBorrow _ | VReservedMutBorrow _ -> [%internal_error] span
+        in
+        { v with value = VBorrow bc }
+    | VLoan (VSharedLoan (_, sv)) -> copy sv
+    | VLoan (VMutLoan _) -> [%internal_error] span
+    | VSymbolic sv ->
+        [%cassert] span
+          (not (ty_has_mut_borrows ctx.type_ctx.type_infos sv.sv_ty))
+          "Symbolic values containing mutable borrows inside shared values are \
+           not supported yet";
+        { v with value = VSymbolic (copy_symbolic sv) }
+  in
+  copy v

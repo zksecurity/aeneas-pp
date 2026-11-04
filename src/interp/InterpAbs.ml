@@ -184,6 +184,9 @@ let convert_value_to_abstractions (span : Meta.span) (abs_kind : abs_kind)
             push_abs (RVar (Free rid)) (av :: avl) (Some output) (Some input)
         | VReservedMutBorrow _ ->
             (* This borrow should have been activated *)
+            [%craise] span "Unexpected"
+        | VFrozenMutBorrow _ ->
+            (* Frozen borrows only appear inside shared values *)
             [%craise] span "Unexpected")
     | VLoan _ ->
         let rid = ctx.fresh_region_id () in
@@ -332,6 +335,9 @@ let convert_value_to_output_avalues (span : Meta.span) (ctx : eval_ctx)
               ([ av ], output)
           | VReservedMutBorrow _ ->
               (* This borrow should have been activated *)
+              [%craise] span "Unexpected"
+          | VFrozenMutBorrow _ ->
+              (* Frozen borrows only appear inside shared values *)
               [%craise] span "Unexpected"
         else ([], mk_eignored (Some (ctx.env, v)) proj_ty)
     | VLoan _, _ ->

@@ -740,7 +740,7 @@ let ids_sets_empty_borrows_loans (ids : ids_sets) : ids_sets =
 let tavalue_add_marker (span : Meta.span) (ctx : eval_ctx) (pm : proj_marker)
     (av : tavalue) : tavalue =
   let obj =
-    object
+    object (self)
       inherit [_] map_tavalue as super
       method! visit_borrow_content _ _ = [%craise] span "Unexpected borrow"
       method! visit_loan_content _ _ = [%craise] span "Unexpected loan"
@@ -765,9 +765,11 @@ let tavalue_add_marker (span : Meta.span) (ctx : eval_ctx) (pm : proj_marker)
         | AMutLoan (pm0, bid, av) ->
             [%sanity_check] span (pm0 = PNone);
             super#visit_aloan_content env (AMutLoan (pm, bid, av))
-        | ASharedLoan (pm0, bids, av, child) ->
+        | ASharedLoan (pm0, bids, sv, child) ->
             [%sanity_check] span (pm0 = PNone);
-            super#visit_aloan_content env (ASharedLoan (pm, bids, av, child))
+            (* The marker applies to the loan: the shared value, which may
+               contain shared borrows (nested borrows), doesn't carry markers *)
+            ASharedLoan (pm, bids, sv, self#visit_tavalue env child)
         | _ ->
             [%craise] span
               ("(Internal error: please file an issue (unexpected value: "
