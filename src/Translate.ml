@@ -365,6 +365,68 @@ let translate_crate_to_pure (crate : crate) (marked_ids : marked_ids) :
       (List.map (fun (d : Pure.global_decl) -> (d.def_id, d)) global_decls)
   in
 
+  (* Compute the signatures of the trait methods *)
+  let method_sigs =
+    let translate_method_sig (trait_decl : LlbcAst.trait_decl)
+        (method_id : TraitMethodId.id)
+        (bound_method : LlbcAst.trait_method Types.binder) =
+      try
+        let sg =
+          SymbolicToPureTypes.translate_flat_trait_method_sigs trans_ctx
+            trait_decl method_id bound_method
+        in
+        Some (FunOrMethodId.Method (trait_decl.def_id, method_id), sg)
+      with CFailure error ->
+        let method_meta = bound_method.binder_value.item_meta in
+        [%warn_opt_span] error.span
+          ("Could not translate the signature of the trait method '"
+          ^ name_to_string trans_ctx method_meta.name
+          ^ "' because of previous error\nDefinition span: "
+          ^ Errors.raw_span_to_string method_meta.span);
+        None
+    in
+    let translate_trait_methods (trait_decl : LlbcAst.trait_decl) =
+      let methods =
+        TraitDeclId.Map.find trait_decl.def_id
+          trans_ctx.trait_methods_to_extract
+      in
+      List.filter_map
+        (fun (method_id, bound_method) ->
+          translate_method_sig trait_decl method_id bound_method)
+        (TraitMethodId.Map.to_list methods)
+    in
+    let entries =
+      List.concat
+        (List.map translate_trait_methods
+           (TraitDeclId.Map.values trans_ctx.trait_decls_to_extract))
+    in
+    FunOrMethodId.Map.of_list entries
+  in
+
+  (* The methods of the extracted trait declarations whose signatures can't be
+     translated are left out of their trait declarations and of the trait
+     implementations *)
+  let trans_ctx =
+    {
+      trans_ctx with
+      trait_methods_to_extract =
+        TraitDeclId.Map.of_list
+          (List.map
+             (fun (decl_id, methods) ->
+               if TraitDeclId.Map.mem decl_id trans_ctx.trait_decls_to_extract
+               then
+                 ( decl_id,
+                   TraitMethodId.Map.filter
+                     (fun method_id _ ->
+                       FunOrMethodId.Map.mem
+                         (FunOrMethodId.Method (decl_id, method_id))
+                         method_sigs)
+                     methods )
+               else (decl_id, methods))
+             (TraitDeclId.Map.bindings trans_ctx.trait_methods_to_extract));
+    }
+  in
+
   (* Compute the function signatures for the whole crate *)
   let fun_sigs =
     let fun_decl_sigs =
@@ -394,43 +456,6 @@ let translate_crate_to_pure (crate : crate) (marked_ids : marked_ids) :
               ^ compute_local_uses_error_message trans_ctx (IdFun fdef.def_id));
             None)
         (FunDeclId.Map.values trans_ctx.fun_ctx.to_extract)
-    in
-
-    let method_sigs =
-      let translate_method_sig (trait_decl : LlbcAst.trait_decl)
-          (method_id : TraitMethodId.id)
-          (bound_method : LlbcAst.trait_method Types.binder) =
-        try
-          let sg =
-            SymbolicToPureTypes.translate_flat_trait_method_sigs trans_ctx
-              trait_decl method_id bound_method
-          in
-          Some (FunOrMethodId.Method (trait_decl.def_id, method_id), sg)
-        with CFailure error ->
-          let method_meta = bound_method.binder_value.item_meta in
-          [%warn_opt_span] error.span
-            ("Could not translate the signature of the trait method '"
-            ^ name_to_string trans_ctx method_meta.name
-            ^ "' because of previous error\nDefinition span: "
-            ^ Errors.raw_span_to_string method_meta.span);
-          None
-      in
-      let translate_trait_methods (trait_decl : LlbcAst.trait_decl) =
-        let methods =
-          TraitDeclId.Map.find trait_decl.def_id
-            trans_ctx.trait_methods_to_extract
-        in
-        List.filter_map
-          (fun (method_id, bound_method) ->
-            translate_method_sig trait_decl method_id bound_method)
-          (TraitMethodId.Map.to_list methods)
-      in
-      let entries =
-        List.concat
-          (List.map translate_trait_methods
-             (TraitDeclId.Map.values trans_ctx.trait_decls_to_extract))
-      in
-      FunOrMethodId.Map.of_list entries
     in
 
     FunOrMethodId.Map.of_list

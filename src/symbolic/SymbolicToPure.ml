@@ -339,6 +339,15 @@ let translate_trait_impl (ctx : Contexts.decls_ctx) (trait_impl : A.trait_impl)
   in
   (* We checked that there were no types in the trait declaration already. *)
   let types = [] in
+  (* The impl provides the methods extracted as fields of the trait declaration *)
+  let methods_to_extract =
+    TraitDeclId.Map.find trait_impl.impl_trait.id ctx.trait_methods_to_extract
+  in
+  let methods =
+    TraitMethodId.Map.filter
+      (fun method_id _ -> TraitMethodId.Map.mem method_id methods_to_extract)
+      methods
+  in
   let methods =
     List.map
       (fun ((method_id, m) : TraitMethodId.id * T.fun_decl_ref T.binder) ->
