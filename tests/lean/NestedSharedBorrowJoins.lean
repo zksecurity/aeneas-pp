@@ -262,8 +262,36 @@ def frame_kept_by_branches
     core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
       Std.U32 residual
 
+/-- [nested_shared_borrow_joins::join_different_referents]:
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 152:0-157:1
+    Visibility: public -/
+def join_different_referents
+  (a : Std.U32) (b : Std.U32) (c : Bool) : Result Std.U32 := do
+  if c
+  then get a
+  else get b
+
+/-- [nested_shared_borrow_joins::ended_outer_live_inner]:
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 160:0-167:1
+    Visibility: public -/
+def ended_outer_live_inner (a : Std.U32) (c : Bool) : Result Std.U32 := do
+  let inner ← get a
+  let r ← if c
+            then ok 1#u32
+            else ok 2#u32
+  inner + r
+
+/-- [nested_shared_borrow_joins::one_branch_reborrow]:
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 170:0-180:1
+    Visibility: public -/
+def one_branch_reborrow (s : Std.U32) (b : Bool) : Result Std.U32 := do
+  let n ← if b
+            then ok s
+            else ok 0#u32
+  n + s
+
 /-- [nested_shared_borrow_joins::test_ref_eq_then_branch]:
-    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 153:0-157:1
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 183:0-187:1
     Visibility: public -/
 def test_ref_eq_then_branch : Result Unit := do
   let i ← ref_eq_then_branch 3#u32 3#u32 true
@@ -275,7 +303,7 @@ def test_ref_eq_then_branch : Result Unit := do
 #guard (test_ref_eq_then_branch).reducesTo ()
 
 /-- [nested_shared_borrow_joins::test_join_call_and_local]:
-    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 160:0-164:1
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 190:0-194:1
     Visibility: public -/
 def test_join_call_and_local : Result Unit := do
   let i ← join_call_and_local 7#u32 true
@@ -287,7 +315,7 @@ def test_join_call_and_local : Result Unit := do
 #guard (test_join_call_and_local).reducesTo ()
 
 /-- [nested_shared_borrow_joins::test_join_aliased_handles]:
-    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 167:0-171:1
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 197:0-201:1
     Visibility: public -/
 def test_join_aliased_handles : Result Unit := do
   let i ← join_aliased_handles 5#u32 true
@@ -299,7 +327,7 @@ def test_join_aliased_handles : Result Unit := do
 #guard (test_join_aliased_handles).reducesTo ()
 
 /-- [nested_shared_borrow_joins::test_update_across_join]:
-    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 174:0-183:1
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 204:0-213:1
     Visibility: public -/
 def test_update_across_join : Result Unit := do
   let x ← update_across_join 1#u32 1#u32 0#u32 true
@@ -313,7 +341,7 @@ def test_update_across_join : Result Unit := do
 #guard (test_update_across_join).reducesTo ()
 
 /-- [nested_shared_borrow_joins::test_eq_in_branch]:
-    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 186:0-191:1
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 216:0-221:1
     Visibility: public -/
 def test_eq_in_branch : Result Unit := do
   let i ← eq_in_branch 1#u32 1#u32 true
@@ -327,7 +355,7 @@ def test_eq_in_branch : Result Unit := do
 #guard (test_eq_in_branch).reducesTo ()
 
 /-- [nested_shared_borrow_joins::test_holder_branch]:
-    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 194:0-199:1
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 224:0-229:1
     Visibility: public -/
 def test_holder_branch : Result Unit := do
   let i ← holder_branch { r := 5#u32 } 2#u32 true
@@ -337,5 +365,41 @@ def test_holder_branch : Result Unit := do
 
 /- Unit test for [nested_shared_borrow_joins::test_holder_branch] -/
 #guard (test_holder_branch).reducesTo ()
+
+/-- [nested_shared_borrow_joins::test_join_different_referents]:
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 232:0-236:1
+    Visibility: public -/
+def test_join_different_referents : Result Unit := do
+  let i ← join_different_referents 1#u32 2#u32 true
+  massert (i = 1#u32)
+  let i1 ← join_different_referents 1#u32 2#u32 false
+  massert (i1 = 2#u32)
+
+/- Unit test for [nested_shared_borrow_joins::test_join_different_referents] -/
+#guard (test_join_different_referents).reducesTo ()
+
+/-- [nested_shared_borrow_joins::test_ended_outer_live_inner]:
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 240:0-244:1
+    Visibility: public -/
+def test_ended_outer_live_inner : Result Unit := do
+  let i ← ended_outer_live_inner 5#u32 true
+  massert (i = 6#u32)
+  let i1 ← ended_outer_live_inner 5#u32 false
+  massert (i1 = 7#u32)
+
+/- Unit test for [nested_shared_borrow_joins::test_ended_outer_live_inner] -/
+#guard (test_ended_outer_live_inner).reducesTo ()
+
+/-- [nested_shared_borrow_joins::test_one_branch_reborrow]:
+    Source: 'tests/src/nested-shared-borrow-joins.rs', lines 247:0-250:1
+    Visibility: public -/
+def test_one_branch_reborrow : Result Unit := do
+  let i ← one_branch_reborrow 2#u32 true
+  massert (i = 4#u32)
+  let i1 ← one_branch_reborrow 2#u32 false
+  massert (i1 = 2#u32)
+
+/- Unit test for [nested_shared_borrow_joins::test_one_branch_reborrow] -/
+#guard (test_one_branch_reborrow).reducesTo ()
 
 end nested_shared_borrow_joins

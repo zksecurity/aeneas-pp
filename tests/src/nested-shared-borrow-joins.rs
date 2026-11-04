@@ -149,6 +149,36 @@ pub fn frame_kept_by_branches(env: &Env, k: &str, c: bool) -> Option<u32> {
 // Executed checks
 // ------------------------------------------------------------------
 
+pub fn join_different_referents(a: &u32, b: &u32, c: bool) -> u32 {
+    let aa = &a;
+    let bb = &b;
+    let r = if c { get(aa) } else { get(bb) };
+    **r
+}
+
+/// The outer borrow ends before the join, the inner one stays live.
+pub fn ended_outer_live_inner(a: &u32, c: bool) -> u32 {
+    let inner: &u32 = {
+        let aa = &a;
+        *get(aa)
+    };
+    let r = if c { 1 } else { 2 };
+    *inner + r
+}
+
+/// A nested shared borrow introduced in one branch only.
+pub fn one_branch_reborrow(s: &u32, b: bool) -> u32 {
+    let r: &&u32;
+    let n;
+    if b {
+        r = &s;
+        n = **r;
+    } else {
+        n = 0;
+    }
+    n + *s
+}
+
 #[verify::test]
 pub fn test_ref_eq_then_branch() {
     let (a, b) = (3, 3);
@@ -196,4 +226,25 @@ pub fn test_holder_branch() {
     let h = Holder { r: &a };
     assert!(holder_branch(&h, &2, true) == 6);
     assert!(holder_branch(&h, &2, false) == 2);
+}
+
+#[verify::test]
+pub fn test_join_different_referents() {
+    let (a, b) = (1, 2);
+    assert!(join_different_referents(&a, &b, true) == 1);
+    assert!(join_different_referents(&a, &b, false) == 2);
+}
+
+
+#[verify::test]
+pub fn test_ended_outer_live_inner() {
+    let a = 5;
+    assert!(ended_outer_live_inner(&a, true) == 6);
+    assert!(ended_outer_live_inner(&a, false) == 7);
+}
+
+#[verify::test]
+pub fn test_one_branch_reborrow() {
+    assert!(one_branch_reborrow(&2, true) == 4);
+    assert!(one_branch_reborrow(&2, false) == 2);
 }

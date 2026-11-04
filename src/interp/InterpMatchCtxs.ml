@@ -166,6 +166,18 @@ let compute_abs_borrows_loans_maps (span : Meta.span) (explore : abs -> bool)
       true loan_proj_to_abs proj abs.abs_id
   in
 
+  let shared_value_loans =
+    object
+      inherit [_] iter_tvalue
+      method! visit_loan_id (abs, pm) lid = register_loan_id abs pm lid
+
+      method! visit_borrow_content _ bc =
+        match bc with
+        | VSharedBorrow _ | VFrozenMutBorrow _ -> ()
+        | VMutBorrow _ | VReservedMutBorrow _ -> [%internal_error] span
+    end
+  in
+
   let explore_abs =
     object (self : 'self)
       inherit [_] iter_tavalue as super
@@ -180,9 +192,12 @@ let compute_abs_borrows_loans_maps (span : Meta.span) (explore : abs -> bool)
             (* Recurse with the old marker *)
             super#visit_tavalue (abs, pm) child
         | ASharedLoan (npm, lid, sv, child) ->
-            (* Add the current marker when visiting the loan ids and the shared value *)
+            (* Add the current marker when visiting the loan ids and the shared
+               value. The shared and frozen borrows of the shared value (nested
+               borrows) are contained in the loan: they are not exposed to the
+               other abstractions, and we don't register them. *)
             self#visit_loan_id (abs, npm) lid;
-            self#visit_tvalue (abs, npm) sv;
+            shared_value_loans#visit_tvalue (abs, npm) sv;
             (* Recurse with the old marker *)
             self#visit_tavalue (abs, pm) child
         | AIgnoredMutLoan (_, child)
@@ -1544,15 +1559,17 @@ module MakeJoinMatcher (S : MatchJoinState) : PrimMatcher = struct
     [%cassert_recover] S.recover span
       (not (ety_has_nested_borrows (Some span) ctx0.type_ctx.type_infos ty))
       "Unimplemented";
+    (* The values may contain shared borrows (nested shared borrows): the loan
+       moves to the abstraction with its shared value, and the shared borrows
+       of the joined value are fresh instances of the same loans. *)
     [%cassert_recover] S.recover span
-      (not
-         (ValuesUtils.value_has_loans_or_borrows (Some span)
-            ctx0.type_ctx.type_infos shared_value.value))
+      (value_is_observation (Some span) ctx0 shared_value.value)
       "Unimplemented";
     [%cassert_recover] S.recover span
-      (not
-         (ValuesUtils.value_has_borrows (Some span) ctx0.type_ctx.type_infos
-            other.value))
+      ((not
+          (ValuesUtils.value_has_borrows (Some span) ctx0.type_ctx.type_infos
+             other.value))
+      || value_is_observation (Some span) ctx0 other.value)
       "Unimplemented";
 
     (* Join the inner value. *)
@@ -1566,7 +1583,9 @@ module MakeJoinMatcher (S : MatchJoinState) : PrimMatcher = struct
     let nbid = ctx0.fresh_borrow_id () in
 
     let kind = RShared in
-    let bv_ty = ty in
+    (* The references inside the shared value don't belong to the abstraction:
+       they get fresh regions *)
+    let _, bv_ty = ty_refresh_regions (Some span) ctx0.fresh_region_id ty in
     let borrow_ty = mk_ref_ty (RVar (Free rid)) bv_ty kind in
 
     let borrow_av =

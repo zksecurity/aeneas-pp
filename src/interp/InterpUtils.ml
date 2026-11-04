@@ -577,6 +577,55 @@ let value_has_borrows span (ctx : eval_ctx) (v : value) : bool =
 let value_has_mut_borrows span (ctx : eval_ctx) (v : value) : bool =
   ValuesUtils.value_has_mut_borrows span ctx.type_ctx.type_infos v
 
+(** Check if a value only observes other values: it contains no loans, its
+    borrows are shared or frozen borrows (see {!Values.VFrozenMutBorrow}), and
+    its symbolic values contain no borrows. A shared value with only such
+    borrows can be copied and joined like a value without borrows, the copies
+    being new instances of the same borrows. *)
+let value_is_observation span (ctx : eval_ctx) (v : value) : bool =
+  let visitor =
+    object
+      inherit [_] iter_tvalue
+      method! visit_VLoan _ _ = raise Found
+      method! visit_VMutBorrow _ _ _ = raise Found
+      method! visit_VReservedMutBorrow _ _ _ = raise Found
+
+      method! visit_symbolic_value _ sv =
+        if ValuesUtils.symbolic_value_has_borrows span ctx.type_ctx.type_infos sv
+        then raise Found
+    end
+  in
+  try
+    visitor#visit_value () v;
+    true
+  with Found -> false
+
+(** Replace the shared borrow ids in a value with a dummy id: two shared values
+    which only differ by the instances of their shared borrows are equal after
+    this transformation *)
+let value_erase_shared_borrow_ids (v : tvalue) : tvalue =
+  let visitor =
+    object
+      inherit [_] map_tvalue
+      method! visit_shared_borrow_id _ _ = SharedBorrowId.zero
+    end
+  in
+  visitor#visit_tvalue () v
+
+(** End the shared and frozen borrows of a value (by replacing them with ⊥) *)
+let value_end_observations (v : tvalue) : tvalue =
+  let visitor =
+    object
+      inherit [_] map_tvalue as super
+
+      method! visit_VBorrow env bc =
+        match bc with
+        | VSharedBorrow _ | VFrozenMutBorrow _ -> VBottom
+        | VMutBorrow _ | VReservedMutBorrow _ -> super#visit_VBorrow env bc
+    end
+  in
+  visitor#visit_tvalue () v
+
 (** See {!ValuesUtils.value_has_borrows}. *)
 let tvalue_has_borrows span (ctx : eval_ctx) (v : tvalue) : bool =
   ValuesUtils.value_has_borrows span ctx.type_ctx.type_infos v.value

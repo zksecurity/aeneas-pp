@@ -30,14 +30,18 @@ let eliminate_shared_loans (span : Meta.span) (ctx : eval_ctx) : eval_ctx =
       inherit [_] map_abs as super
 
       method! visit_ASharedLoan env pm bid sv child =
-        if
-          (not (BorrowId.Set.mem bid shared_borrows))
-          &&
+        if BorrowId.Set.mem bid shared_borrows then
+          super#visit_ASharedLoan env pm bid sv child
+        else if
           (* We have to pay attention to markers: if there is a borrow/loan
               inside the shared value, by removing the shared loan we forget
               about the marker, which can be a problem *)
           not (value_has_loans_or_borrows (Some span) ctx sv.value)
         then self#visit_AEndedSharedLoan env sv child
+        else if value_is_observation (Some span) ctx sv.value then
+          (* The shared value can't be read anymore: we end the shared and
+             frozen borrows it contains *)
+          self#visit_AEndedSharedLoan env (value_end_observations sv) child
         else super#visit_ASharedLoan env pm bid sv child
     end
   in
@@ -1190,9 +1194,9 @@ let mk_collapse_ctx_merge_duplicate_funs (span : Meta.span)
       let _, ty0, _ = ty_as_ref ty0 in
       let _, ty1, _ = ty_as_ref ty1 in
       [%sanity_check] span
-        (not (ty_has_borrows (Some span) ctx.type_ctx.type_infos ty0));
+        (not (ty_has_mut_borrows ctx.type_ctx.type_infos ty0));
       [%sanity_check] span
-        (not (ty_has_borrows (Some span) ctx.type_ctx.type_infos ty1))
+        (not (ty_has_mut_borrows ctx.type_ctx.type_infos ty1))
     in
 
     (* Same remarks as for [merge_amut_borrows] *)
@@ -1225,10 +1229,20 @@ let mk_collapse_ctx_merge_duplicate_funs (span : Meta.span)
        This time we need to also merge the shared values. We rely on the
        join matcher [JM] to do so.
     *)
-    [%sanity_check] span
-      (not (value_has_loans_or_borrows (Some span) ctx sv0.value));
-    [%sanity_check] span
-      (not (value_has_loans_or_borrows (Some span) ctx sv1.value));
+    [%ldebug
+      "- sv0: " ^ tvalue_to_string ctx sv0 ^ "\n- sv1: "
+      ^ tvalue_to_string ctx sv1];
+    [%sanity_check] span (value_is_observation (Some span) ctx sv0.value);
+    [%sanity_check] span (value_is_observation (Some span) ctx sv1.value);
+    (* The shared values may contain shared borrows: we only merge them when
+       they are the same up to the instances of those borrows, so that joining
+       them doesn't introduce new abstractions *)
+    [%cassert_recover] recoverable span
+      ((not (value_has_borrows (Some span) ctx sv0.value))
+       && (not (value_has_borrows (Some span) ctx sv1.value))
+      || value_erase_shared_borrow_ids sv0 = value_erase_shared_borrow_ids sv1)
+      "Merging shared loans of different nested shared borrows is not \
+       supported yet";
 
     let ty = ty0 in
     let child = child0 in
@@ -1331,21 +1345,22 @@ let collapse_fixed_abs_ids (ctx : eval_ctx) : AbsId.Set.t =
     {!InterpMatchCtxs.compute_abs_borrows_loans_maps}) we can't register such
     borrows. We use this function to fail early with a recoverable error in
     {!collapse_ctx}. *)
-let ctx_has_borrows_in_shared_loans_of_abs (fixed : AbsId.Set.t)
-    (ctx : eval_ctx) : bool =
-  let has_borrows =
-    object
-      inherit [_] iter_tvalue
-      method! visit_borrow_content _ _ = raise Found
-    end
-  in
+(** Check if the abstractions which are not fixed contain shared loans whose
+    shared values contain borrows, but are not observations (see
+    {!InterpUtils.value_is_observation}) *)
+let ctx_has_borrows_in_shared_loans_of_abs (span : Meta.span)
+    (fixed : AbsId.Set.t) (ctx : eval_ctx) : bool =
   let visitor =
     object
       inherit [_] iter_tavalue as super
 
       method! visit_aloan_content env lc =
         (match lc with
-        | ASharedLoan (_, _, sv, _) -> has_borrows#visit_tvalue () sv
+        | ASharedLoan (_, _, sv, _) ->
+            if
+              value_has_borrows (Some span) ctx sv.value
+              && not (value_is_observation (Some span) ctx sv.value)
+            then raise Found
         | _ -> ());
         super#visit_aloan_content env lc
     end
@@ -1372,9 +1387,9 @@ let collapse_ctx config (span : Meta.span)
      join, for instance by duplicating the code after a branching). *)
   let fixed_aids = collapse_fixed_abs_ids ctx in
   [%cassert_recover] recoverable span
-    (not (ctx_has_borrows_in_shared_loans_of_abs fixed_aids ctx))
+    (not (ctx_has_borrows_in_shared_loans_of_abs span fixed_aids ctx))
     "Joining region abstractions containing shared loans whose shared value \
-     contains borrows is not supported yet";
+     contains mutable borrows is not supported yet";
   let merge_funs =
     mk_collapse_ctx_merge_duplicate_funs span fresh_abs_kind ~recoverable
       ~with_abs_conts ctx
