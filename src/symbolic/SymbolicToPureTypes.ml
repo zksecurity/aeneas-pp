@@ -436,8 +436,9 @@ let rec translate_fwd_ty (span : Meta.span option) (decls_ctx : C.decls_ctx)
         "Unimplemented";
       let trait_ref = translate_fwd_trait_ref span decls_ctx trait_ref in
       TTraitType (trait_ref, type_name)
-  | TFnDef { binder_regions; binder_value = { kind; generics }; _ } -> (
-      [%cassert_opt_span] span (binder_regions = []) "Unimplemented";
+  | TFnDef { binder_value = { kind; generics }; _ } -> (
+      (* The regions bound by the binder are the late-bound regions of the
+         function: they are regions of its signature, which we translate below *)
       let generics = translate_fwd_generic_args span decls_ctx generics in
       match kind with
       | T.Fun fid ->
@@ -578,8 +579,10 @@ and compute_back_ty_num_levels (span : Meta.span option)
           (generics = TypesUtils.empty_generic_args)
           "Unimplemented";
         save_count outer_regions
-    | TFnDef _ | TFnPtr _ ->
-        [%craise_opt_span] span "Arrow types are not supported yet"
+    | TFnDef _ ->
+        (* A function item doesn't hold any value *)
+        save_count outer_regions
+    | TFnPtr _ -> [%craise_opt_span] span "Arrow types are not supported yet"
     | TDynTrait _ ->
         [%craise_opt_span] span "Dynamic trait types are not supported yet"
     | TError _ ->
@@ -713,8 +716,11 @@ and translate_back_ty_aux (span : Meta.span option) (decls_ctx : C.decls_ctx)
           (generics = TypesUtils.empty_generic_args)
           "Unimplemented";
         stop outer_regions ty
-    | TFnDef _ | TFnPtr _ ->
-        [%craise_opt_span] span "Arrow types are not supported yet"
+    | TFnDef _ ->
+        (* A function item doesn't hold any value, and in particular doesn't
+           hold borrows *)
+        stop outer_regions ty
+    | TFnPtr _ -> [%craise_opt_span] span "Arrow types are not supported yet"
     | TDynTrait _ ->
         [%craise_opt_span] span "Dynamic trait types are not supported yet"
     | TError _ ->
@@ -1098,6 +1104,40 @@ and lower_fn_trait_output (span : span option) (decls_ctx : C.decls_ctx)
   in
   Option.map
     (fun method_name ->
+      (* The output of the closure must not borrow from what its arguments
+         borrow mutably: the result of the call would depend on the regions they
+         share, which the calls don't preserve (the regions of the
+         instantiations of the bodies are erased) *)
+      let region_vars (ty : T.ty) : T.region list =
+        let regions = ref [] in
+        let visitor =
+          object
+            inherit [_] T.iter_ty
+            method! visit_TFnDef _ _ = ()
+
+            method! visit_region _ r =
+              match r with
+              | T.RVar _ -> regions := r :: !regions
+              | _ -> ()
+          end
+        in
+        visitor#visit_ty () ty;
+        !regions
+      in
+      (match List.rev tr.generics.types with
+      | output :: args ->
+          [%cassert_opt_span] span
+            (not
+               (List.exists
+                  (fun r ->
+                    List.exists
+                      (TypesUtils.ty_has_mut_borrow_for_region_in_pred
+                         decls_ctx.type_ctx.type_infos (fun r' -> r' = r))
+                      args)
+                  (region_vars output)))
+            "Closures whose output borrows from their arguments are not \
+             supported yet"
+      | [] -> [%internal_error_opt_span] span);
       (* A closure capturing mutable borrows gives them back when called
          (through backward functions of its implementation), while generic code
          sees its state as opaque *)
@@ -1151,6 +1191,8 @@ and lower_fn_trait_output (span : span option) (decls_ctx : C.decls_ctx)
                supported yet";
             super#visit_region_binder visit_value env rb
 
+          (* A function item doesn't hold any value: we leave its regions *)
+          method! visit_TFnDef _ fn = TFnDef fn
           method! visit_RVar _ var = get_region (RVar var)
           method! visit_RBody _ rid = get_region (RBody rid)
           method! visit_RErased _ = T.RVar (Free (fresh_region ()))

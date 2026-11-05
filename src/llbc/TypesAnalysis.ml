@@ -489,27 +489,9 @@ let analyze_full_ty (span : Meta.span option) (updated : bool ref)
             ty_info inputs
         in
         analyze span expl_info ty_info output
-    | TFnDef { binder_regions; binder_value = { kind = _; generics }; _ } ->
-        (* For now we check that there are no regions anywhere.
-
-           TODO: the best would be to open all binders and then do a sanity
-           check (probably that no region bound at the level of the signature
-           is outlived by a locally bound region).
-         *)
-        [%cassert_opt_span] span (binder_regions = []) "Unimplemented";
-        let visitor =
-          object
-            inherit [_] iter_ty
-            method! visit_region _ _ = raise Utils.Found
-          end
-        in
-        let has_regions =
-          try
-            visitor#visit_generic_args () generics;
-            false
-          with Utils.Found -> true
-        in
-        [%cassert_opt_span] span (not has_regions) "Unimplemented";
+    | TFnDef _ ->
+        (* A function item doesn't hold any value, and in particular doesn't
+           hold borrows *)
         ty_info
     | TError _ ->
         [%craise_opt_span] span "Found type error in the output of charon"
@@ -1053,6 +1035,10 @@ let check_no_bound_free_implied_bounds (span : Meta.span option)
                against [outer] by [visit_region], the type arguments are
                recursed into. *)
             super#visit_ty outer ty
+        | TFnDef _ ->
+            (* A function item doesn't hold any value: its regions (the ones of
+               the signature of the function) don't introduce implied bounds *)
+            ()
         | _ -> super#visit_ty outer ty
     end
   in

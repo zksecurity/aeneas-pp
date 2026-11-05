@@ -110,6 +110,10 @@ let ty_regions (ty : ty) : RegionId.Set.t =
         (* Ignore the dyn traits by default *)
         if Config.type_analysis_ignore_dyn then ()
         else super#visit_TDynTrait env tr
+
+      (* A function item holds no borrows: the regions of its type are the
+         regions of the signature of the function *)
+      method! visit_TFnDef _ _ = ()
     end
   in
   (* Explore the type *)
@@ -186,6 +190,10 @@ let ty_has_regions_in_pred_aux (infos : TypesAnalysis.type_infos option)
         (* Ignore the dyn traits by default *)
         if Config.type_analysis_ignore_dyn then ()
         else super#visit_TDynTrait env tr
+
+      (* A function item holds no borrows: the regions of its type are the
+         regions of the signature of the function *)
+      method! visit_TFnDef _ _ = ()
     end
   in
   try
@@ -493,10 +501,15 @@ let raise_if_not_rty_visitor =
       (* Ignore dyn traits by default *)
       if Config.type_analysis_ignore_dyn then ()
       else super#visit_TDynTrait env tr
+
+    (* A function item doesn't hold any value: its regions (the ones of the
+       signature of the function) are irrelevant *)
+    method! visit_TFnDef _ _ = ()
   end
 
 (** Return [true] if the type is a region type (i.e., it doesn't contain erased
-    regions), and only contains free regions) *)
+    regions), and only contains free regions). We ignore the regions of the
+    function items, which hold no borrows. *)
 let ty_is_rty (ty : ty) : bool =
   try
     raise_if_not_rty_visitor#visit_ty () ty;
@@ -514,6 +527,10 @@ let raise_if_not_erased_ty_visitor =
       | RErased -> ()
       | RLub ty -> self#visit_ty () ty
       | RBody _ -> [%craise_opt_span] None "unsupported: Body region"
+
+    (* A function item holds no borrows: the regions of its type are the
+       regions of the signature of the function *)
+    method! visit_TFnDef _ _ = ()
   end
 
 (** Return [true] if the type is a region type (i.e., it doesn't contain erased
@@ -558,6 +575,10 @@ let raise_if_region_ty_visitor =
   object
     inherit [_] iter_ty as super
     method! visit_region _ _ = raise Found
+
+    (* A function item holds no borrows: the regions of its type are the
+       regions of the signature of the function *)
+    method! visit_TFnDef _ _ = ()
 
     method! visit_TDynTrait env tr =
       (* Ignore the dyn traits by default *)

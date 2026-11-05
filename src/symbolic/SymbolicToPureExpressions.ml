@@ -470,41 +470,43 @@ and check_fn_trait_dictionaries (ctx : bs_ctx) (span : Meta.span)
     | Some (RustcLangItemFnOnce | RustcLangItemFnMut | RustcLangItemFn) -> true
     | _ -> false
   in
-  let sg =
-    (A.FunOrMethodId.Map.find (A.FunOrMethodId.Fun fid) ctx.fun_sigs).sg
-  in
-  [%sanity_check] span
-    (List.length sg.generics.trait_clauses = List.length generics.trait_refs);
-  let subst = make_subst_from_generics sg.generics generics in
-  List.iter2
-    (fun (clause : trait_param) (tr : trait_ref) ->
-      match tr.trait_id with
-      | TraitImpl (impl_id, impl_generics) when is_fn_trait clause.trait_id ->
-          let expected = generic_args_substitute subst clause.generics in
-          let impl = T.TraitImplId.Map.find impl_id decls_ctx.crate.trait_impls in
-          let impl_params, _ =
-            translate_generic_params (Some span) decls_ctx impl.generics
-          in
-          let impl_trait =
-            translate_trait_decl_ref (Some span) decls_ctx
-              (translate_fwd_ty (Some span) decls_ctx)
-              impl.impl_trait
-          in
-          let actual =
-            generic_args_substitute
-              (make_subst_from_generics impl_params impl_generics)
-              impl_trait.decl_generics
-          in
-          [%cassert] span
-            (expected.types = actual.types)
-            ("Unimplemented: a closure is given back its arguments differently \
-              from what the function expects (the function relates regions of \
-              the arguments which the closure keeps apart).\nExpected: "
-            ^ String.concat ", " (List.map (pure_ty_to_string ctx) expected.types)
-            ^ "\nClosure: "
-            ^ String.concat ", " (List.map (pure_ty_to_string ctx) actual.types))
-      | _ -> ())
-    sg.generics.trait_clauses generics.trait_refs
+  (* If the signature of the function couldn't be translated, translating the
+     call fails anyway *)
+  match A.FunOrMethodId.Map.find_opt (A.FunOrMethodId.Fun fid) ctx.fun_sigs with
+  | None -> ()
+  | Some { sg; _ } ->
+      [%sanity_check] span
+        (List.length sg.generics.trait_clauses = List.length generics.trait_refs);
+      let subst = make_subst_from_generics sg.generics generics in
+      List.iter2
+        (fun (clause : trait_param) (tr : trait_ref) ->
+          match tr.trait_id with
+          | TraitImpl (impl_id, impl_generics) when is_fn_trait clause.trait_id ->
+              let expected = generic_args_substitute subst clause.generics in
+              let impl = T.TraitImplId.Map.find impl_id decls_ctx.crate.trait_impls in
+              let impl_params, _ =
+                translate_generic_params (Some span) decls_ctx impl.generics
+              in
+              let impl_trait =
+                translate_trait_decl_ref (Some span) decls_ctx
+                  (translate_fwd_ty (Some span) decls_ctx)
+                  impl.impl_trait
+              in
+              let actual =
+                generic_args_substitute
+                  (make_subst_from_generics impl_params impl_generics)
+                  impl_trait.decl_generics
+              in
+              [%cassert] span
+                (expected.types = actual.types)
+                ("Unimplemented: a closure is given back its arguments differently \
+                  from what the function expects (the function relates regions of \
+                  the arguments which the closure keeps apart).\nExpected: "
+                ^ String.concat ", " (List.map (pure_ty_to_string ctx) expected.types)
+                ^ "\nClosure: "
+                ^ String.concat ", " (List.map (pure_ty_to_string ctx) actual.types))
+          | _ -> ())
+        sg.generics.trait_clauses generics.trait_refs
 
 (** Handle the function call cases which are not unsized casts *)
 and translate_function_call_aux (call : S.call) (e : S.expr) (ctx : bs_ctx) :

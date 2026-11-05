@@ -1868,7 +1868,8 @@ let extract_fun_parameters (space : bool ref) (ctx : extraction_ctx)
 let extract_fun_input_parameters_types (span : span) (ctx : extraction_ctx)
     (fmt : F.formatter) (inputs : ty list) : unit =
   let extract_param (ty : ty) : unit =
-    let inside = false in
+    (* The arrows are right-associative *)
+    let inside = is_arrow_ty ty in
     extract_ty span ctx fmt TypeDeclId.TreeSet.empty ~inside ty;
     F.pp_print_space fmt ();
     extract_arrow fmt ();
