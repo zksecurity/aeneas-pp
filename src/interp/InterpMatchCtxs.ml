@@ -601,6 +601,15 @@ module MakeMatcher (M : PrimMatcher) : Matcher = struct
             (* Those should have been filtered when destructuring the abstractions -
                they are necessary only when there are nested borrows *)
             [%craise_recover] M.recover M.span "Unreachable"
+        | AEndedSharedLoan (sv0, av0), AEndedSharedLoan (sv1, av1) ->
+            (* The shared value of an ended loan behaves as a regular value.
+
+               We get there when checking that contexts are equivalent: the joins
+               copy the abstractions which are the same in the joined contexts,
+               and destructure the others. *)
+            let sv = match_rec sv0 sv1 in
+            let av = match_arec av0 av1 in
+            { value = ALoan (AEndedSharedLoan (sv, av)); ty }
         | _ -> [%craise_recover] M.recover M.span "Unreachable")
     | ASymbolic (pm0, proj0), ASymbolic (pm1, proj1) -> begin
         [%ldebug "Matching symbolic avalues"];
@@ -615,6 +624,17 @@ module MakeMatcher (M : PrimMatcher) : Matcher = struct
             let proj_ty = M.match_rtys ctx0 ctx1 proj0.proj_ty proj1.proj_ty in
             M.match_aproj_loans match_rec ctx0 ctx1 v0.ty pm0 ploans0 v1.ty pm1
               ploans1 ty proj_ty
+        | ( AEndedProjLoans { proj; consumed = []; borrows = [] },
+            AEndedProjLoans { consumed = []; borrows = []; _ } )
+          when pm0 = pm1 ->
+            (* Ended loan projectors which consumed nothing: they don't hold
+               anything anymore. As above, we get there when checking that
+               contexts are equivalent. *)
+            {
+              value =
+                ASymbolic (pm0, AEndedProjLoans { proj; consumed = []; borrows = [] });
+              ty;
+            }
         | _ -> [%craise_recover] M.recover M.span "Unreachable"
       end
     | _ ->

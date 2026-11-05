@@ -281,6 +281,32 @@ pub fn call_then_maybe_call(v: &mut Vec<u32>, b: bool) -> Result<u32, u32> {
     Ok(m)
 }
 
+/// A match on a value returned by a call, which holds a borrow in one branch
+/// only.
+pub fn get_or_zero(v: &[u32], i: usize) -> u32 {
+    match v.get(i) {
+        Some(x) => *x,
+        None => 0,
+    }
+}
+
+/// An early return from a loop over a slice iterator.
+pub fn contains_zero(a: &[u32]) -> bool {
+    for &x in a {
+        if x == 0 {
+            return true;
+        }
+    }
+    false
+}
+
+/// A [?] on a value holding a shared borrow, followed by a join.
+pub fn first_plus(v: &[u32], c: bool) -> Option<u32> {
+    let x = *v.get(0)?;
+    let r = if c { 1 } else { 2 };
+    Some(x + r)
+}
+
 #[verify::test]
 pub fn test_let_else_chain() {
     let mut acc = 0;
@@ -403,4 +429,17 @@ pub fn test_call_then_maybe_call() {
     assert!(v.len() == 2);
     assert!(matches!(call_then_maybe_call(&mut v, false), Ok(1)));
     assert!(v.len() == 3);
+}
+
+#[verify::test]
+pub fn test_get_or_zero() {
+    let v = [1, 2, 3];
+    assert!(get_or_zero(&v, 1) == 2);
+    assert!(get_or_zero(&v, 5) == 0);
+}
+
+#[verify::test]
+pub fn test_contains_zero() {
+    assert!(contains_zero(&[3, 0, 1]));
+    assert!(!contains_zero(&[3, 1]));
 }

@@ -18,7 +18,30 @@ set_option maxHeartbeats 1000000
 /- You can set the `maxRecDepth` value with the `-max-recdepth` CLI option -/
 set_option maxRecDepth 2048
 
+/- You can remove the following line by using the CLI option `-all-computable`: -/
+noncomputable section
+
 namespace forward_scopes
+
+/-- [core::option::{impl core::ops::try_trait::Try for core::option::Option<T>}::branch]:
+    Source: '/rustc/library/core/src/option.rs', lines 2875:4-2875:64
+    Name pattern: [core::option::{core::ops::try_trait::Try<core::option::Option<@T>>}::branch]
+    Visibility: public -/
+@[rust_fun
+  "core::option::{core::ops::try_trait::Try<core::option::Option<@T>>}::branch"]
+axiom core.option.Option.Insts.CoreOpsTry_traitTry.branch
+  {T : Type _} :
+  Option T → Result (core.ops.control_flow.ControlFlow (Option Never) T)
+
+/-- [core::option::{impl core::ops::try_trait::FromResidual<core::option::Option<!>> for core::option::Option<T>}::from_residual]:
+    Source: '/rustc/library/core/src/option.rs', lines 2889:4-2889:49
+    Name pattern: [core::option::{core::ops::try_trait::FromResidual<core::option::Option<@T>, core::option::Option<!>>}::from_residual]
+    Visibility: public -/
+@[rust_fun
+  "core::option::{core::ops::try_trait::FromResidual<core::option::Option<@T>, core::option::Option<!>>}::from_residual"]
+axiom
+  core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
+  (T : Type _) : Option Never → Result (Option T)
 
 /-- [forward_scopes::Class]
     Source: 'tests/src/forward-scopes.rs', lines 9:0-13:1
@@ -690,8 +713,81 @@ def call_then_maybe_call
   | Sum.inl p => ok p
   | Sum.inr p => ok p
 
+/-- [forward_scopes::get_or_zero]:
+    Source: 'tests/src/forward-scopes.rs', lines 286:0-291:1
+    Visibility: public -/
+def get_or_zero (v : Slice Std.U32) (i : Std.Usize) : Result Std.U32 := do
+  let o ←
+    core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice Std.U32) v i
+  match o with
+  | none => ok 0#u32
+  | some x => ok x
+
+/-- [forward_scopes::contains_zero]: loop body 0:
+    Source: 'tests/src/forward-scopes.rs', lines 295:14-301:1
+    Visibility: public -/
+@[rust_loop_body]
+def contains_zero_loop.body
+  (a : Slice Std.U32) (iter : core.slice.iter.Iter Std.U32) :
+  Result (ControlFlow ((Slice Std.U32) × (core.slice.iter.Iter Std.U32)) Bool)
+  := do
+  let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
+  let s : _root_.Sum Std.U32 (_root_.Sum ((Slice Std.U32) ×
+    (core.slice.iter.Iter Std.U32)) (Bool × (Slice Std.U32))) ←
+    match o with
+    | none => ok (Sum.inr (Sum.inr (false, a)))
+    | some x =>
+      if x = 0#u32
+      then ok (Sum.inl x)
+      else ok (Sum.inr (Sum.inl (a, iter1)))
+  match s with
+  | Sum.inl _ => ok (done true)
+  | Sum.inr s1 =>
+    match s1 with
+    | Sum.inl p => let (s2, i) := p
+                   ok (cont (s2, i))
+    | Sum.inr p => let (b, _) := p
+                   ok (done b)
+
+/-- [forward_scopes::contains_zero]: loop 0:
+    Source: 'tests/src/forward-scopes.rs', lines 295:14-301:1
+    Visibility: public -/
+@[rust_loop]
+def contains_zero_loop
+  (a : Slice Std.U32) (iter : core.slice.iter.Iter Std.U32) : Result Bool := do
+  loop
+    (fun (a1, iter1) => contains_zero_loop.body a1 iter1)
+    (a, iter)
+
+/-- [forward_scopes::contains_zero]:
+    Source: 'tests/src/forward-scopes.rs', lines 294:0-301:1
+    Visibility: public -/
+def contains_zero (a : Slice Std.U32) : Result Bool := do
+  let iter ←
+    SharedSlice.Insts.CoreIterTraitsCollectIntoIteratorSharedIter.into_iter a
+  contains_zero_loop a iter
+
+/-- [forward_scopes::first_plus]:
+    Source: 'tests/src/forward-scopes.rs', lines 304:0-308:1
+    Visibility: public -/
+def first_plus (v : Slice Std.U32) (c : Bool) : Result (Option Std.U32) := do
+  let o ←
+    core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice Std.U32) v
+      0#usize
+  let cf ← core.option.Option.Insts.CoreOpsTry_traitTry.branch o
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue val =>
+    let r ← if c
+              then ok 1#u32
+              else ok 2#u32
+    let i ← val + r
+    ok (some i)
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
+      Std.U32 residual
+
 /-- [forward_scopes::test_let_else_chain]:
-    Source: 'tests/src/forward-scopes.rs', lines 285:0-296:1
+    Source: 'tests/src/forward-scopes.rs', lines 311:0-322:1
     Visibility: public -/
 def test_let_else_chain : Result Unit := do
   let (r, i) ←
@@ -749,7 +845,7 @@ def test_let_else_chain : Result Unit := do
 #guard (test_let_else_chain).reducesTo ()
 
 /-- [forward_scopes::test_all_return]:
-    Source: 'tests/src/forward-scopes.rs', lines 299:0-304:1
+    Source: 'tests/src/forward-scopes.rs', lines 325:0-330:1
     Visibility: public -/
 def test_all_return : Result Unit := do
   let i ← all_return (Val.Neutral (Head.Const 5#u32 Class.Def) 0#u32)
@@ -765,7 +861,7 @@ def test_all_return : Result Unit := do
 #guard (test_all_return).reducesTo ()
 
 /-- [forward_scopes::test_skip_to_outer]:
-    Source: 'tests/src/forward-scopes.rs', lines 307:0-314:1
+    Source: 'tests/src/forward-scopes.rs', lines 333:0-340:1
     Visibility: public -/
 def test_skip_to_outer : Result Unit := do
   let (i, x) ← skip_to_outer (Val.Nat 4#u32) true 0#u32
@@ -781,7 +877,7 @@ def test_skip_to_outer : Result Unit := do
 #guard (test_skip_to_outer).reducesTo ()
 
 /-- [forward_scopes::test_scopes_in_loop]:
-    Source: 'tests/src/forward-scopes.rs', lines 317:0-327:1
+    Source: 'tests/src/forward-scopes.rs', lines 343:0-353:1
     Visibility: public -/
 def test_scopes_in_loop : Result Unit := do
   let s ←
@@ -799,7 +895,7 @@ def test_scopes_in_loop : Result Unit := do
 #guard (test_scopes_in_loop).reducesTo ()
 
 /-- [forward_scopes::test_real_loops]:
-    Source: 'tests/src/forward-scopes.rs', lines 330:0-332:1
+    Source: 'tests/src/forward-scopes.rs', lines 356:0-358:1
     Visibility: public -/
 def test_real_loops : Result Unit := do
   let i ← real_loops 5#u32
@@ -809,7 +905,7 @@ def test_real_loops : Result Unit := do
 #guard (test_real_loops).reducesTo ()
 
 /-- [forward_scopes::test_panic_or_return]:
-    Source: 'tests/src/forward-scopes.rs', lines 335:0-339:1
+    Source: 'tests/src/forward-scopes.rs', lines 361:0-365:1
     Visibility: public -/
 def test_panic_or_return : Result Unit := do
   let i ← panic_or_return (Val.Nat 10#u32) 3#u32
@@ -823,7 +919,7 @@ def test_panic_or_return : Result Unit := do
 #guard (test_panic_or_return).reducesTo ()
 
 /-- [forward_scopes::test_loop_in_scope]:
-    Source: 'tests/src/forward-scopes.rs', lines 342:0-346:1
+    Source: 'tests/src/forward-scopes.rs', lines 368:0-372:1
     Visibility: public -/
 def test_loop_in_scope : Result Unit := do
   let i ← loop_in_scope (Val.Nat 3#u32) 2#u32
@@ -837,7 +933,7 @@ def test_loop_in_scope : Result Unit := do
 #guard (test_loop_in_scope).reducesTo ()
 
 /-- [forward_scopes::test_live_borrow]:
-    Source: 'tests/src/forward-scopes.rs', lines 349:0-357:1
+    Source: 'tests/src/forward-scopes.rs', lines 375:0-383:1
     Visibility: public -/
 def test_live_borrow : Result Unit := do
   let a := Array.repeat 2#usize 0#u32
@@ -864,7 +960,7 @@ def test_live_borrow : Result Unit := do
 #guard (test_live_borrow).reducesTo ()
 
 /-- [forward_scopes::test_live_borrow_rev]:
-    Source: 'tests/src/forward-scopes.rs', lines 360:0-366:1
+    Source: 'tests/src/forward-scopes.rs', lines 386:0-392:1
     Visibility: public -/
 def test_live_borrow_rev : Result Unit := do
   let a := Array.repeat 2#usize 0#u32
@@ -883,7 +979,7 @@ def test_live_borrow_rev : Result Unit := do
 #guard (test_live_borrow_rev).reducesTo ()
 
 /-- [forward_scopes::test_shared_from_call]:
-    Source: 'tests/src/forward-scopes.rs', lines 369:0-376:1
+    Source: 'tests/src/forward-scopes.rs', lines 395:0-402:1
     Visibility: public -/
 def test_shared_from_call : Result Unit := do
   let (i, a) ←
@@ -904,7 +1000,7 @@ def test_shared_from_call : Result Unit := do
 #guard (test_shared_from_call).reducesTo ()
 
 /-- [forward_scopes::test_conditional_referent]:
-    Source: 'tests/src/forward-scopes.rs', lines 379:0-383:1
+    Source: 'tests/src/forward-scopes.rs', lines 405:0-409:1
     Visibility: public -/
 def test_conditional_referent : Result Unit := do
   let (i, a) ←
@@ -917,7 +1013,7 @@ def test_conditional_referent : Result Unit := do
 #guard (test_conditional_referent).reducesTo ()
 
 /-- [forward_scopes::test_loop_live_borrow]:
-    Source: 'tests/src/forward-scopes.rs', lines 386:0-397:1
+    Source: 'tests/src/forward-scopes.rs', lines 412:0-423:1
     Visibility: public -/
 def test_loop_live_borrow : Result Unit := do
   let a := Array.repeat 2#usize 0#u32
@@ -936,7 +1032,7 @@ def test_loop_live_borrow : Result Unit := do
 #guard (test_loop_live_borrow).reducesTo ()
 
 /-- [forward_scopes::test_call_then_maybe_call]:
-    Source: 'tests/src/forward-scopes.rs', lines 400:0-406:1
+    Source: 'tests/src/forward-scopes.rs', lines 426:0-432:1
     Visibility: public -/
 def test_call_then_maybe_call : Result Unit := do
   let (r, v) ← call_then_maybe_call (alloc.vec.Vec.new Std.U32) true
@@ -964,5 +1060,33 @@ def test_call_then_maybe_call : Result Unit := do
 
 /- Unit test for [forward_scopes::test_call_then_maybe_call] -/
 #guard (test_call_then_maybe_call).reducesTo ()
+
+/-- [forward_scopes::test_get_or_zero]:
+    Source: 'tests/src/forward-scopes.rs', lines 435:0-439:1
+    Visibility: public -/
+def test_get_or_zero : Result Unit := do
+  let s ← lift (Array.to_slice (Array.make 3#usize [ 1#u32, 2#u32, 3#u32 ]))
+  let i ← get_or_zero s 1#usize
+  massert (i = 2#u32)
+  let s1 ← lift (Array.to_slice (Array.make 3#usize [ 1#u32, 2#u32, 3#u32 ]))
+  let i1 ← get_or_zero s1 5#usize
+  massert (i1 = 0#u32)
+
+/- Unit test for [forward_scopes::test_get_or_zero] -/
+#guard (test_get_or_zero).reducesTo ()
+
+/-- [forward_scopes::test_contains_zero]:
+    Source: 'tests/src/forward-scopes.rs', lines 442:0-445:1
+    Visibility: public -/
+def test_contains_zero : Result Unit := do
+  let s ← lift (Array.to_slice (Array.make 3#usize [ 3#u32, 0#u32, 1#u32 ]))
+  let b ← contains_zero s
+  massert b
+  let s1 ← lift (Array.to_slice (Array.make 2#usize [ 3#u32, 1#u32 ]))
+  let b1 ← contains_zero s1
+  massert (¬ b1)
+
+/- Unit test for [forward_scopes::test_contains_zero] -/
+#guard (test_contains_zero).reducesTo ()
 
 end forward_scopes
