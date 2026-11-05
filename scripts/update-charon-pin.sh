@@ -16,5 +16,5 @@ else
 fi
 
 # Keep the commit revision in `./charon-pin` as well so that non-nix users can know which commit to use.
-echo '# This is the commit from https://github.com/AeneasVerif/charon that should be used with this version of aeneas.' > ./charon-pin
+echo '# This is the commit from https://github.com/zksecurity/charon-pp that should be used with this version of aeneas.' > ./charon-pin
 jq -r .nodes.charon.locked.rev flake.lock >> ./charon-pin
