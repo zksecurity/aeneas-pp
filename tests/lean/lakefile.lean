@@ -24,6 +24,7 @@ package «tests» {}
 @[default_target] lean_lib BuiltinAuto
 @[default_target] lean_lib CallBorrowJoins
 @[default_target] lean_lib CastSigned
+@[default_target] lean_lib CharCasts
 @[default_target] lean_lib ChunksExact
 @[default_target] lean_lib ClosureRecursion
 @[default_target] lean_lib ClosureRegionRequirements

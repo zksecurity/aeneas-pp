@@ -26,6 +26,10 @@ let extract_str (_span : Meta.span) (fmt : F.formatter) ~(inside : bool)
   extract_pure_string fmt s;
   if inside then F.pp_print_string fmt ")"
 
+(** Printable ASCII characters which can be written between single quotes *)
+let is_printable_char (c : char) : bool =
+  c >= ' ' && c <= '~' && c <> '\'' && c <> '\\'
+
 (** Format a constant value.
 
     Inputs:
@@ -78,6 +82,15 @@ let extract_literal (span : Meta.span) (fmt : F.formatter) ~(is_pattern : bool)
         | Coq | FStar | Lean -> if b then "true" else "false"
       in
       F.pp_print_string fmt b
+  | VChar c
+    when backend () = Lean
+         && not (Uchar.is_char c && is_printable_char (Uchar.to_char c)) ->
+      (* Characters outside printable ASCII are given by their code point *)
+      if inside then F.pp_print_string fmt "(";
+      F.pp_print_string fmt "Char.ofNat";
+      F.pp_print_space fmt ();
+      F.pp_print_string fmt (string_of_int (Uchar.to_int c));
+      if inside then F.pp_print_string fmt ")"
   | VChar c when Uchar.is_char c -> (
       let c = Uchar.to_char c in
       match backend () with
