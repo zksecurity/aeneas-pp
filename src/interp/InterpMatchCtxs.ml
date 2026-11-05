@@ -2211,6 +2211,48 @@ struct
       ty;
     }
 
+  (** Match the projectors nested in projectors (their consumed values, given
+      back borrows, etc.): we check that they have the same structure. The
+      meta-values are irrelevant: we keep the left ones. *)
+  let rec match_nested_aprojs ctx0 ctx1 (l0 : (mconsumed_symb * aproj) list)
+      (l1 : (mconsumed_symb * aproj) list) : (mconsumed_symb * aproj) list =
+    if List.length l0 <> List.length l1 then
+      raise (Distinct "match_nested_aprojs: not the same length");
+    List.map
+      (fun ((m, p0), (_, p1)) -> (m, match_nested_aproj ctx0 ctx1 p0 p1))
+      (List.combine l0 l1)
+
+  and match_nested_aproj ctx0 ctx1 (p0 : aproj) (p1 : aproj) : aproj =
+    let match_proj (p0 : symbolic_proj) (p1 : symbolic_proj) : symbolic_proj =
+      {
+        sv_id = match_symbolic_value_ids p0.sv_id p1.sv_id;
+        proj_ty = match_rtys ctx0 ctx1 p0.proj_ty p1.proj_ty;
+      }
+    in
+    let nested = match_nested_aprojs ctx0 ctx1 in
+    match (p0, p1) with
+    | AProjLoans l0, AProjLoans l1 ->
+        AProjLoans
+          {
+            proj = match_proj l0.proj l1.proj;
+            consumed = nested l0.consumed l1.consumed;
+            borrows = nested l0.borrows l1.borrows;
+          }
+    | AProjBorrows b0, AProjBorrows b1 ->
+        AProjBorrows
+          { proj = match_proj b0.proj b1.proj; loans = nested b0.loans b1.loans }
+    | AEndedProjLoans l0, AEndedProjLoans l1 ->
+        AEndedProjLoans
+          {
+            l0 with
+            consumed = nested l0.consumed l1.consumed;
+            borrows = nested l0.borrows l1.borrows;
+          }
+    | AEndedProjBorrows b0, AEndedProjBorrows b1 ->
+        AEndedProjBorrows { b0 with loans = nested b0.loans b1.loans }
+    | AEmpty, AEmpty -> AEmpty
+    | _ -> raise (Distinct "match_nested_aproj: distinct projectors")
+
   let match_aproj_borrows (_match_values : tvalue_matcher) (ctx0 : eval_ctx)
       (ctx1 : eval_ctx) _ty0 pm0 (proj0 : aproj_borrows) _ty1 pm1
       (proj1 : aproj_borrows) ty proj_ty : tavalue =
@@ -2222,11 +2264,11 @@ struct
     [%sanity_check_recover] S.recover span (pm0 = PNone && pm1 = PNone);
     let { proj = proj0; loans = loans0 } : aproj_borrows = proj0 in
     let { proj = proj1; loans = loans1 } : aproj_borrows = proj1 in
-    [%sanity_check_recover] S.recover span (loans0 = [] && loans1 = []);
     (* Match the ids of the symbolic values *)
     let sv_id = match_symbolic_value_ids proj0.sv_id proj1.sv_id in
     let proj : symbolic_proj = { sv_id; proj_ty } in
-    { value = ASymbolic (PNone, AProjBorrows { proj; loans = [] }); ty }
+    let loans = match_nested_aprojs ctx0 ctx1 loans0 loans1 in
+    { value = ASymbolic (PNone, AProjBorrows { proj; loans }); ty }
 
   let match_aproj_loans (_match_values : tvalue_matcher) (ctx0 : eval_ctx)
       (ctx1 : eval_ctx) _ty0 pm0 (proj0 : aproj_loans) _ty1 pm1
@@ -2245,12 +2287,12 @@ struct
         =
       proj1
     in
-    [%sanity_check_recover] S.recover span (consumed0 = [] && consumed1 = []);
-    [%sanity_check_recover] S.recover span (borrows0 = [] && borrows1 = []);
     (* Match the ids of the symbolic values *)
     let sv_id = match_symbolic_value_ids proj0.sv_id proj1.sv_id in
     let proj : symbolic_proj = { sv_id; proj_ty } in
-    let proj = AProjLoans { proj; consumed = []; borrows = [] } in
+    let consumed = match_nested_aprojs ctx0 ctx1 consumed0 consumed1 in
+    let borrows = match_nested_aprojs ctx0 ctx1 borrows0 borrows1 in
+    let proj = AProjLoans { proj; consumed; borrows } in
     { value = ASymbolic (PNone, proj); ty }
 
   let match_aproj_shared_borrows (ctx0 : eval_ctx) (ctx1 : eval_ctx) _ty0

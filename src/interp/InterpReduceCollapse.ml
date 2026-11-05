@@ -59,7 +59,7 @@ let eliminate_shared_loans (span : Meta.span) (ctx : eval_ctx) : eval_ctx =
 
 (** Compute the set of shared loans and shared loan projectors without markers
     appearing in the context *)
-let get_non_marked_shared_loans span (ctx : eval_ctx) :
+let get_non_marked_shared_loans (ctx : eval_ctx) :
     BorrowId.Set.t * NormSymbProj.Set.t =
   let non_marked_loans = ref BorrowId.Set.empty in
   let non_marked_projs = ref NormSymbProj.Set.empty in
@@ -78,10 +78,9 @@ let get_non_marked_shared_loans span (ctx : eval_ctx) :
 
       method! visit_ASymbolic env pm aproj =
         match aproj with
-        | AProjLoans { proj; consumed; borrows } ->
-            (* For now we don't support those cases *)
-            [%sanity_check] span (consumed = []);
-            [%sanity_check] span (borrows = []);
+        | AProjLoans { proj; _ } ->
+            (* The projector observes the loans of [proj] whatever it consumed
+               or gave back at other levels *)
             if pm = PNone then
               let pred (r : region) =
                 match r with
@@ -145,7 +144,7 @@ let eliminate_shared_borrow_markers (span : Meta.span)
     (ctx : eval_ctx) : eval_ctx =
   (* Compute the set of loans without markers *)
   let non_marked_loans, non_marked_loan_projs =
-    get_non_marked_shared_loans span ctx
+    get_non_marked_shared_loans ctx
   in
   [%ldebug
     "- non_marked_loans: "
@@ -1458,7 +1457,7 @@ let add_shared_borrows (span : Meta.span)
     (shared_borrows_seq :
       (abs_id * int * proj_marker * borrow_or_proj * ty) list) (ctx : eval_ctx)
     : eval_ctx =
-  let loans, loan_projs = get_non_marked_shared_loans span ctx in
+  let loans, loan_projs = get_non_marked_shared_loans ctx in
   let ctx = ref ctx in
   let update
       ((abs_id, i, pm, borrow_or_proj, ty) :
