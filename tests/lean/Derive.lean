@@ -201,11 +201,13 @@ def ScalarEnum.Insts.CoreFmtDebug.fmt
   (self : ScalarEnum) (f : core.fmt.Formatter) :
   Result ((core.result.Result Unit core.fmt.Error) × core.fmt.Formatter)
   := do
-  match self with
-  | ScalarEnum.Variant0 => core.fmt.Formatter.write_str f (toStr "Variant0")
-  | ScalarEnum.Variant1 => core.fmt.Formatter.write_str f (toStr "Variant1")
-  | ScalarEnum.Variant2 => core.fmt.Formatter.write_str f (toStr "Variant2")
-  | ScalarEnum.Variant3 => core.fmt.Formatter.write_str f (toStr "Variant3")
+  let s ←
+    match self with
+    | ScalarEnum.Variant0 => ok (toStr "Variant0")
+    | ScalarEnum.Variant1 => ok (toStr "Variant1")
+    | ScalarEnum.Variant2 => ok (toStr "Variant2")
+    | ScalarEnum.Variant3 => ok (toStr "Variant3")
+  core.fmt.Formatter.write_str f s
 
 /-- Trait implementation: [derive::{impl core::fmt::Debug for derive::ScalarEnum}]
     Source: 'tests/src/derive.rs', lines 8:37-8:42 -/
