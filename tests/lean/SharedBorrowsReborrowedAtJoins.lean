@@ -18,7 +18,28 @@ set_option maxHeartbeats 1000000
 /- You can set the `maxRecDepth` value with the `-max-recdepth` CLI option -/
 set_option maxRecDepth 2048
 
+/- You can remove the following line by using the CLI option `-all-computable`: -/
+noncomputable section
+
 namespace shared_borrows_reborrowed_at_joins
+
+/-- [core::slice::iter::{impl core::iter::traits::iterator::Iterator<&'a T> for core::slice::iter::Iter<'a, T>}::any]:
+    Source: '/rustc/library/core/src/slice/iter/macros.rs', lines 321:12-324:45; this code is generated from a macro invocation at: '/rustc/library/core/src/slice/iter.rs', lines 140:0-148:2
+    Name pattern: [core::slice::iter::{core::iter::traits::iterator::Iterator<core::slice::iter::Iter<'a, @T>, &'a @T>}::any]
+    Visibility: public -/
+@[rust_fun
+  "core::slice::iter::{core::iter::traits::iterator::Iterator<core::slice::iter::Iter<'a, @T>, &'a @T>}::any"]
+axiom core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.any
+  {T : Type _} {F : Type _} (opsfunctionFnMutFTupleSharedATBoolInst :
+  core.ops.function.FnMut F T Bool) :
+  core.slice.iter.Iter T → F → Result (Bool × (core.slice.iter.Iter T))
+
+/-- [core::str::{str}::len]:
+    Source: '/rustc/library/core/src/str/mod.rs', lines 155:4-155:36
+    Name pattern: [core::str::{str}::len]
+    Visibility: public -/
+@[rust_fun "core::str::{str}::len"]
+axiom core.str.Str.len : Str → Result Std.Usize
 
 /-- [shared_borrows_reborrowed_at_joins::P]
     Source: 'tests/src/shared-borrows-reborrowed-at-joins.rs', lines 9:0-12:1
@@ -92,8 +113,71 @@ def first_or
        id_ref i
   else ok d
 
+/-- [shared_borrows_reborrowed_at_joins::exactly::{closure}]
+    Source: 'tests/src/shared-borrows-reborrowed-at-joins.rs', lines 54:51-54:67 -/
+@[reducible]
+def exactly.closure := Unit
+
+/-- [shared_borrows_reborrowed_at_joins::exactly::{impl core::ops::function::FnMut<(&'_0 &'_1 str,), bool> for shared_borrows_reborrowed_at_joins::exactly::{closure}<'_0, '_1>}::call_mut]:
+    Source: 'tests/src/shared-borrows-reborrowed-at-joins.rs', lines 54:51-54:67 -/
+def
+  exactly.closure.Insts.CoreOpsFunctionFnMutTupleShared0Shared1StrBool.call_mut
+  (c : exactly.closure) (tupled_args : Str) :
+  Result (Bool × exactly.closure)
+  := do
+  let i ← core.str.Str.len tupled_args
+  ok (i = 0#usize, ())
+
+/-- [shared_borrows_reborrowed_at_joins::exactly::{impl core::ops::function::FnOnce<(&'_0 &'_1 str,), bool> for shared_borrows_reborrowed_at_joins::exactly::{closure}<'_0, '_1>}::call_once]:
+    Source: 'tests/src/shared-borrows-reborrowed-at-joins.rs', lines 54:51-54:67 -/
+def
+  exactly.closure.Insts.CoreOpsFunctionFnOnceTupleShared0Shared1StrBool.call_once
+  (c : exactly.closure) (s : Str) : Result Bool := do
+  let (b, _) ←
+    exactly.closure.Insts.CoreOpsFunctionFnMutTupleShared0Shared1StrBool.call_mut
+      () s
+  ok b
+
+/-- Trait implementation: [shared_borrows_reborrowed_at_joins::exactly::{impl core::ops::function::FnOnce<(&'_0 &'_1 str,), bool> for shared_borrows_reborrowed_at_joins::exactly::{closure}<'_0, '_1>}]
+    Source: 'tests/src/shared-borrows-reborrowed-at-joins.rs', lines 54:51-54:67 -/
+@[reducible]
+def exactly.closure.Insts.CoreOpsFunctionFnOnceTupleShared0Shared1StrBool :
+  core.ops.function.FnOnce exactly.closure Str Bool := {
+  call_once :=
+    exactly.closure.Insts.CoreOpsFunctionFnOnceTupleShared0Shared1StrBool.call_once
+}
+
+/-- Trait implementation: [shared_borrows_reborrowed_at_joins::exactly::{impl core::ops::function::FnMut<(&'_0 &'_1 str,), bool> for shared_borrows_reborrowed_at_joins::exactly::{closure}<'_0, '_1>}]
+    Source: 'tests/src/shared-borrows-reborrowed-at-joins.rs', lines 54:51-54:67 -/
+@[reducible]
+def exactly.closure.Insts.CoreOpsFunctionFnMutTupleShared0Shared1StrBool :
+  core.ops.function.FnMut exactly.closure Str Bool := {
+  FnOnceInst :=
+    exactly.closure.Insts.CoreOpsFunctionFnOnceTupleShared0Shared1StrBool
+  call_mut :=
+    exactly.closure.Insts.CoreOpsFunctionFnMutTupleShared0Shared1StrBool.call_mut
+}
+
+/-- [shared_borrows_reborrowed_at_joins::exactly]:
+    Source: 'tests/src/shared-borrows-reborrowed-at-joins.rs', lines 53:0-58:1
+    Visibility: public -/
+def exactly (n : Std.U32) (keys : Slice Str) : Result (Option Std.U32) := do
+  let i ← lift (UScalar.cast .Usize n)
+  let i1 := Slice.len keys
+  if i != i1
+  then ok none
+  else
+    let i2 ← core.slice.Slice.iter keys
+    let (b, _) ←
+      core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.any
+        exactly.closure.Insts.CoreOpsFunctionFnMutTupleShared0Shared1StrBool i2
+        ()
+    if b
+    then ok none
+    else ok (some n)
+
 /-- [shared_borrows_reborrowed_at_joins::test_pick]:
-    Source: 'tests/src/shared-borrows-reborrowed-at-joins.rs', lines 53:0-59:1
+    Source: 'tests/src/shared-borrows-reborrowed-at-joins.rs', lines 61:0-67:1
     Visibility: public -/
 def test_pick : Result Unit := do
   let i ← pick { r := 3#u32, n := 0#u32 } true
@@ -105,7 +189,7 @@ def test_pick : Result Unit := do
 #guard (test_pick).reducesTo ()
 
 /-- [shared_borrows_reborrowed_at_joins::test_loop_local]:
-    Source: 'tests/src/shared-borrows-reborrowed-at-joins.rs', lines 62:0-65:1
+    Source: 'tests/src/shared-borrows-reborrowed-at-joins.rs', lines 70:0-73:1
     Visibility: public -/
 def test_loop_local : Result Unit := do
   let i ← loop_local 0#u32
@@ -117,7 +201,7 @@ def test_loop_local : Result Unit := do
 #guard (test_loop_local).reducesTo ()
 
 /-- [shared_borrows_reborrowed_at_joins::test_first_or]:
-    Source: 'tests/src/shared-borrows-reborrowed-at-joins.rs', lines 68:0-73:1
+    Source: 'tests/src/shared-borrows-reborrowed-at-joins.rs', lines 76:0-81:1
     Visibility: public -/
 def test_first_or : Result Unit := do
   let s ← lift (Array.to_slice (Array.make 2#usize [ 3#u32, 4#u32 ]))

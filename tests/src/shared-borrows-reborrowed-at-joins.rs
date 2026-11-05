@@ -49,6 +49,14 @@ pub fn first_or<'a, 'b>(xs: &'a [&'b u32], d: &'b u32, b: bool) -> &'b u32 {
     r
 }
 
+/// A guard on a slice of string slices.
+pub fn exactly(n: u32, keys: &[&str]) -> Option<u32> {
+    if n as usize != keys.len() || keys.iter().any(|k| k.len() == 0) {
+        return None;
+    }
+    Some(n)
+}
+
 #[verify::test]
 pub fn test_pick() {
     let (x, y) = (3, 4);
