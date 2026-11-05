@@ -204,6 +204,11 @@ type names_map = {
           debugging messages: if there is a name clash, it is useful to know
           precisely which identifiers are mapped to the same name... *)
   names_set : StringSet.t;
+  roots : StringSet.t;
+      (** The first components of the qualified names of [names_set]: in Lean,
+          a variable named like one of them shadows the qualified names (if [x]
+          is a variable, [x.Kind.A] is a projection of [x]), so variables must
+          avoid them. *)
 }
 
 let empty_names_map : names_map =
@@ -211,6 +216,7 @@ let empty_names_map : names_map =
     id_to_name = IdMap.empty;
     name_to_id = StringMap.empty;
     names_set = StringSet.empty;
+    roots = StringSet.empty;
   }
 
 (** Small helper to update an LLBC name by using a rename attribute *)
@@ -287,7 +293,12 @@ let names_map_add_unchecked ((id, span) : id * Meta.span option) (name : string)
   let id_to_name = IdMap.add id name nm.id_to_name in
   let name_to_id = StringMap.add name (id, span) nm.name_to_id in
   let names_set = StringSet.add name nm.names_set in
-  { id_to_name; name_to_id; names_set }
+  let roots =
+    match String.index_opt name '.' with
+    | Some i -> StringSet.add (String.sub name 0 i) nm.roots
+    | None -> nm.roots
+  in
+  { id_to_name; name_to_id; names_set; roots }
 
 let names_map_add (id_to_string : id -> string) ((id, span) : id * span option)
     (name : string) (nm : names_map) : names_map =
@@ -1330,7 +1341,9 @@ let initialize_names_maps () : names_maps =
    * Also note that we don't need this mapping for keywords: we insert keywords only
    * to check collisions. *)
   let id_to_name = IdMap.empty in
-  let names_map = { id_to_name; name_to_id; names_set } in
+  let names_map =
+    { id_to_name; name_to_id; names_set; roots = StringSet.empty }
+  in
   let unsafe_names_map = empty_unsafe_names_map in
   let strict_names_map = empty_names_map in
   (* For debugging - we are creating bindings for builtin types and functions, so
@@ -2159,6 +2172,8 @@ let basename_to_unique (ctx : extraction_ctx) (name : string) =
        the backend allows such collisions *)
     StringSet.mem s ctx.names_maps.names_map.names_set
     || StringSet.mem s ctx.names_maps.strict_names_map.names_set
+    || StringSet.mem s ctx.names_maps.names_map.roots
+    || StringSet.mem s ctx.names_maps.strict_names_map.roots
   in
   basename_to_unique_aux collision name_append_index name
 
@@ -2286,6 +2301,22 @@ let ctx_reserve_names (names : string list) (ctx : extraction_ctx) :
   in
   let names_map = { names_map with names_set } in
   { ctx with names_maps = { ctx.names_maps with names_map } }
+
+(** The auxiliary definitions Lean generates for an inductive [T] (named
+    [T.rec], etc.) *)
+let lean_inductive_auxiliary_names : string list =
+  [
+    "rec";
+    "recOn";
+    "casesOn";
+    "below";
+    "brecOn";
+    "noConfusion";
+    "noConfusionType";
+    "ctorIdx";
+    "ctorElim";
+    "ctorElimType";
+  ]
 
 let ctx_add_adt_projector_names (decl_name : string) (field_names : string list)
     (ctx : extraction_ctx) : extraction_ctx =

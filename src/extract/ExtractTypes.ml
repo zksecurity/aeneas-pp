@@ -800,6 +800,14 @@ let extract_type_decl_register_names (ctx : extraction_ctx) (def : type_decl) :
     | Some info -> info.extract_name
   in
   let ctx = ctx_add span (TypeId (TAdtId def.def_id)) def_name ctx in
+  (* In the case of Lean, the methods must not collide with the auxiliary
+     definitions generated for inductives (we treat them like projectors) *)
+  let ctx =
+    match (backend (), def.kind) with
+    | Lean, (Struct _ | Enum _) ->
+        ctx_add_adt_projector_names def_name lean_inductive_auxiliary_names ctx
+    | _ -> ctx
+  in
   (* Compute and register:
    * - the variant names, if this is an enumeration
    * - the field names, if this is a structure
