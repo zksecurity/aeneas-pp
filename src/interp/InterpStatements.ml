@@ -1147,6 +1147,22 @@ and eval_switch_with_join (config : config) (span : Meta.span)
      [always_bind]: introduce the let-binding even if there is a single
      context to join (the joins of forward scopes are the targets of the
      branches of nested let-bindings which jump out of them). *)
+  let ctx_resl =
+    let ctxl =
+      InterpJoin.drop_locals_uninit_in_some_ctx
+        (List.filter_map
+           (fun (ctx, res) -> if res = Unit then Some ctx else None)
+           ctx_resl)
+    in
+    (* Put the updated contexts back, in the order of the branches *)
+    snd
+      (List.fold_left_map
+         (fun ctxl (ctx, res) ->
+           match (res, ctxl) with
+           | Unit, ctx :: ctxl -> (ctxl, (ctx, res))
+           | _ -> (ctxl, (ctx, res)))
+         ctxl ctx_resl)
+  in
   let ctxl =
     List.filter_map
       (fun (ctx, res) -> if res = Unit then Some ctx else None)

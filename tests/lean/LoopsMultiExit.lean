@@ -741,8 +741,9 @@ def overlapping_outputs_loop0.body
                      ok (Sum.inr (s2, i, i1, i2))
       | Sum.inr s2 =>
         match s2 with
-        | Sum.inl t => let (_, _, _, i, i1, _, _, _) := t
-                       ok (Sum.inl (i, i1))
+        | Sum.inl t =>
+          let (_, _, _, t1, j2, _, _, _) := t
+          ok (Sum.inl (t1, j2))
         | Sum.inr t =>
           let (a1, k1, total1, j2, i, _) := t
           let i1 ← lift (UScalar.cast .U32 i)

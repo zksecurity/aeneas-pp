@@ -1048,6 +1048,58 @@ let end_observing_abs (span : Meta.span) ~(recoverable : bool)
       [%craise_recover] recoverable span
         "Could not end the abstraction of an observation"
 
+(** A local which isn't initialized ([⊥]) in one of the contexts reaching a
+    join can't be read after the join: Rust only reads the locals which are
+    initialized on every path. If it has no drop glue either (it only contains
+    scalars and shared borrows), nothing uses its value after the join: in the
+    other contexts, we move its value to a dummy variable, so that the
+    abstractions which only its borrows keep alive can end before we join (see
+    {!InterpBorrows.simplify_dummy_values_useless_abs}). *)
+let drop_locals_uninit_in_some_ctx (ctxl : eval_ctx list) : eval_ctx list =
+  let rec drop_trivial (ty : ty) : bool =
+    match ty with
+    | TScalar _ | TRef (_, _, RShared) -> true
+    | TAdt { builtin = Some TTuple; generics; _ } ->
+        List.for_all drop_trivial generics.types
+    | _ -> false
+  in
+  let frame_locals (ctx : eval_ctx) : (real_var_binder * tvalue) list =
+    let rec collect env =
+      match env with
+      | [] | EFrame :: _ -> []
+      | EBinding (BVar var, v) :: env -> (var, v) :: collect env
+      | (EBinding (BDummy _, _) | EAbs _) :: env -> collect env
+    in
+    collect ctx.env
+  in
+  let uninit =
+    List.fold_left
+      (fun uninit ctx ->
+        List.fold_left
+          (fun uninit ((var : real_var_binder), (v : tvalue)) ->
+            if v.value = VBottom && drop_trivial v.ty then
+              Expressions.LocalId.Set.add var.index uninit
+            else uninit)
+          uninit (frame_locals ctx))
+      Expressions.LocalId.Set.empty ctxl
+  in
+  let drop (ctx : eval_ctx) : eval_ctx =
+    let dropped = ref [] in
+    let rec update env =
+      match env with
+      | [] -> []
+      | EFrame :: _ -> env
+      | EBinding (BVar var, v) :: env
+        when Expressions.LocalId.Set.mem var.index uninit && v.value <> VBottom ->
+          dropped := v :: !dropped;
+          EBinding (BVar var, { v with value = VBottom }) :: update env
+      | e :: env -> e :: update env
+    in
+    let ctx = { ctx with env = update ctx.env } in
+    ctx_push_fresh_dummy_vars ctx (List.rev !dropped)
+  in
+  if Expressions.LocalId.Set.is_empty uninit then ctxl else List.map drop ctxl
+
 let join_ctxs_list (config : config) (span : Meta.span)
     (fresh_abs_kind : abs_kind) ?(preprocess_first_ctx : bool = true)
     ~(recoverable : bool) ~(with_abs_conts : bool) (ctxl : eval_ctx list) :

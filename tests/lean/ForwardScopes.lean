@@ -732,13 +732,13 @@ def contains_zero_loop.body
   Result (ControlFlow ((Slice Std.U32) × (core.slice.iter.Iter Std.U32)) Bool)
   := do
   let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
-  let s : _root_.Sum Std.U32 (_root_.Sum ((Slice Std.U32) ×
-    (core.slice.iter.Iter Std.U32)) (Bool × (Slice Std.U32))) ←
+  let s : _root_.Sum Unit (_root_.Sum ((Slice Std.U32) × (core.slice.iter.Iter
+    Std.U32)) (Bool × (Slice Std.U32))) ←
     match o with
     | none => ok (Sum.inr (Sum.inr (false, a)))
     | some x =>
       if x = 0#u32
-      then ok (Sum.inl x)
+      then ok (Sum.inl ())
       else ok (Sum.inr (Sum.inl (a, iter1)))
   match s with
   | Sum.inl _ => ok (done true)

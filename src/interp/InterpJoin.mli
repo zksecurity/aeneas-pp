@@ -112,6 +112,11 @@ val join_ctxs :
   eval_ctx ->
   join_info_or_update
 
+(** In the contexts reaching a join, move to dummy variables the values of the
+    locals which are uninitialized in one of them (they can't be read after the
+    join). *)
+val drop_locals_uninit_in_some_ctx : eval_ctx list -> eval_ctx list
+
 (** Join a list of contexts, which must be non empty.
 
     As we may have to end loans in the environments before doing the join, we
