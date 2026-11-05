@@ -2011,6 +2011,40 @@ let lookup_shared_value (span : Meta.span) (env : env) (bid : BorrowId.id) :
 
 let ctx_lookup_shared_value span ctx = lookup_shared_value span ctx.env
 
+(** The meta environment of a meta-value [v] (see {!Values.menv}): the shared
+    loans which the shared, frozen and reserved borrows of [v] refer to,
+    transitively. Translating [v] only looks these loans up: storing them rather
+    than the whole environment keeps meta-values small (environments would
+    otherwise nest in the values of the environment). *)
+let meta_env_of_value (span : Meta.span) (env : env) (v : tvalue) : env =
+  let loans = ref [] in
+  let rec explore (v : tvalue) =
+    let visitor =
+      object
+        inherit [_] iter_tvalue as super
+
+        method! visit_borrow_content venv bc =
+          match bc with
+          | VSharedBorrow (bid, _)
+          | VFrozenMutBorrow (bid, _)
+          | VReservedMutBorrow (bid, _) ->
+              if not (List.mem_assoc bid !loans) then (
+                let sv = lookup_shared_value span env bid in
+                loans := (bid, sv) :: !loans;
+                explore sv)
+          | VMutBorrow _ -> super#visit_borrow_content venv bc
+      end
+    in
+    visitor#visit_tvalue () v
+  in
+  explore v;
+  List.mapi
+    (fun i (bid, (sv : tvalue)) ->
+      EBinding
+        ( BDummy (DummyVarId.of_int i),
+          { value = VLoan (VSharedLoan (bid, sv)); ty = sv.ty } ))
+    (List.rev !loans)
+
 (** A marked borrow id *)
 type marked_borrow_id = proj_marker * borrow_id [@@deriving show, ord]
 

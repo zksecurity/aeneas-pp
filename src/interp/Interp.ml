@@ -338,7 +338,7 @@ let initialize_symbolic_context_for_fun (ctx : decls_ctx)
     let avalues =
       List.map
         (fun (sv : symbolic_value) ->
-          mk_aproj_loans_value_from_symbolic_value ctx.env
+          mk_aproj_loans_value_from_symbolic_value
             ctx.type_ctx.type_infos abs.regions.owned sv sv.sv_ty)
         input_svs
     in
@@ -350,7 +350,7 @@ let initialize_symbolic_context_for_fun (ctx : decls_ctx)
       let inputs =
         List.map
           (fun (sv : symbolic_value) ->
-            mk_eproj_loans_value_from_symbolic_value ctx.env
+            mk_eproj_loans_value_from_symbolic_value
               ctx.type_ctx.type_infos abs.regions.owned sv sv.sv_ty)
           input_svs
       in

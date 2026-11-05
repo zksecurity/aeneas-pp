@@ -248,7 +248,7 @@ let push_value_to_static_shared_loan (span : Meta.span) (ctx : eval_ctx)
 
     Checks if the projector will actually project some regions. If not, returns
     {!Values.AIgnored} ([_]). *)
-let mk_aproj_loans_value_from_symbolic_value env
+let mk_aproj_loans_value_from_symbolic_value
     (type_infos : TypesAnalysis.type_infos) (proj_regions : region_set)
     (svalue : symbolic_value) (proj_ty : ty) : tavalue =
   if ty_has_regions_in_set type_infos proj_regions proj_ty then
@@ -266,11 +266,13 @@ let mk_aproj_loans_value_from_symbolic_value env
     av
   else
     {
-      value = AIgnored (Some (env, mk_tvalue_from_symbolic_value svalue));
+      (* A symbolic value refers to no shared loans: its meta environment is
+         empty (see {!InterpBorrowsCore.meta_env_of_value}) *)
+      value = AIgnored (Some ([], mk_tvalue_from_symbolic_value svalue));
       ty = svalue.sv_ty;
     }
 
-let mk_eproj_loans_value_from_symbolic_value env
+let mk_eproj_loans_value_from_symbolic_value
     (type_infos : TypesAnalysis.type_infos) (proj_regions : region_set)
     (svalue : symbolic_value) (proj_ty : ty) : tevalue =
   if ty_has_mut_borrow_for_region_in_set type_infos proj_regions proj_ty then
@@ -288,7 +290,7 @@ let mk_eproj_loans_value_from_symbolic_value env
     av
   else
     {
-      value = EIgnored (Some (env, mk_tvalue_from_symbolic_value svalue));
+      value = EIgnored (Some ([], mk_tvalue_from_symbolic_value svalue));
       ty = svalue.sv_ty;
     }
 
@@ -316,7 +318,7 @@ let push_static_loans_proj_for_symbolic_value (span : Meta.span)
        borrows with the 'static lifetime (only shared 'static borrows are \
        supported)";
     let loan_proj =
-      mk_aproj_loans_value_from_symbolic_value ctx.env type_infos static_regions
+      mk_aproj_loans_value_from_symbolic_value type_infos static_regions
         sv sv.sv_ty
     in
     (* The abstraction doesn't have any computational content *)

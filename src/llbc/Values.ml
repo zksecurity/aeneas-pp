@@ -1600,10 +1600,10 @@ and env_elem =
 
 and env = env_elem list
 
-(** Wrapper around {!env} that compares as always-equal in derived equality.
-    Used in meta-only positions (EValue, EIgnored) where the environment is
-    stored for pure translation but must not affect symbolic execution
-    convergence. *)
+(** The environment of a meta-value (EValue, EIgnored, AIgnored): the shared
+    loans its shared borrows refer to, which the pure translation looks up (see
+    {!InterpBorrowsCore.meta_env_of_value}). It compares as always-equal in
+    derived equality: it must not affect symbolic execution convergence. *)
 and menv = (env[@opaque] [@equal fun _ _ -> true])
 [@@deriving
   show,

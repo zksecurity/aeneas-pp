@@ -89,7 +89,7 @@ let convert_value_to_abstractions (span : Meta.span) (abs_kind : abs_kind)
   (* We only call this on values inside mutable borrows *)
   let rec to_inputs (rid : RegionId.id) (v : tvalue) : tavalue list * tevalue =
     match v.value with
-    | VLiteral _ -> ([], { value = EValue (ctx.env, v); ty = v.ty })
+    | VLiteral _ -> ([], { value = EValue (meta_env_of_value span ctx.env v, v); ty = v.ty })
     | VAdt { variant_id; fields } ->
         [%cassert] span (ty_no_regions v.ty)
           "Nested borrows are not supported yet";
@@ -108,7 +108,7 @@ let convert_value_to_abstractions (span : Meta.span) (abs_kind : abs_kind)
             [%cassert] span (ty_no_regions v.ty)
               "Nested borrows are not supported yet";
             let avl, _ = decompose_shared_value span PNone rid v in
-            let ev : tevalue = { value = EValue (ctx.env, v); ty = v.ty } in
+            let ev : tevalue = { value = EValue (meta_env_of_value span ctx.env v, v); ty = v.ty } in
             (avl, ev)
         | VMutLoan bid ->
             (* Push the avalue *)
@@ -137,7 +137,7 @@ let convert_value_to_abstractions (span : Meta.span) (abs_kind : abs_kind)
            can't be an input value and we're in a case of nested borrows) *)
         [%cassert] span (ty_no_regions v.ty)
           "Nested borrows are not supported yet";
-        ([], { value = EValue (ctx.env, v); ty = v.ty })
+        ([], { value = EValue (meta_env_of_value span ctx.env v, v); ty = v.ty })
   in
 
   (* Convert a value to abstractions *)
@@ -254,7 +254,7 @@ let convert_value_to_abstractions (span : Meta.span) (abs_kind : abs_kind)
                     { proj = { sv_id = sv.sv_id; proj_ty = ty }; loans = [] }
                 in
                 ( { value = ESymbolic (PNone, output); ty },
-                  { value = EValue (ctx.env, v); ty } )
+                  { value = EValue (meta_env_of_value span ctx.env v, v); ty } )
               else
                 ( mk_etuple ~borrow_proj:true [],
                   mk_etuple ~borrow_proj:false [] )
@@ -397,7 +397,7 @@ let convert_value_to_input_avalues (span : Meta.span) (ctx : eval_ctx)
   (* Convert a value to abstractions *)
   let rec to_input (v : tvalue) : tavalue list * tevalue =
     match v.value with
-    | VLiteral _ -> ([], mk_evalue ctx.env v.ty v)
+    | VLiteral _ -> ([], mk_evalue (meta_env_of_value span ctx.env v) v.ty v)
     | VBottom -> [%internal_error] span
     | VAdt { variant_id; fields } ->
         let avalues, outputs = List.split (List.map to_input fields) in
@@ -411,7 +411,7 @@ let convert_value_to_input_avalues (span : Meta.span) (ctx : eval_ctx)
         match lc with
         | VSharedLoan _ ->
             let avl, sv = decompose_shared_value span pm rid v in
-            (avl, mk_evalue ctx.env sv.ty sv)
+            (avl, mk_evalue (meta_env_of_value span ctx.env sv) sv.ty sv)
         | VMutLoan bid ->
             [%cassert] span (ty_no_regions v.ty)
               "Nested borrows are not supported yet";
@@ -443,7 +443,7 @@ let convert_value_to_input_avalues (span : Meta.span) (ctx : eval_ctx)
           "Nested borrows are not supported yet";
         [%cassert] span (not (tvalue_has_bottom ctx v)) "Unexpected";
 
-        if ty_no_regions sv.sv_ty then ([], mk_evalue ctx.env v.ty v)
+        if ty_no_regions sv.sv_ty then ([], mk_evalue (meta_env_of_value span ctx.env v) v.ty v)
         else
           (* We project all the remaining regions: substitute all the regions
            with the region we're using for the abstraction. *)
