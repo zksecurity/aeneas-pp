@@ -641,15 +641,18 @@ and avalue =
   | ALoan of aloan_content
   | ABorrow of aborrow_content
   | ASymbolic of proj_marker * aproj
-  | AIgnored of mvalue option
+  | AIgnored of (menv * mvalue) option
       (** A value which doesn't contain borrows, or which borrows we don't own
           and thus ignore.
 
           In the comments, we display it as [_].
 
-          Note that we store the ignored value as a meta value. Also note that
-          this value is not always present (when we introduce abstractions
-          because of a join for instance). *)
+          Note that we store the ignored value as a meta value, together with
+          the environment at the time we introduced it (translating its shared
+          borrows requires looking up the corresponding loans, which may have
+          ended when we translate it). Also note that this value is not always
+          present (when we introduce abstractions because of a join for
+          instance). *)
 
 and adt_avalue = {
   borrow_proj : bool;

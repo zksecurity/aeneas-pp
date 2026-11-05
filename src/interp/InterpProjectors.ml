@@ -113,11 +113,11 @@ let rec apply_proj_borrows (span : Meta.span) (check_symbolic_no_ended : bool)
   [%sanity_check] span (ty_is_rty ty && ety = v.ty);
   (* Project - if there are no regions from the abstraction in the type, return [_] *)
   if not (ty_has_regions_in_set ctx.type_ctx.type_infos regions ty) then
-    { value = AIgnored (Some v); ty }
+    { value = AIgnored (Some (ctx.env, v)); ty }
   else
     let value : avalue =
       match (v.value, ty) with
-      | VLiteral _, TScalar _ -> AIgnored (Some v)
+      | VLiteral _, TScalar _ -> AIgnored (Some (ctx.env, v))
       | VAdt adt, TAdt tref ->
           (* Retrieve the types of the fields *)
           let field_types =
@@ -430,7 +430,8 @@ let apply_proj_loans_on_symbolic_expansion (span : Meta.span)
   let (value, ty) : avalue * ty =
     match (see, proj_ty) with
     | SeLiteral lit, TScalar _ ->
-        ( AIgnored (Some { value = VLiteral lit; ty = original_sv_ty }),
+        ( AIgnored
+            (Some (ctx.env, { value = VLiteral lit; ty = original_sv_ty })),
           original_sv_ty )
     | SeAdt (variant_id, fields), TAdt tref ->
         (* Project over the field values *)
@@ -439,8 +440,8 @@ let apply_proj_loans_on_symbolic_expansion (span : Meta.span)
         in
         let fields =
           List.map2
-            (mk_aproj_loans_value_from_symbolic_value ctx.type_ctx.type_infos
-               regions)
+            (mk_aproj_loans_value_from_symbolic_value ctx.env
+               ctx.type_ctx.type_infos regions)
             fields field_types
         in
         (AAdt { borrow_proj = false; variant_id; fields }, original_sv_ty)
@@ -449,8 +450,8 @@ let apply_proj_loans_on_symbolic_expansion (span : Meta.span)
         [%sanity_check] span (spc.sv_ty = ref_ty);
         (* Apply the projector to the borrowed value *)
         let child_av =
-          mk_aproj_loans_value_from_symbolic_value ctx.type_ctx.type_infos
-            regions spc ref_ty
+          mk_aproj_loans_value_from_symbolic_value ctx.env
+            ctx.type_ctx.type_infos regions spc ref_ty
         in
         (* Check if the region is in the set of projected regions *)
         if region_in_set r regions then
@@ -471,8 +472,8 @@ let apply_proj_loans_on_symbolic_expansion (span : Meta.span)
         [%sanity_check] span (spc.sv_ty = ref_ty);
         (* Apply the projector to the borrowed value *)
         let child_av =
-          mk_aproj_loans_value_from_symbolic_value ctx.type_ctx.type_infos
-            regions spc ref_ty
+          mk_aproj_loans_value_from_symbolic_value ctx.env
+            ctx.type_ctx.type_infos regions spc ref_ty
         in
         (* Check if the region is in the set of projected regions *)
         if region_in_set r regions then

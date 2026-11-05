@@ -39,7 +39,8 @@ let mk_bottom (span : Meta.span) (ty : ty) : tvalue =
 
 let mk_ebottom (ty : ty) : tevalue = { value = EBottom; ty }
 
-let mk_aignored (span : Meta.span) (ty : ty) (v : tvalue option) : tavalue =
+let mk_aignored (span : Meta.span) (ty : ty) (v : (env * tvalue) option) :
+    tavalue =
   [%sanity_check] span (ty_is_rty ty);
   { value = AIgnored v; ty }
 

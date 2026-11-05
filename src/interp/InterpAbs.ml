@@ -1586,7 +1586,11 @@ let tevalue_get_max_level (v : tevalue) : int =
   !max_level
 
 let project_output_at_level span (level : int) (v : tevalue) : tevalue =
-  let rec project level (v : tevalue) : tevalue =
+  (* [in_borrow]: we are below a loan or a borrow. Above all loans and borrows,
+     an ignored value is held unchanged by the abstraction: it is the same at
+     every level, so we keep its meta-value (it is needed to rebuild the ADTs
+     given back at the deeper levels). *)
+  let rec project ~(in_borrow : bool) level (v : tevalue) : tevalue =
     let stop (v : tevalue) =
       if level = 0 then v else { v with value = EIgnored None }
     in
@@ -1594,9 +1598,10 @@ let project_output_at_level span (level : int) (v : tevalue) : tevalue =
     | ELet _ | EJoinMarkers _ | EBVar _ | EApp _ ->
         [%craise] span "Unimplemented"
     | EAdt { borrow_proj; variant_id; fields } ->
-        let fields = List.map (project level) fields in
+        let fields = List.map (project ~in_borrow level) fields in
         { v with value = EAdt { borrow_proj; variant_id; fields } }
     | ELoan lc -> (
+        let project = project ~in_borrow:true in
         match lc with
         | EMutLoan (pm, lid, child) ->
             let child = project level child in
@@ -1611,6 +1616,7 @@ let project_output_at_level span (level : int) (v : tevalue) : tevalue =
             if level = 0 then project level child
             else project (level - 1) given_back)
     | EBorrow bc -> (
+        let project = project ~in_borrow:true in
         match bc with
         | EMutBorrow (pm, bid, child) ->
             let child = project level child in
@@ -1643,10 +1649,11 @@ let project_output_at_level span (level : int) (v : tevalue) : tevalue =
             [%cassert] span (loans = []) "Unimplemented";
             stop v
         | EEmpty -> stop v)
+    | EIgnored (Some _) when not in_borrow -> v
     | EFVar _ | EValue _ | EIgnored _ -> stop v
     | EMutBorrowInput _ | EBottom -> [%craise] span "Unreachable"
   in
-  project level v
+  project ~in_borrow:false level v
 
 (** Small trick to handle nested borrows.
 
