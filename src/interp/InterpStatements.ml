@@ -1147,14 +1147,18 @@ and eval_switch_with_join (config : config) (span : Meta.span)
      [always_bind]: introduce the let-binding even if there is a single
      context to join (the joins of forward scopes are the targets of the
      branches of nested let-bindings which jump out of them). *)
+  (* The contexts which continue after the switch, with the expansions which
+     align them to synthesize at the end of their branches *)
+  let ctxl_wraps =
+    InterpJoin.align_fixed_abs_expansions span (env_get_abs_ids ctx0.env)
+      (InterpJoin.drop_locals_uninit_in_some_ctx
+         (List.filter_map
+            (fun (ctx, res) -> if res = Unit then Some ctx else None)
+            ctx_resl))
+  in
+  let ctxl = List.map fst ctxl_wraps in
+  (* Put the updated contexts back, in the order of the branches *)
   let ctx_resl =
-    let ctxl =
-      InterpJoin.drop_locals_uninit_in_some_ctx
-        (List.filter_map
-           (fun (ctx, res) -> if res = Unit then Some ctx else None)
-           ctx_resl)
-    in
-    (* Put the updated contexts back, in the order of the branches *)
     snd
       (List.fold_left_map
          (fun ctxl (ctx, res) ->
@@ -1162,11 +1166,6 @@ and eval_switch_with_join (config : config) (span : Meta.span)
            | Unit, ctx :: ctxl -> (ctxl, (ctx, res))
            | _ -> (ctxl, (ctx, res)))
          ctxl ctx_resl)
-  in
-  let ctxl =
-    List.filter_map
-      (fun (ctx, res) -> if res = Unit then Some ctx else None)
-      ctx_resl
   in
   if ctxl = [] || (List.length ctxl = 1 && not always_bind) then
     (* No need to join the contexts: continue with the current context, and
@@ -1275,7 +1274,7 @@ and eval_switch_with_join (config : config) (span : Meta.span)
 
        Note that we make the match (and the whole join) recoverable.
     *)
-    let match_ctx (ctx : eval_ctx) : SA.expr =
+    let match_ctx ((ctx, wrap) : eval_ctx * (SA.expr -> SA.expr)) : SA.expr =
       (* Match the contexts with the joined context to determine the output of the branch *)
       let (_, ctx, output_values, output_abs), cf =
         InterpJoin.match_ctx_with_target config span WithCont fixed_aids
@@ -1298,9 +1297,9 @@ and eval_switch_with_join (config : config) (span : Meta.span)
       let output_abs = reorder_output_abs output_abs output_abs_ids in
 
       (* Generate the let expression *)
-      cf (SA.Join (join_id, ctx, output_values, output_abs))
+      wrap (cf (SA.Join (join_id, ctx, output_values, output_abs)))
     in
-    let resl = List.map match_ctx ctxl in
+    let resl = List.map match_ctx ctxl_wraps in
     let exits = List.filter (fun (_, res) -> res <> Unit) ctx_resl in
 
     (* Generate the let expression. The continuation receives the expression

@@ -2607,6 +2607,17 @@ let rec simplify_dummy_values_useless_abs_aux (config : config)
                   | _ -> super#visit_VLoan false lc
                 end
               | _ -> super#visit_VLoan false lc
+
+            method! visit_VMutBorrow end_borrows bid v =
+              match v.value with
+              | VLoan (VSharedLoan (l, w)) when not end_borrows ->
+                  (* Below a shared loan, the shared loan freezes the value of
+                     the mutable borrow (see
+                     {!InterpBorrowsCore.ctx_freeze_mut_borrows_in_shared_values}):
+                     it stays *)
+                  let w = self#visit_tvalue end_borrows w in
+                  VMutBorrow (bid, { v with value = VLoan (VSharedLoan (l, w)) })
+              | _ -> super#visit_VMutBorrow end_borrows bid v
           end
         in
         let v = visitor#visit_tvalue true v in
@@ -2634,6 +2645,17 @@ let rec simplify_dummy_values_useless_abs_aux (config : config)
                   | _ -> super#visit_VLoan () lc
                 end
               | _ -> super#visit_VLoan () lc
+
+            method! visit_VMutBorrow () bid v =
+              match v.value with
+              | VLoan (VSharedLoan (l, w)) ->
+                  (* The concrete values of an abstraction are shared: the
+                     shared loan freezes the value of the mutable borrow (see
+                     {!InterpBorrowsCore.ctx_freeze_mut_borrows_in_shared_values}):
+                     it stays *)
+                  let w = super#visit_tvalue () w in
+                  VMutBorrow (bid, { v with value = VLoan (VSharedLoan (l, w)) })
+              | _ -> super#visit_VMutBorrow () bid v
 
             method! visit_ASharedLoan () pm l sv child =
               [%sanity_check] span (pm = PNone);

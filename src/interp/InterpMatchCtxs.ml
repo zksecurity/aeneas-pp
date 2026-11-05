@@ -2478,7 +2478,10 @@ let match_ctxs (span : Meta.span) ~(check_equiv : bool)
       raise_distinct "match_abstractions: kind";
     if check_can_end && can_end0 <> can_end1 then
       raise_distinct "match_abstractions: can_end";
-    let _ = match_aids parents0 parents1 in
+    (* The parents which have ended (or were projected away by a join) don't
+       constrain the matching *)
+    let live ctx = AbsId.Set.filter (fun aid -> ctx_lookup_abs_opt ctx aid <> None) in
+    let _ = match_aids (live ctx0 parents0) (live ctx1 parents1) in
     if region_set_has_static regions0 <> region_set_has_static regions1 then
       raise_distinct "match_abstractions: static region";
     let _ =

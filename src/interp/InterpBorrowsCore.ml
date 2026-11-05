@@ -2508,8 +2508,8 @@ let normalize_symbolic_proj (regions : region_set) (proj : symbolic_proj) :
     it borrows.
 
     We maintain this normal form by freezing the mutable borrows whenever they
-    can appear below a shared loan: when introducing a shared loan, and when
-    expanding a symbolic mutable borrow. *)
+    can appear below a shared loan: when introducing a shared loan, when
+    expanding a symbolic mutable borrow, and when joining contexts. *)
 let rec ctx_freeze_mut_borrows_in_shared_values (ctx : eval_ctx) : eval_ctx =
   let visitor =
     object (self)

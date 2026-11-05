@@ -557,6 +557,12 @@ let expand_symbolic_bool (span : Meta.span) (sv : symbolic_value)
   (* Return *)
   ((ctx_true, ctx_false), cf)
 
+let expand_symbolic_value_into (span : Meta.span) (sv : symbolic_value)
+    (see : symbolic_expansion) : cm_fun =
+ fun ctx ->
+  let ctx = apply_symbolic_expansion_non_borrow span sv ctx see in
+  (ctx, S.synthesize_symbolic_expansion_no_branching span sv None see)
+
 let expand_symbolic_value_no_branching (span : Meta.span) (sv : symbolic_value)
     (sv_place : SA.mplace option) : cm_fun =
  fun ctx ->
@@ -580,13 +586,8 @@ let expand_symbolic_value_no_branching (span : Meta.span) (sv : symbolic_value)
         in
         (* There should be exacly one branch *)
         let see = Collections.List.to_cons_nil seel in
-        (* Apply in the context *)
-        let ctx =
-          apply_symbolic_expansion_non_borrow span original_sv ctx see
-        in
-        (* Return*)
+        let ctx = apply_symbolic_expansion_non_borrow span original_sv ctx see in
         ( ctx,
-          (* Update the synthesized program *)
           S.synthesize_symbolic_expansion_no_branching span original_sv
             original_sv_place see )
     (* Borrows *)

@@ -249,4 +249,69 @@ def test_status : Result Unit := do
 /- Unit test for [join_live_borrows::test_status] -/
 #guard (test_status).reducesTo ()
 
+/-- [join_live_borrows::Store]
+    Source: 'tests/src/join-live-borrows.rs', lines 98:0-100:1
+    Visibility: public -/
+structure Store where
+  nats : alloc.vec.Vec Std.U64
+
+/-- [join_live_borrows::Slot]
+    Source: 'tests/src/join-live-borrows.rs', lines 102:0-105:1
+    Visibility: public -/
+@[discriminant isize]
+inductive Slot where
+| Nat : Std.Usize → Slot
+| Other : Slot
+
+/-- [join_live_borrows::Engine]
+    Source: 'tests/src/join-live-borrows.rs', lines 107:0-110:1
+    Visibility: public -/
+structure Engine where
+  s : Store
+  slots : alloc.vec.Vec Slot
+
+/-- [join_live_borrows::{join_live_borrows::Engine<'a>}::slot]:
+    Source: 'tests/src/join-live-borrows.rs', lines 113:4-115:5 -/
+def Engine.slot (self : Engine) (v : Std.Usize) : Result Slot := do
+  alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Slot) self.slots v
+
+/-- [join_live_borrows::{join_live_borrows::Engine<'a>}::nat_value]:
+    Source: 'tests/src/join-live-borrows.rs', lines 117:4-122:5
+    Visibility: public -/
+def Engine.nat_value
+  (self : Engine) (v : Std.Usize) : Result (Option Std.U64) := do
+  let s ← Engine.slot self v
+  match s with
+  | Slot.Nat i =>
+    let i1 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U64)
+        self.s.nats i
+    ok (some i1)
+  | Slot.Other => ok none
+
+/-- [join_live_borrows::nat_or_zero]:
+    Source: 'tests/src/join-live-borrows.rs', lines 125:0-130:1
+    Visibility: public -/
+def nat_or_zero (n : Option Std.U64) : Result Std.U64 := do
+  match n with
+  | none => ok 0#u64
+  | some n1 => ok n1
+
+/-- [join_live_borrows::test_nat_value]:
+    Source: 'tests/src/join-live-borrows.rs', lines 133:0-143:1
+    Visibility: public -/
+def test_nat_value : Result Unit := do
+  let v ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.U64) 7#u64
+  let slots ← alloc.vec.Vec.push (alloc.vec.Vec.new Slot) (Slot.Nat 0#usize)
+  let slots1 ← alloc.vec.Vec.push slots Slot.Other
+  let o ← Engine.nat_value { s := { nats := v }, slots := slots1 } 0#usize
+  let a ← nat_or_zero o
+  let o1 ← Engine.nat_value { s := { nats := v }, slots := slots1 } 1#usize
+  let b ← nat_or_zero o1
+  massert (a = 7#u64)
+  massert (b = 0#u64)
+
+/- Unit test for [join_live_borrows::test_nat_value] -/
+#guard (test_nat_value).reducesTo ()
+
 end join_live_borrows

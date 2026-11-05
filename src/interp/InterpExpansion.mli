@@ -13,6 +13,10 @@ type proj_kind = LoanProj | BorrowProj
 val apply_symbolic_expansion_non_borrow :
   Meta.span -> symbolic_value -> eval_ctx -> symbolic_expansion -> eval_ctx
 
+(** Expand a symbolic value into a given expansion, without branching. *)
+val expand_symbolic_value_into :
+  Meta.span -> symbolic_value -> symbolic_expansion -> cm_fun
+
 (** Expand a symhbolic value, without branching *)
 val expand_symbolic_value_no_branching :
   Meta.span -> symbolic_value -> SA.mplace option -> cm_fun

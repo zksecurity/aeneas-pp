@@ -1250,18 +1250,11 @@ let mk_collapse_ctx_merge_duplicate_funs (span : Meta.span)
     { value; ty }
   in
 
-  let merge_ashared_borrows id ty0 _pm0 _ ty1 _pm1 _ : tavalue =
-    (* Sanity checks *)
-    let _ =
-      let _, ty0, _ = ty_as_ref ty0 in
-      let _, ty1, _ = ty_as_ref ty1 in
-      [%sanity_check] span
-        (not (ty_has_mut_borrows ctx.type_ctx.type_infos ty0));
-      [%sanity_check] span
-        (not (ty_has_mut_borrows ctx.type_ctx.type_infos ty1))
-    in
+  let merge_ashared_borrows id ty0 _pm0 _ _ty1 _pm1 _ : tavalue =
+    (* The two borrows are instances of the same shared borrow: the result is a
+       single instance, whatever the borrowed value contains.
 
-    (* Same remarks as for [merge_amut_borrows] *)
+       Same remarks as for [merge_amut_borrows] *)
     let ty = ty0 in
     let value =
       ABorrow (ASharedBorrow (PNone, id, ctx.fresh_shared_borrow_id ()))
@@ -1570,6 +1563,16 @@ let collapse_ctx_following_sequence (span : Meta.span)
     | None -> aid
     | Some aid -> aid
   in
+  (* The abstraction which replaces an abstraction of the context, when the
+     sequence merges it (or merges it with an abstraction absent from the
+     context) *)
+  let replaced = ref AbsId.Map.empty in
+  let replace (aids : abs_id list) (nabs : abs_id) : unit =
+    List.iter
+      (fun aid ->
+        if aid <> nabs then replaced := AbsId.Map.add aid nabs !replaced)
+      aids
+  in
 
   (* Apply the sequence of merges *)
   List.iter
@@ -1593,8 +1596,10 @@ let collapse_ctx_following_sequence (span : Meta.span)
             "Context after merging " ^ AbsId.to_string nabs' ^ " := ("
             ^ AbsId.to_string abs0 ^ " <- " ^ AbsId.to_string abs1 ^ "):\n"
             ^ eval_ctx_to_string !ctx];
-          nabs_map := AbsId.Map.add nabs nabs' !nabs_map
+          nabs_map := AbsId.Map.add nabs nabs' !nabs_map;
+          replace [ abs0; abs1 ] nabs'
       | None, Some abs | Some abs, None ->
+          replace [ abs0; abs1 ] abs.abs_id;
           (* We don't have to merge anything, meaning the abstraction resulting
              from the merge is exactly the abstraction we found (what happened is
              that we're in the situation where we had to merge an abstraction
@@ -1630,7 +1635,21 @@ let collapse_ctx_following_sequence (span : Meta.span)
             | _ -> ())
         | None -> ())
     sequence;
-  let ctx = !ctx in
+  (* The parents follow the replacements *)
+  let ctx =
+    let rec resolve aid =
+      match AbsId.Map.find_opt aid !replaced with
+      | Some aid -> resolve aid
+      | None -> aid
+    in
+    ctx_map_abs
+      (fun abs ->
+        let parents =
+          AbsId.Set.remove abs.abs_id (AbsId.Set.map resolve abs.parents)
+        in
+        { abs with parents })
+      !ctx
+  in
   [%ldebug "ctx after applying the merge sequence:\n" ^ eval_ctx_to_string ctx];
 
   let fixed_aids = compute_fixed_abs_ids ctx0 ctx in

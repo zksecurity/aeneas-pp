@@ -92,3 +92,52 @@ pub fn test_status() {
     assert!(status(None) == 0);
     assert!(status(Some(&Value::Num(3))) == 1);
 }
+
+// One branch reads a field of a value shared by the input abstraction, which
+// the other branch never expands.
+pub struct Store {
+    pub nats: Vec<u64>,
+}
+
+pub enum Slot {
+    Nat(usize),
+    Other,
+}
+
+pub struct Engine<'a> {
+    pub s: &'a mut Store,
+    pub slots: Vec<Slot>,
+}
+
+impl<'a> Engine<'a> {
+    fn slot(&self, v: usize) -> &Slot {
+        &self.slots[v]
+    }
+
+    pub fn nat_value(&self, v: usize) -> Option<&u64> {
+        match self.slot(v) {
+            Slot::Nat(i) => Some(&self.s.nats[*i]),
+            _ => None,
+        }
+    }
+}
+
+pub fn nat_or_zero(n: Option<&u64>) -> u64 {
+    match n {
+        Some(n) => *n,
+        None => 0,
+    }
+}
+
+#[verify::test]
+pub fn test_nat_value() {
+    let mut store = Store { nats: Vec::new() };
+    store.nats.push(7);
+    let mut slots = Vec::new();
+    slots.push(Slot::Nat(0));
+    slots.push(Slot::Other);
+    let e = Engine { s: &mut store, slots };
+    let a = nat_or_zero(e.nat_value(0));
+    let b = nat_or_zero(e.nat_value(1));
+    assert!(a == 7 && b == 0);
+}

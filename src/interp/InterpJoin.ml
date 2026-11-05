@@ -907,7 +907,7 @@ let join_ctxs (span : Meta.span) (fresh_abs_kind : abs_kind)
         let var = EBinding (BVar b, v) in
         (* Continue *)
         var :: join_prefixes env0' env1'
-    | (EAbs abs0 as abs) :: env0' ->
+    | EAbs abs0 :: env0' ->
         let abs1, env1' = pop_abs abs0.abs_id env1 in
 
         (* Debug *)
@@ -926,9 +926,18 @@ let join_ctxs (span : Meta.span) (fresh_abs_kind : abs_kind)
 
            Note that we ignore the continuation expressions: when computing fixed
            points we might remove/add continuations while the presence/absence
-           shouldn't have an impact on the way we match/unify contexts. *)
+           shouldn't have an impact on the way we match/unify contexts.
+
+           The parents may differ: a parent which is not fixed got a fresh id in
+           [ctx0]. The joined abstraction has the parents of both (the
+           collapse merges them). *)
         [%sanity_check] span
-          (equal_abs { abs0 with cont = None } { abs1 with cont = None });
+          (equal_abs
+             { abs0 with cont = None; parents = AbsId.Set.empty }
+             { abs1 with cont = None; parents = AbsId.Set.empty });
+        let abs =
+          EAbs { abs0 with parents = AbsId.Set.union abs0.parents abs1.parents }
+        in
         (* Continue *)
         abs :: join_prefixes env0' env1'
     | [] ->
@@ -1053,6 +1062,10 @@ let join_ctxs (span : Meta.span) (fresh_abs_kind : abs_kind)
         ended_regions;
       }
     in
+    (* A shared loan of one side only disappears from the join, while the
+       values it contains may be below a shared loan of both sides: we freeze
+       them again *)
+    let ctx = InterpBorrowsCore.ctx_freeze_mut_borrows_in_shared_values ctx in
     let join_info : join_info =
       { joined_ctx = ctx; symbolic_to_value = !symbolic_to_value }
     in
@@ -1174,6 +1187,201 @@ let drop_locals_uninit_in_some_ctx (ctxl : eval_ctx list) : eval_ctx list =
     ctx_push_fresh_dummy_vars ctx (List.rev !dropped)
   in
   if Expressions.LocalId.Set.is_empty uninit then ctxl else List.map drop ctxl
+
+(** In the contexts reaching a join, align the abstractions which exist before
+    the branching ([fixed_aids]): a branch may have expanded a struct (or tuple)
+    value shared by one of them, which another branch left symbolic. We expand
+    it identically in the other branch, reusing the symbolic values of the
+    fields when they are still symbolic. Values under shared loans are
+    immutable: the fields are the ones the expansion introduced, possibly
+    expanded further (which a later round aligns). We only align values without
+    borrows. Similarly, a branch may have shared a part of such a value: we
+    introduce the shared loan, without borrows, in the other branches.
+
+    Returns the updated contexts, with the expansions to synthesize at the end
+    of their branches. *)
+let align_fixed_abs_expansions (span : Meta.span) (fixed_aids : AbsId.Set.t)
+    (ctxl : eval_ctx list) : (eval_ctx * (SymbolicAst.expr -> SymbolicAst.expr)) list =
+  (* The shared values of an abstraction *)
+  let shared_values (abs : abs) : tvalue list =
+    let values = ref [] in
+    let visitor =
+      object
+        inherit [_] iter_abs as super
+
+        method! visit_ASharedLoan env pm lid sv child =
+          values := sv :: !values;
+          super#visit_tavalue env child
+      end
+    in
+    visitor#visit_abs () abs;
+    List.rev !values
+  in
+  let expandable (ctx : eval_ctx) (sv : symbolic_value) : bool =
+    (match sv.sv_ty with
+    | TAdt { id; builtin = None; _ } -> (
+        match (ctx_lookup_type_decl span ctx id).kind with
+        | Struct _ -> true
+        | _ -> false)
+    | TAdt { builtin = Some TTuple; _ } -> true
+    | _ -> false)
+    && not (ty_has_borrows (Some span) ctx.type_ctx.type_infos sv.sv_ty)
+  in
+  (* Find a value symbolic in [a] and expanded in [b] *)
+  let rec find (ctx_a : eval_ctx) (a : tvalue) (b : tvalue) :
+      (symbolic_value * tvalue list) option =
+    match (a.value, b.value) with
+    | VSymbolic sv, VAdt { variant_id = None; fields } when expandable ctx_a sv
+      ->
+        Some (sv, fields)
+    | VAdt fa, VAdt fb
+      when fa.variant_id = fb.variant_id
+           && List.length fa.fields = List.length fb.fields ->
+        List.find_map
+          (fun (a, b) -> find ctx_a a b)
+          (List.combine fa.fields fb.fields)
+    | VLoan (VSharedLoan (_, a)), VLoan (VSharedLoan (_, b)) -> find ctx_a a b
+    | VLoan (VSharedLoan (_, a)), _ -> find ctx_a a b
+    | _, VLoan (VSharedLoan (_, b)) -> find ctx_a a b
+    | VBorrow (VMutBorrow (_, a)), VBorrow (VMutBorrow (_, b)) -> find ctx_a a b
+    | _ -> None
+  in
+  let find_in_abs (ctx_a : eval_ctx) (ctx_b : eval_ctx) (aid : abs_id) =
+    match (ctx_lookup_abs_opt ctx_a aid, ctx_lookup_abs_opt ctx_b aid) with
+    | Some abs_a, Some abs_b ->
+        let va = shared_values abs_a and vb = shared_values abs_b in
+        if List.length va = List.length vb then
+          List.find_map (fun (a, b) -> find ctx_a a b) (List.combine va vb)
+        else None
+    | _ -> None
+  in
+  (* The expansion of [sv] in [ctx_a] matching the fields of [ctx_b] *)
+  let expansion (ctx_a : eval_ctx) (fields : tvalue list) : symbolic_expansion
+      =
+    let rec strip (v : tvalue) : tvalue =
+      match v.value with
+      | VLoan (VSharedLoan (_, v)) -> strip v
+      | _ -> v
+    in
+    let field_value (v : tvalue) : symbolic_value =
+      let v = strip v in
+      match v.value with
+      | VSymbolic sv when not (symbolic_value_id_in_ctx sv.sv_id ctx_a) -> sv
+      | _ -> mk_fresh_symbolic_value span ctx_a v.ty
+    in
+    SeAdt (None, List.map field_value fields)
+  in
+  (* Wrap a value of [a] in a shared loan of [b] which [ctx_a] doesn't have *)
+  let rec wrap (ctx_a : eval_ctx) (a : tvalue) (b : tvalue) : tvalue option =
+    let rewrap f a' = Option.map (fun a' -> { a with value = f a' }) a' in
+    match (a.value, b.value) with
+    | VLoan (VSharedLoan (la, a')), VLoan (VSharedLoan (lb, b')) ->
+        if la = lb then
+          rewrap (fun a' -> VLoan (VSharedLoan (la, a'))) (wrap ctx_a a' b')
+        else None
+    | _, VLoan (VSharedLoan (lb, _))
+      when InterpBorrowsCore.lookup_loan_opt span InterpBorrowsCore.ek_all lb ctx_a.env
+           = None ->
+        Some { a with value = VLoan (VSharedLoan (lb, a)) }
+    | VLoan (VSharedLoan (la, a')), _ ->
+        rewrap (fun a' -> VLoan (VSharedLoan (la, a'))) (wrap ctx_a a' b)
+    | VAdt fa, VAdt fb
+      when fa.variant_id = fb.variant_id
+           && List.length fa.fields = List.length fb.fields ->
+        let rec fields fa fb =
+          match (fa, fb) with
+          | a :: fa, b :: fb -> (
+              match wrap ctx_a a b with
+              | Some a -> Some (a :: fa)
+              | None -> Option.map (fun fa -> a :: fa) (fields fa fb))
+          | _ -> None
+        in
+        rewrap
+          (fun fields -> VAdt { fa with fields })
+          (fields fa.fields fb.fields)
+    | VBorrow (VMutBorrow (ba, a')), VBorrow (VMutBorrow (bb, b')) when ba = bb
+      ->
+        rewrap (fun a' -> VBorrow (VMutBorrow (ba, a'))) (wrap ctx_a a' b')
+    | _ -> None
+  in
+  (* Replace the [i]th shared value of an abstraction *)
+  let replace_shared_value (abs : abs) (i : int) (v : tvalue) : abs =
+    let count = ref 0 in
+    let visitor =
+      object
+        inherit [_] map_abs as super
+
+        method! visit_ASharedLoan env pm lid sv child =
+          let sv = if !count = i then v else sv in
+          incr count;
+          ASharedLoan (pm, lid, sv, super#visit_tavalue env child)
+      end
+    in
+    visitor#visit_abs () abs
+  in
+  let find_wrap (ctx_a : eval_ctx) (ctx_b : eval_ctx) (aid : abs_id) =
+    match (ctx_lookup_abs_opt ctx_a aid, ctx_lookup_abs_opt ctx_b aid) with
+    | Some abs_a, Some abs_b ->
+        let va = shared_values abs_a and vb = shared_values abs_b in
+        if List.length va = List.length vb then
+          List.find_map
+            (fun (i, (a, b)) ->
+              Option.map
+                (fun v -> replace_shared_value abs_a i v)
+                (wrap ctx_a a b))
+            (List.mapi (fun i x -> (i, x)) (List.combine va vb))
+        else None
+    | _ -> None
+  in
+  let rec align (ctxl : (eval_ctx * (SymbolicAst.expr -> SymbolicAst.expr)) list) =
+    let refinement =
+      List.find_map
+        (fun (i, (ctx_a, _)) ->
+          List.find_map
+            (fun (ctx_b, _) ->
+              Option.map
+                (fun (sv, fields) -> (i, sv, expansion ctx_a fields))
+                (List.find_map (find_in_abs ctx_a ctx_b)
+                   (AbsId.Set.elements fixed_aids)))
+            ctxl)
+        (List.mapi (fun i x -> (i, x)) ctxl)
+    in
+    let wrapping () =
+      List.find_map
+        (fun (i, (ctx_a, _)) ->
+          List.find_map
+            (fun (ctx_b, _) ->
+              Option.map
+                (fun abs -> (i, abs))
+                (List.find_map (find_wrap ctx_a ctx_b)
+                   (AbsId.Set.elements fixed_aids)))
+            ctxl)
+        (List.mapi (fun i x -> (i, x)) ctxl)
+    in
+    match refinement with
+    | None -> (
+        match wrapping () with
+        | None -> ctxl
+        | Some (i, abs) ->
+            align
+              (List.mapi
+                 (fun j (ctx, wrap) ->
+                   if j <> i then (ctx, wrap)
+                   else (fst (ctx_subst_abs span ctx abs.abs_id abs), wrap))
+                 ctxl))
+    | Some (i, sv, see) ->
+        align
+          (List.mapi
+             (fun j (ctx, wrap) ->
+               if j <> i then (ctx, wrap)
+               else
+                 let ctx, cc =
+                   InterpExpansion.expand_symbolic_value_into span sv see ctx
+                 in
+                 (ctx, fun e -> wrap (cc e)))
+             ctxl)
+  in
+  align (List.map (fun ctx -> (ctx, fun e -> e)) ctxl)
 
 let join_ctxs_list (config : config) (span : Meta.span)
     (fresh_abs_kind : abs_kind) ?(preprocess_first_ctx : bool = true)

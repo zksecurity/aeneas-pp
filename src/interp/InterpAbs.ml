@@ -2367,6 +2367,25 @@ let merge_into_first_abstraction (span : Meta.span) (abs_kind : abs_kind)
      remove the abstraction 1 *)
   let ctx = fst (ctx_subst_abs span ctx abs_id0 nabs) in
   let ctx = fst (ctx_remove_abs span ctx abs_id1) in
+  (* The abstractions whose parent was one of the merged abstractions now have
+     the result of the merge as parent *)
+  let ctx =
+    ctx_map_abs
+      (fun abs ->
+        if
+          abs.abs_id <> nabs.abs_id
+          && AbsId.Set.exists
+               (fun aid -> aid = abs_id0 || aid = abs_id1)
+               abs.parents
+        then
+          let parents =
+            AbsId.Set.add nabs.abs_id
+              (AbsId.Set.remove abs_id0 (AbsId.Set.remove abs_id1 abs.parents))
+          in
+          { abs with parents }
+        else abs)
+      ctx
+  in
 
   (* Merge all the regions from the abstraction into one (the first - i.e., the
      one with the smallest id). Note that we need to do this in the whole
