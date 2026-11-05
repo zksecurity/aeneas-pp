@@ -354,7 +354,15 @@ let apply_passes_to_pure_fun_translations (crate : LlbcAst.crate)
   let diagnose_mutex = Mutex.create () in
 
   (* Apply the micro-passes *)
-  let apply (rank : int) (f : fun_decl) : pure_fun_translation =
+  let rec apply (rank : int) (f : fun_decl) : pure_fun_translation =
+    try apply_aux rank f
+    with Errors.CFailure error ->
+      (* We keep the signature of the function, but not its body *)
+      [%warn_opt_span] error.span
+        ("Could not translate the body of the function '" ^ f.name
+       ^ "' because of previous error");
+      { f = { f with body = None }; loops = []; bodies = [] }
+  and apply_aux (rank : int) (f : fun_decl) : pure_fun_translation =
     let overall_start =
       if !Config.diagnose_micro_passes then Unix.gettimeofday () else 0.0
     in
