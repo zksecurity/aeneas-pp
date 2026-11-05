@@ -581,10 +581,11 @@ let value_has_mut_borrows span (ctx : eval_ctx) (v : value) : bool =
 
 (** Check if a value only observes other values: it contains no loans, its
     borrows are shared or frozen borrows (see {!Values.VFrozenMutBorrow}), and
-    its symbolic values contain no borrows. A shared value with only such
-    borrows can be copied and joined like a value without borrows, the copies
-    being new instances of the same borrows. *)
-let value_is_observation span (ctx : eval_ctx) (v : value) : bool =
+    its symbolic values contain no mutable borrows. A shared value with only
+    such borrows can be copied and joined like a value without borrows, the
+    copies being new instances of the same borrows (the shared borrows of a
+    symbolic value stay projected by the loan projectors of their owners). *)
+let value_is_observation _span (ctx : eval_ctx) (v : value) : bool =
   let visitor =
     object
       inherit [_] iter_tvalue
@@ -593,8 +594,7 @@ let value_is_observation span (ctx : eval_ctx) (v : value) : bool =
       method! visit_VReservedMutBorrow _ _ _ = raise Found
 
       method! visit_symbolic_value _ sv =
-        if ValuesUtils.symbolic_value_has_borrows span ctx.type_ctx.type_infos sv
-        then raise Found
+        if ty_has_mut_borrows ctx.type_ctx.type_infos sv.sv_ty then raise Found
     end
   in
   try
@@ -614,8 +614,9 @@ let value_erase_shared_borrow_ids (v : tvalue) : tvalue =
   in
   visitor#visit_tvalue () v
 
-(** End the shared and frozen borrows of a value (by replacing them with ⊥) *)
-let value_end_observations (v : tvalue) : tvalue =
+(** End the shared and frozen borrows of a value (by replacing them, and the
+    symbolic values containing shared borrows, with ⊥) *)
+let value_end_observations span (ctx : eval_ctx) (v : tvalue) : tvalue =
   let visitor =
     object
       inherit [_] map_tvalue as super
@@ -624,6 +625,10 @@ let value_end_observations (v : tvalue) : tvalue =
         match bc with
         | VSharedBorrow _ | VFrozenMutBorrow _ -> VBottom
         | VMutBorrow _ | VReservedMutBorrow _ -> super#visit_VBorrow env bc
+
+      method! visit_VSymbolic env sv =
+        if symbolic_value_has_borrows span ctx sv then VBottom
+        else super#visit_VSymbolic env sv
     end
   in
   visitor#visit_tvalue () v

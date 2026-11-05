@@ -17,7 +17,9 @@ let log = Logging.reduce_collapse_log
     remaining markers.
 
     We simply eliminate shared loans which don't have corresponding shared
-    borrows.
+    borrows, and the loan projectors over shared borrows whose symbolic value
+    doesn't appear anywhere else in the context (it was in a shared value which
+    is not there anymore).
 
     TODO: will not be necessary once we destructure the avalues. *)
 let eliminate_shared_loans (span : Meta.span) (ctx : eval_ctx) : eval_ctx =
@@ -41,7 +43,9 @@ let eliminate_shared_loans (span : Meta.span) (ctx : eval_ctx) : eval_ctx =
         else if value_is_observation (Some span) ctx sv.value then
           (* The shared value can't be read anymore: we end the shared and
              frozen borrows it contains *)
-          self#visit_AEndedSharedLoan env (value_end_observations sv) child
+          self#visit_AEndedSharedLoan env
+            (value_end_observations (Some span) ctx sv)
+            child
         else super#visit_ASharedLoan env pm bid sv child
     end
   in
@@ -50,6 +54,52 @@ let eliminate_shared_loans (span : Meta.span) (ctx : eval_ctx) : eval_ctx =
     if abs.can_end then update_loans#visit_abs () abs else abs
   in
   let ctx = ctx_map_abs update_abs ctx in
+
+  (* End the loan projectors over shared borrows of symbolic values which
+     appear nowhere else *)
+  let sv_appears (sv_id : symbolic_value_id) : bool =
+    let visitor =
+      object
+        inherit [_] iter_eval_ctx as super
+        method! visit_symbolic_value _ sv =
+          if sv.sv_id = sv_id then raise Found
+
+        method! visit_aproj env proj =
+          match proj with
+          | AProjLoans _ -> ()
+          | AProjBorrows { proj; _ } when proj.sv_id = sv_id -> raise Found
+          | _ -> super#visit_aproj env proj
+      end
+    in
+    try
+      visitor#visit_eval_ctx () ctx;
+      false
+    with Found -> true
+  in
+  let useless_loan_projs =
+    List.concat_map
+      (fun (abs : abs) ->
+        if abs.can_end then
+          List.filter_map
+            (fun (av : tavalue) ->
+              match av.value with
+              | ASymbolic (_, AProjLoans { proj; _ })
+                when (not
+                        (ty_has_mut_borrows ctx.type_ctx.type_infos
+                           proj.proj_ty))
+                     && not (sv_appears proj.sv_id) ->
+                  Some (abs.abs_id, proj.sv_id)
+              | _ -> None)
+            abs.avalues
+        else [])
+      (AbsId.Map.values (ctx_get_abs ctx))
+  in
+  let ctx =
+    List.fold_left
+      (fun ctx (abs_id, sv_id) ->
+        update_aproj_loans_to_ended span abs_id sv_id ctx)
+      ctx useless_loan_projs
+  in
 
   (* Remove the ended shared loans, if possible *)
   let ctx = InterpBorrows.eliminate_ended_shared_loans span ctx in

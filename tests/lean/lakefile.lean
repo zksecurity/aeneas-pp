@@ -101,6 +101,7 @@ package «tests» {}
 @[default_target] lean_lib LeanKeywords
 @[default_target] lean_lib LeanKeywordsClash
 @[default_target] lean_lib ListBorrows
+@[default_target] lean_lib LoopPromotedSharedRefs
 @[default_target] lean_lib Loops
 @[default_target] lean_lib LoopsAdts
 @[default_target] lean_lib LoopsFrozenInputs

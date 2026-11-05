@@ -1136,8 +1136,21 @@ module MakeJoinMatcher (S : MatchJoinState) : PrimMatcher = struct
       let rid = ctx0.fresh_region_id () in
       let bid2 = ctx0.fresh_borrow_id () in
 
-      (* Update the type of the shared loan to use the fresh region *)
+      (* Lookup the shared values and match them *)
+      let sv0 = ctx_lookup_shared_value span ctx0 bid0 in
+      let sv1 = ctx_lookup_shared_value span ctx1 bid1 in
+      let sv = match_rec sv0 sv1 in
+
+      (* The type of the shared loan is the type of the joined shared value,
+         with the fresh region. A joined symbolic value has the regions of its
+         loan projectors (nested shared borrows). *)
       let _, bv_ty, kind = ty_as_ref ty in
+      let bv_ty =
+        match (sv : tvalue).value with
+        | VSymbolic sv -> sv.sv_ty
+        | _ -> bv_ty
+      in
+      [%cassert_recover] S.recover span (ty_is_rty bv_ty) "Unimplemented";
       let borrow_ty = mk_ref_ty (RVar (Free rid)) bv_ty kind in
 
       (* Generate the avalues for the abstraction *)
@@ -1150,12 +1163,6 @@ module MakeJoinMatcher (S : MatchJoinState) : PrimMatcher = struct
         [ mk_aborrow PLeft bid0 sid0; mk_aborrow PRight bid1 sid1 ]
       in
 
-      (* Lookup the shared values and match them *)
-      let sv0 = ctx_lookup_shared_value span ctx0 bid0 in
-      let sv1 = ctx_lookup_shared_value span ctx1 bid1 in
-      let sv = match_rec sv0 sv1 in
-
-      [%sanity_check_recover] S.recover span (ty_is_rty bv_ty);
       let loan = ASharedLoan (PNone, bid2, sv, mk_aignored span bv_ty None) in
       (* Note that an aloan has a borrow type *)
       let loan : tavalue = { value = ALoan loan; ty = borrow_ty } in
