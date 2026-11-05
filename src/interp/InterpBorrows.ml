@@ -214,13 +214,10 @@ let end_concrete_borrow_get_borrow_core (span : Meta.span)
                  of the two cases described above *)
               ABorrow AEndedSharedBorrow)
             else super#visit_ABorrow outer bc
-        | AIgnoredMutBorrow _ | AEndedSharedBorrow ->
-            (* Nothing special to do *)
+        | AIgnoredMutBorrow _ | AEndedSharedBorrow | AEndedMutBorrow _ ->
+            (* Nothing special to do (the child of an ended borrow is the one
+               of the borrow: it stays at the same level) *)
             super#visit_ABorrow outer bc
-        | AEndedMutBorrow (meta, given_back) ->
-            (* We need to increase the level when diving into the given back value *)
-            let given_back = self#visit_tavalue (incr_level outer) given_back in
-            ABorrow (AEndedMutBorrow (meta, given_back))
         | AEndedIgnoredMutBorrow { given_back; child; given_back_meta } ->
             (* We need to increase the level when diving into the given back value *)
             let given_back = self#visit_tavalue (incr_level outer) given_back in
@@ -1280,18 +1277,21 @@ and end_abs_aux (config : config) (span : Meta.span) ~(snapshots : bool)
         comp cc (end_abs_borrows config span ~snapshots chain abs_id level ctx)
       in
 
-      (* End the regions owned by the abstraction - note that we don't need to
-         relookup the abstraction: the set of regions in an abstraction never
-         changes... *)
+      (* End the regions owned by the abstraction once the abstraction itself
+         ends (its sub-abstractions are intermediate stages, after which the
+         regions may still be projected) - note that we don't need to relookup
+         the abstraction: the set of regions in an abstraction never changes *)
       let ctx =
-        let ended_regions =
-          (* Note that we never consider the static region as ended, though we may
-             "eliminate" abstractions that track 'static (in which case we simply
-             forget the abstraction, we don't really end it) *)
-          RegionId.Set.union ctx.ended_regions
-            (region_set_get_region_ids abs.regions.owned)
-        in
-        { ctx with ended_regions }
+        if level > 0 then ctx
+        else
+          let ended_regions =
+            (* Note that we never consider the static region as ended, though we
+               may "eliminate" abstractions that track 'static (in which case we
+               simply forget the abstraction, we don't really end it) *)
+            RegionId.Set.union ctx.ended_regions
+              (region_set_get_region_ids abs.regions.owned)
+          in
+          { ctx with ended_regions }
       in
 
       (* Synthesize the symbolic expression to save the fact that we ended a (sub-)
@@ -1343,11 +1343,12 @@ and end_all_sub_abs (config : config) (span : Meta.span) ~(snapshots : bool)
     ^ eval_ctx_to_string ctx];
   (* Lookup the abstraction *)
   let abs = ctx_lookup_abs ctx abs_id in
-  (* Check whether we need to end sub-abstractions *)
+  (* Check whether we need to end sub-abstractions: we recompute the pending
+     sub-abstractions after ending one, as ending it may update the others *)
   let max_level = get_max_sub_abs abs in
   if max_level > level then
-    (* We do: end the sub-abstraction *)
-    end_abs_aux config span ~snapshots chain abs_id max_level ctx
+    let ctx, cc = end_abs_aux config span ~snapshots chain abs_id max_level ctx in
+    comp cc (end_all_sub_abs config span ~snapshots chain abs_id level ctx)
   else
     (* No strict sub-abstraction to end. *)
     (ctx, fun e -> e)

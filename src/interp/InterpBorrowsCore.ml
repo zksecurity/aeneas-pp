@@ -1803,7 +1803,7 @@ let abs_has_non_ended_eborrows_or_eloans ~(borrows : bool) (abs : abs)
         match sproj with
         | EProjBorrows { proj = _; loans } ->
             opt_raise ~is_borrow:true level;
-            List.iter (fun (_, x) -> self#visit_eproj level x) loans
+            List.iter (fun (_, x) -> self#visit_eproj (level + 1) x) loans
         | EProjLoans { proj = _; consumed; borrows } ->
             opt_raise ~is_borrow:false level;
             List.iter (fun (_, x) -> self#visit_eproj (level + 1) x) consumed;
@@ -1920,12 +1920,12 @@ let get_max_sub_abs_visitor ?(with_ended = false) ?(with_evalues = false)
 
     method! visit_aborrow_content level bc =
       (match bc with
-      | AMutBorrow _ | ASharedBorrow _ -> save_level level
+      | AMutBorrow _ | ASharedBorrow _ | AProjSharedBorrow (_, _ :: _) ->
+          save_level level
       | AIgnoredMutBorrow _
       | AEndedMutBorrow _
       | AEndedSharedBorrow
       | AEndedIgnoredMutBorrow _
-      | AProjSharedBorrow (_, _ :: _) -> save_level level
       | AProjSharedBorrow (_, []) -> if with_ended then save_level level);
       super#visit_aborrow_content level bc
 
