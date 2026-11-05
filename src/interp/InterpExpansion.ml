@@ -117,14 +117,14 @@ let apply_symbolic_expansion_to_target_aevalues (span : Meta.span)
               (* Not the searched symbolic value: nothing to do *)
               super#visit_ASymbolic (Some current_abs) pm aproj
         | AProjBorrows { proj; loans }, BorrowProj ->
-            (* We should never expand a symbolic value which has consumed given
-               back values (because then it means the symbolic value was consumed
-               by region abstractions, and is thus inaccessible: such a value can't
-               be expanded)
-            *)
-            [%cassert] span (loans = []) "Unreachable";
             (* Check if this is the symbolic value we are looking for *)
-            if proj.sv_id = original_sv.sv_id then
+            if proj.sv_id = original_sv.sv_id then (
+              (* We should never expand a symbolic value which has consumed given
+                 back values (because then it means the symbolic value was consumed
+                 by region abstractions, and is thus inaccessible: such a value can't
+                 be expanded)
+              *)
+              [%cassert] span (loans = []) "Unreachable";
               (* Convert the symbolic expansion to a value on which we can
                * apply a projector (if the expansion is a reference expansion,
                * convert it to a borrow) *)
@@ -140,7 +140,7 @@ let apply_symbolic_expansion_to_target_aevalues (span : Meta.span)
                   expansion proj.proj_ty
               in
               (* Replace *)
-              projected_value.value
+              projected_value.value)
             else
               (* Not the searched symbolic value: nothing to do *)
               super#visit_ASymbolic (Some current_abs) pm aproj
@@ -179,14 +179,14 @@ let apply_symbolic_expansion_to_target_aevalues (span : Meta.span)
               (* Not the searched symbolic value: nothing to do *)
               super#visit_ESymbolic (Some current_abs) pm aproj
         | EProjBorrows { proj; loans }, BorrowProj ->
-            (* We should never expand a symbolic value which has consumed given
-               back values (because then it means the symbolic value was consumed
-               by region abstractions, and is thus inaccessible: such a value can't
-               be expanded)
-            *)
-            [%cassert] span (loans = []) "Unreachable";
             (* Check if this is the symbolic value we are looking for *)
-            if proj.sv_id = original_sv.sv_id then
+            if proj.sv_id = original_sv.sv_id then (
+              (* We should never expand a symbolic value which has consumed given
+                 back values (because then it means the symbolic value was consumed
+                 by region abstractions, and is thus inaccessible: such a value can't
+                 be expanded)
+              *)
+              [%cassert] span (loans = []) "Unreachable";
               (* Convert the symbolic expansion to a value on which we can
                * apply a projector (if the expansion is a reference expansion,
                * convert it to a borrow) *)
@@ -202,7 +202,7 @@ let apply_symbolic_expansion_to_target_aevalues (span : Meta.span)
                   proj_regions expansion proj.proj_ty
               in
               (* Replace *)
-              projected_value.value
+              projected_value.value)
             else
               (* Not the searched symbolic value: nothing to do *)
               super#visit_ESymbolic (Some current_abs) pm aproj
@@ -446,7 +446,9 @@ let expand_symbolic_value_shared_borrow (span : Meta.span)
                by region abstractions, and is thus inaccessible: such a value can't
                be expanded)
             *)
-            [%cassert] span (loans = []) "Unreachable";
+            [%cassert] span
+              (proj.sv_id <> original_sv.sv_id || loans = [])
+              "Unreachable";
             (* Check if we need to reborrow *)
             match reborrow_ashared (Option.get proj_regions) proj with
             | None -> super#visit_ASymbolic proj_regions pm aproj
@@ -464,13 +466,15 @@ let expand_symbolic_value_shared_borrow (span : Meta.span)
         | EProjLoans _ ->
             (* Loans are handled later *)
             ESymbolic (pm, aproj)
-        | EProjBorrows { proj = _; loans } ->
+        | EProjBorrows { proj; loans } ->
             (* We should never expand a symbolic value which has consumed given
                back values (because then it means the symbolic value was consumed
                by region abstractions, and is thus inaccessible: such a value can't
                be expanded)
             *)
-            [%cassert] span (loans = []) "Unreachable";
+            [%cassert] span
+              (proj.sv_id <> original_sv.sv_id || loans = [])
+              "Unreachable";
             (* No need to check for reborrows of shared values: we don't track
                them in abstraction expressions *)
             super#visit_ESymbolic proj_regions pm aproj
