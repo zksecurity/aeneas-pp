@@ -924,7 +924,18 @@ let export_functions_group_scc (fmt : Format.formatter) (config : gen_config)
 
     Extract.start_fun_decl_group ctx fmt is_rec decls;
     List.iter (fun f -> f ()) extract_defs;
-    Extract.end_fun_decl_group fmt is_rec decls)
+    Extract.end_fun_decl_group fmt is_rec decls;
+    (* Prove that the helpers of the groups of mutually recursive functions and
+       trait implementations are monotone in their closure dictionaries *)
+    if Config.backend () = Lean && not is_rec then
+      List.iter
+        (fun (def : Pure.fun_decl) ->
+          if
+            def.loop_id = None
+            && FunDeclId.TreeSet.mem def.def_id ctx.closure_mono_funs
+          then
+            Extract.extract_derive_closure_mono ctx fmt def)
+        decls)
 
 (** Extract the decreases-clause template bodies for a list of function
     declarations (typically a function together with the loops it contains).
@@ -962,7 +973,34 @@ let export_fun_decls_scc (fmt : Format.formatter) (config : gen_config)
     (ctx : gen_ctx) (decls : Pure.fun_decl list) : unit =
   if config.extract_fun_decls then
     (* Group the mutually recursive definitions *)
-    let subgroups = ReorderDecls.group_reorder_fun_decls decls in
+    (* The functions contained in the trait implementations we refer to with
+       inline records, including the implementations of their parent clauses *)
+    let inline_impl_funs =
+      let rec impl_funs (id : TraitImplId.id) : FunDeclId.id list =
+        match TraitImplId.Map.find_opt id ctx.trans_trait_impls with
+        | None -> []
+        | Some impl ->
+            List.map
+              (fun (_, _, (m : Pure.fun_decl_ref Pure.binder)) ->
+                m.binder_value.fun_id)
+              impl.methods
+            @ List.concat_map
+                (fun (tr : Pure.trait_ref) ->
+                  match tr.trait_id with
+                  | TraitImpl (pid, _)
+                    when TraitImplId.TreeSet.mem pid ctx.inline_trait_impls ->
+                      impl_funs pid
+                  | _ -> [])
+                impl.parent_trait_refs
+      in
+      TraitImplId.Map.of_list
+        (List.map
+           (fun id -> (id, impl_funs id))
+           (TraitImplId.TreeSet.elements ctx.inline_trait_impls))
+    in
+    let subgroups =
+      ReorderDecls.group_reorder_fun_decls inline_impl_funs decls
+    in
     (* Extract the subgroups *)
     List.iter
       (fun (is_rec, decls) ->
@@ -1151,6 +1189,7 @@ let extract_definitions (fmt : Format.formatter) (config : gen_config)
      - [extract_extra_info]: extra the extra type information (e.g.,
        the [Arguments] information in Coq).
   *)
+  let export_functions_group_with_ctx = export_functions_group fmt config in
   let export_functions_group = export_functions_group fmt config ctx in
   let export_global = export_global fmt config ctx in
   let export_types_group = export_types_group fmt config ctx in
@@ -1296,9 +1335,75 @@ let extract_definitions (fmt : Format.formatter) (config : gen_config)
                doesn't work for mutually recursive impls. *)
             let is_rec = List.length decls = 1 && Config.backend () = Lean in
             List.iter (fun id -> export_trait_impl ~is_rec id) ids)
-    | MixedGroup _ ->
-        [%craise_opt_span] None
-          "Mixed-recursive declaration groups are not supported"
+    | MixedGroup ids ->
+        let ids = Charon.GAstUtils.g_declaration_group_to_list ids in
+        if not (LlbcAstUtils.mixed_group_is_funs_and_impls ids) then
+          [%craise_opt_span] None
+            "Mixed-recursive declaration groups which contain other \
+             declarations than functions and trait implementations are not \
+             supported"
+        else
+          let fun_ids =
+            List.filter_map
+              (fun (id : Charon.Meta.item_id) ->
+                match id with
+                | IdFun id -> Some id
+                | IdTraitImpl _ | IdType _ | IdTraitDecl _ | IdGlobal _ -> None)
+              ids
+          in
+          let impl_ids =
+            List.filter_map
+              (fun (id : Charon.Meta.item_id) ->
+                match id with
+                | IdTraitImpl id -> Some id
+                | IdFun _ | IdType _ | IdTraitDecl _ | IdGlobal _ -> None)
+              ids
+          in
+          (* The functions refer to the trait implementations of the group
+             with inline records: the named implementations can only be
+             defined after the functions *)
+          let pure_funs =
+            List.filter_map
+              (fun id -> ExtractBase.ctx_lookup_fun_decl_info ctx id)
+              fun_ids
+          in
+          export_functions_group_with_ctx
+            {
+              ctx with
+              inline_trait_impls = TraitImplId.TreeSet.of_list impl_ids;
+            }
+            pure_funs;
+          (* The implementations refer to the implementations of their parent
+             clauses: we define those first *)
+          let parent_impls (id : TraitImplId.id) : TraitImplId.id list =
+            match TraitImplId.Map.find_opt id ctx.trans_trait_impls with
+            | None -> []
+            | Some impl ->
+                List.filter_map
+                  (fun (tr : Pure.trait_ref) ->
+                    match tr.trait_id with
+                    | TraitImpl (pid, _) when List.mem pid impl_ids -> Some pid
+                    | _ -> None)
+                  impl.parent_trait_refs
+          in
+          let rec export_impls (exported : TraitImplId.id list)
+              (impls : TraitImplId.id list) : unit =
+            if impls <> [] then (
+              let ready, rest =
+                List.partition
+                  (fun id ->
+                    List.for_all
+                      (fun pid -> List.mem pid exported)
+                      (parent_impls id))
+                  impls
+              in
+              [%cassert_opt_span] None (ready <> [])
+                "Mutually recursive trait implementations are not supported";
+              List.iter (export_trait_impl ~is_rec:false) ready;
+              export_impls (ready @ exported) rest)
+          in
+          if config.extract_trait_impls && config.extract_transparent then
+            export_impls [] impl_ids
   in
 
   List.iter
@@ -1498,6 +1603,77 @@ let extract_file (config : gen_config) (ctx : gen_ctx) (fi : extract_file_info)
   (* Flush and close the file *)
   close_out out
 
+(** Compute the functions which the functions of the groups of mutually
+    recursive functions and trait implementations call with a trait
+    implementation of their group (see [closure_mono_funs] in
+    {!ExtractBase.extraction_ctx}) *)
+let compute_closure_mono_funs (crate : crate)
+    (trans_funs : pure_fun_translation FunDeclId.Map.t) : FunDeclId.TreeSet.t =
+  let funs = ref FunDeclId.TreeSet.empty in
+  let visit_group (ids : Charon.Meta.item_id list) : unit =
+    let impls =
+      List.filter_map
+        (fun (id : Charon.Meta.item_id) ->
+          match id with
+          | IdTraitImpl id -> Some id
+          | IdFun _ | IdType _ | IdTraitDecl _ | IdGlobal _ -> None)
+        ids
+    in
+    let refers_to_impls (generics : Pure.generic_args) : bool =
+      let visitor =
+        object
+          inherit [_] Pure.iter_expr as super
+
+          method! visit_TraitImpl env id generics =
+            if List.mem id impls then raise Utils.Found
+            else super#visit_TraitImpl env id generics
+        end
+      in
+      try
+        visitor#visit_generic_args () generics;
+        false
+      with Utils.Found -> true
+    in
+    let visitor =
+      object
+        inherit [_] Pure.iter_expr as super
+
+        method! visit_qualif env q =
+          (match q.id with
+          | FunOrOp (Fun (FromLlbc (FunId fid, None)))
+            when refers_to_impls q.generics ->
+              funs := FunDeclId.TreeSet.add fid !funs
+          | _ -> ());
+          super#visit_qualif env q
+      end
+    in
+    List.iter
+      (fun (id : Charon.Meta.item_id) ->
+        match id with
+        | IdFun fid -> (
+            match FunDeclId.Map.find_opt fid trans_funs with
+            | None -> ()
+            | Some trans ->
+                List.iter
+                  (fun (f : Pure.fun_decl) ->
+                    Option.iter
+                      (fun (body : Pure.fun_body) ->
+                        visitor#visit_texpr () body.body)
+                      f.body)
+                  ((trans.f :: trans.loops) @ trans.bodies))
+        | IdTraitImpl _ | IdType _ | IdTraitDecl _ | IdGlobal _ -> ())
+      ids
+  in
+  List.iter
+    (fun (g : declaration_group) ->
+      match g with
+      | MixedGroup ids ->
+          let ids = Charon.GAstUtils.g_declaration_group_to_list ids in
+          if LlbcAstUtils.mixed_group_is_funs_and_impls ids then visit_group ids
+      | _ -> ())
+    (Option.get crate.declarations);
+  !funs
+
 let extract_translated_crate (filename : string) (dest_dir : string)
     (subdir : string option) (crate : crate) (trans_ctx : trans_ctx)
     (trans_crate : translated_crate) (extracted_opaque : bool ref) : unit =
@@ -1587,6 +1763,8 @@ let extract_translated_crate (filename : string) (dest_dir : string)
       funs_filter_trait_clauses_map = Pure.FunDeclId.TreeMap.empty;
       trait_impls_filter_type_args_map = Pure.TraitImplId.TreeMap.empty;
       trait_impls_filter_trait_clauses_map = Pure.TraitImplId.TreeMap.empty;
+      inline_trait_impls = Pure.TraitImplId.TreeSet.empty;
+      closure_mono_funs = compute_closure_mono_funs crate trans_funs;
       extracted_opaque;
     }
   in

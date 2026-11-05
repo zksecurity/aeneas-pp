@@ -258,7 +258,11 @@ let analyze_module (m : crate) (funs_map : fun_decl FunDeclId.Map.t) :
     }
   in
 
-  let analyze_fun_decl_group (funs : fun_decl_id list) : unit =
+  (* [recursive]: the functions are known to be mutually recursive, for
+     instance because the recursion goes through trait implementations (see
+     the [MixedGroup] case below) *)
+  let analyze_fun_decl_group ~(recursive : bool) (funs : fun_decl_id list) :
+      unit =
     (* Retrieve the function declarations *)
     let funs =
       List.map
@@ -269,7 +273,31 @@ let analyze_module (m : crate) (funs_map : fun_decl FunDeclId.Map.t) :
     let fun_ids = List.map (fun (d : fun_decl) -> d.def_id) funs in
     let fun_ids = FunDeclId.TreeSet.of_list fun_ids in
     let info = analyze_fun_decls fun_ids funs in
+    let info =
+      if recursive then { info with is_rec = true; can_diverge = true }
+      else info
+    in
     List.iter (fun (f : fun_decl) -> register_fun_decl_info f.def_id info) funs
+  in
+
+  let analyze_fun_decl_group_or_report ~(recursive : bool)
+      (funs : fun_decl_id list) : unit =
+    try analyze_fun_decl_group ~recursive funs
+    with CFailure error ->
+      let fmt_env = Charon.Print.crate_to_fmt_env m in
+      let decl_id_to_string (id : FunDeclId.id) : string =
+        match FunDeclId.Map.find_opt id m.fun_decls with
+        | None -> show_fun_decl_id id
+        | Some d ->
+            Charon.Print.name_to_string fmt_env d.item_meta.name
+            ^ " ("
+            ^ span_to_string d.item_meta.span
+            ^ ")"
+      in
+      let decls = String.concat "\n" (List.map decl_id_to_string funs) in
+      [%save_error_opt_span] error.span
+        ("Encountered an error when analyzing the following function \
+          declaration group:\n" ^ decls ^ "\n\nInitial error:\n" ^ error.msg)
   in
 
   let rec analyze_decl_groups (decls : declaration_group list) : unit =
@@ -278,37 +306,30 @@ let analyze_module (m : crate) (funs_map : fun_decl FunDeclId.Map.t) :
     | (TypeGroup _ | TraitDeclGroup _ | TraitImplGroup _ | GlobalGroup _)
       :: decls' -> analyze_decl_groups decls'
     | FunGroup decl :: decls' ->
-        (try analyze_fun_decl_group (g_declaration_group_to_list decl)
-         with CFailure error ->
-           let fmt_env = Charon.Print.crate_to_fmt_env m in
-           let decls = Charon.GAstUtils.g_declaration_group_to_list decl in
-           let decl_id_to_string (id : FunDeclId.id) : string =
-             match FunDeclId.Map.find_opt id m.fun_decls with
-             | None -> show_fun_decl_id id
-             | Some d ->
-                 Charon.Print.name_to_string fmt_env d.item_meta.name
-                 ^ " ("
-                 ^ span_to_string d.item_meta.span
-                 ^ ")"
-           in
-           let decls = List.map decl_id_to_string decls in
-           let decls = String.concat "\n" decls in
-           [%save_error_opt_span] error.span
-             ("Encountered an error when analyzing the following function \
-               declaration group:\n" ^ decls ^ "\n\nInitial error:\n"
-            ^ error.msg));
+        analyze_fun_decl_group_or_report ~recursive:false
+          (g_declaration_group_to_list decl);
         analyze_decl_groups decls'
     | MixedGroup ids :: decls' ->
-        (* The functions of the group get no information: only the functions
-           using them fail, as when analyzing a function group fails *)
-        [%save_error_opt_span] None
-          ("Mixed declaration groups (which contain both type and function \
-            declarations or functions and traits, for instance) are not \
-            supported yet: ["
-          ^ String.concat ", "
-              (List.map Charon.Print.item_id_to_string
-                 (Charon.GAstUtils.g_declaration_group_to_list ids))
-          ^ "]");
+        let ids = Charon.GAstUtils.g_declaration_group_to_list ids in
+        (* See {!LlbcAstUtils.mixed_group_is_funs_and_impls} *)
+        let funs =
+          List.filter_map
+            (fun (id : Charon.Meta.item_id) ->
+              match id with
+              | IdFun id -> Some id
+              | IdTraitImpl _ | IdType _ | IdTraitDecl _ | IdGlobal _ -> None)
+            ids
+        in
+        if LlbcAstUtils.mixed_group_is_funs_and_impls ids then
+          analyze_fun_decl_group_or_report ~recursive:true funs
+        else
+          (* The functions of the group get no information: only the functions
+             using them fail, as when analyzing a function group fails *)
+          [%save_error_opt_span] None
+            ("Mixed declaration groups which contain other declarations than \
+              functions and trait implementations are not supported yet: ["
+            ^ String.concat ", " (List.map Charon.Print.item_id_to_string ids)
+            ^ "]");
         analyze_decl_groups decls'
   in
 

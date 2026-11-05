@@ -59,8 +59,17 @@ let compute_contexts (crate : crate) : decls_ctx =
   let type_decls_groups, _, _, _, _, mixed_groups =
     split_declarations_to_group_maps declarations
   in
-  (* Check if there are mixed groups: if there are, we report an error
-     and ignore those. *)
+  (* Check if there are unsupported mixed groups (see
+     {!LlbcAstUtils.mixed_group_is_funs_and_impls}): if there are, we report an
+     error and ignore those. *)
+  let mixed_groups =
+    List.filter
+      (fun g ->
+        not
+          (LlbcAstUtils.mixed_group_is_funs_and_impls
+             (g_declaration_group_to_list g)))
+      mixed_groups
+  in
   (if mixed_groups <> [] then
      (* We detected mixed groups: print a nice error message *)
      let item_id_to_string (id : item_id) : string =

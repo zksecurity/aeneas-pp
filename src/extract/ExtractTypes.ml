@@ -332,6 +332,13 @@ let extract_ty_errors (fmt : F.formatter) : unit =
   | Lean -> F.pp_print_string fmt "sorry"
   | HOL4 -> F.pp_print_string fmt "(* ERROR: could not generate the code *)"
 
+(** Extract a reference to a trait implementation as an inline record (see
+    [inline_trait_impls] in {!ExtractBase.extraction_ctx}). Defined in
+    [Extract], which depends on this module. *)
+let extract_inline_trait_impl :
+    (extraction_ctx -> F.formatter -> trait_impl_id -> unit) ref =
+  ref (fun _ _ _ -> [%internal_error_opt_span] None)
+
 let rec extract_ty (span : Meta.span) (ctx : extraction_ctx) (fmt : F.formatter)
     (no_params_tys : TypeDeclId.TreeSet.t) ~(inside : bool) (ty : ty) : unit =
   [%ldebug "ty: " ^ ty_to_string ctx ty];
@@ -623,6 +630,13 @@ and extract_trait_instance_id (span : Meta.span) (ctx : extraction_ctx)
           F.pp_print_space fmt ();
           F.pp_print_string fmt "/- Unexpected occurrence of Self -/"
       | _ -> F.pp_print_string fmt "ERROR(\"Unexpected Self\")")
+  | TraitImpl (id, generics) when TraitImplId.TreeSet.mem id ctx.inline_trait_impls
+    ->
+      (* The implementations of a group of mutually recursive functions and
+         implementations have no generic parameters (we check this when
+         extracting them) *)
+      [%sanity_check] span (generics = empty_generic_args);
+      !extract_inline_trait_impl ctx fmt id
   | TraitImpl (id, generics) ->
       let name = ctx_get_trait_impl span id ctx in
       (* Lookup the the information about the explicit/implicit parameters. *)

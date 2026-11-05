@@ -319,3 +319,17 @@ let compute_body_size (b : body) : int =
 (** Compute the size of a function - we count the number of statements and
     blocks *)
 let compute_fun_decl_size (f : fun_decl) : int = compute_body_size f.body
+
+(** Whether a group of mixed mutually recursive declarations only contains
+    functions and trait implementations (typically, the implementations of the
+    closure traits for closures calling the functions which create them). We
+    support those groups: the functions form a group of mutually recursive
+    functions, the recursion of which may go through the trait implementations.
+*)
+let mixed_group_is_funs_and_impls (ids : Charon.Meta.item_id list) : bool =
+  List.for_all
+    (fun (id : Charon.Meta.item_id) ->
+      match id with
+      | IdFun _ | IdTraitImpl _ -> true
+      | IdType _ | IdTraitDecl _ | IdGlobal _ -> false)
+    ids

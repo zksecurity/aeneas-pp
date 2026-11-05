@@ -620,6 +620,19 @@ type extraction_ctx = {
       (** Set to true if at some point we extract a definition which is opaque,
           meaning we generate an axiom. If yes, and in case the user does not
           use the option [-split-files] we suggest it to the user. *)
+  inline_trait_impls : TraitImplId.TreeSet.t;
+      (** The trait implementations which we refer to with inline records:
+          when extracting a group of mutually recursive functions and trait
+          implementations (see {!LlbcAstUtils.mixed_group_is_funs_and_impls}),
+          the functions refer to the implementations of the group this way, as
+          the named implementations can only be defined after the functions. *)
+  closure_mono_funs : FunDeclId.TreeSet.t;
+      (** The functions which the functions of a group of mutually recursive
+          functions and trait implementations call with one of the inline
+          records of the group (see [inline_trait_impls]): for Lean, we prove
+          that they are monotone in their closure dictionaries, so that
+          [partial_fixpoint] can see through them (see [derive_closure_mono] in
+          the Lean library). *)
 }
 
 let extraction_ctx_to_fmt_env (ctx : extraction_ctx) : PrintPure.fmt_env =

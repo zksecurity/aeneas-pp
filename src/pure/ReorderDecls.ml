@@ -22,15 +22,31 @@ module FunIdSet = Collections.MakeSet (FunIdOrderedType)
 
 (** Compute the dependencies of a function body, taking only into account the
     *custom* (i.e., not builtin) functions ids (ignoring operations, types,
-    globals, etc.). *)
-let compute_body_fun_deps (e : texpr) : FunIdSet.t =
+    globals, etc.).
+
+    [inline_impl_funs] maps the trait implementations which the body refers to
+    with inline records (see [inline_trait_impls] in
+    {!ExtractBase.extraction_ctx}) to the functions they contain. *)
+let compute_body_fun_deps (inline_impl_funs : FunDeclId.id list TraitImplId.Map.t)
+    (e : texpr) : FunIdSet.t =
   let ids = ref FunIdSet.empty in
 
   let visitor =
-    object
-      inherit [_] iter_expr
+    object (self)
+      inherit [_] iter_expr as super
 
-      method! visit_qualif _ id =
+      method! visit_TraitImpl env impl_id generics =
+        (match TraitImplId.Map.find_opt impl_id inline_impl_funs with
+        | None -> ()
+        | Some fids ->
+            List.iter
+              (fun fid -> ids := FunIdSet.add { def_id = fid; lp_id = None } !ids)
+              fids);
+        super#visit_TraitImpl env impl_id generics
+
+      method! visit_qualif env id =
+        (* The generics may refer to trait implementations *)
+        self#visit_generic_args env id.generics;
         match id.id with
         | FunOrOp (Unop _ | Binop _)
         | Global _
@@ -65,8 +81,9 @@ type function_group = {
 (** Group mutually recursive functions together and reorder the groups so that
     if a group B depends on a group A then A comes before B, while trying to
     respect the original order as much as possible. *)
-let group_reorder_fun_decls (decls : fun_decl list) :
-    (bool * fun_decl list) list =
+let group_reorder_fun_decls
+    (inline_impl_funs : FunDeclId.id list TraitImplId.Map.t)
+    (decls : fun_decl list) : (bool * fun_decl list) list =
   let module IntMap = MakeMap (OrderedInt) in
   let get_fun_id (decl : fun_decl) : fun_id =
     { def_id = decl.def_id; lp_id = decl.loop_id }
@@ -89,7 +106,7 @@ let group_reorder_fun_decls (decls : fun_decl list) :
         match decl.body with
         | None -> (id, FunIdSet.empty)
         | Some body ->
-            let deps = compute_body_fun_deps body.body in
+            let deps = compute_body_fun_deps inline_impl_funs body.body in
             (* Restrict the set dependencies *)
             let deps = FunIdSet.inter deps ids in
             (id, deps))
