@@ -578,8 +578,8 @@ let eval_function_call_symbolic_inst (span : Meta.span) (func : fn_ptr)
 (** Helper: introduce a fresh symbolic value for a global.
 
     We return the value as well as its type with regions. Note that we currently
-    only support globals whose (instantiated) type doesn't contain regions,
-    except for static shared references. *)
+    only support globals whose (instantiated) type contains no regions but the
+    static region. *)
 let eval_global_as_fresh_symbolic_value (span : Meta.span)
     (gref : global_decl_ref) (ctx : eval_ctx) :
     eval_ctx * tvalue * rty * (SA.expr -> SA.expr) =
@@ -613,18 +613,19 @@ let eval_global_as_fresh_symbolic_value (span : Meta.span)
       let cc = S.synthesize_global_eval gref sval in
       (ctx, borrow, TRef (RStatic, inner_ty, RShared), cc)
   | _ ->
-      [%cassert] span (ty_no_regions global.ty) "Unimplemented";
-      (* Instantiate the type  *)
+      [%cassert] span (ty_only_static_regions global.ty) "Unimplemented";
+      (* Instantiate the type, keeping its static regions *)
       let generics = Subst.generic_args_erase_regions generics in
       let subst =
         [%add_loc] Subst.make_subst_from_generics (Some span) global.generics
           generics Self
       in
-      let ty = Subst.erase_regions_substitute_types subst global.ty in
-      [%cassert] span (ty_no_regions ty) "Unimplemented";
+      let ty = Charon.Substitute.erase_regions_substitute_types subst global.ty in
+      [%cassert] span (ty_only_static_regions ty) "Unimplemented";
       let sval = mk_fresh_symbolic_value span ctx ty in
-      (* The value may contain static borrows (hidden in ADTs, for instance
-         [struct S(&'static u8)]): we need to project their loans *)
+      (* The value may contain static borrows (for instance [[&'static str; 2]],
+         or hidden in ADTs as in [struct S(&'static u8)]): we need to project
+         their loans *)
       let ctx = push_static_loans_proj_for_symbolic_value span ctx sval in
       let cc =
         match Charon.GAstUtils.init_fun_id_of_global global with
