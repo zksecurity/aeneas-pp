@@ -745,6 +745,11 @@ let freshen_regions_ended_in_other (span : Meta.span) (fresh_abs_kind : abs_kind
           SymbolicValueId.Map.add sid (ctx.fresh_symbolic_value_id ()) m)
         svs SymbolicValueId.Map.empty
     in
+    [%ldebug
+      "- renamed regions: "
+      ^ RegionId.Map.to_string None RegionId.to_string rsubst
+      ^ "\n- renamed symbolic values: "
+      ^ SymbolicValueId.Map.to_string None SymbolicValueId.to_string ssubst];
     let env =
       Substitute.env_subst_ids
         {
