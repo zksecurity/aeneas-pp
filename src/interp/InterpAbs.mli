@@ -251,9 +251,16 @@ val reorder_fresh_abs : Meta.span -> bool -> AbsId.Set.t -> eval_ctx -> eval_ctx
 (** Project a context to only preserve the values appearing on the left or the
     values appearing on the right.
 
-    The [proj_marker] must be [PLeft] or [PRight]. *)
+    The [proj_marker] must be [PLeft] or [PRight]. Non-fixed abstractions which
+    become empty are removed, except the [receiving_aids], which the caller
+    fills afterwards. *)
 val project_context :
-  Meta.span -> AbsId.Set.t -> proj_marker -> eval_ctx -> eval_ctx
+  Meta.span ->
+  AbsId.Set.t ->
+  receiving_aids:AbsId.Set.t ->
+  proj_marker ->
+  eval_ctx ->
+  eval_ctx
 
 (** Introduce a continuation expression to a region abstraction.
 

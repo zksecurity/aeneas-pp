@@ -1821,8 +1821,14 @@ and match_ctx_with_target_aux (config : config) (span : Meta.span)
            merge_seq)];
 
   (* Project the context to only preserve the right part, which corresponds to the
-     target *)
-  let joined_ctx = project_context span preserved_aids PRight joined_ctx in
+     target. The abstractions which receive shared borrows on the right may
+     contain only left values. *)
+  let receiving_aids =
+    AbsId.Set.of_list (List.map (fun (aid, _, _, _, _) -> aid) add_borrows_seq)
+  in
+  let joined_ctx =
+    project_context span preserved_aids ~receiving_aids PRight joined_ctx
+  in
   let joined_symbolic_to_tgt_value =
     SymbolicValueId.Map.map (fun (_, x) -> x) join_info.symbolic_to_value
   in

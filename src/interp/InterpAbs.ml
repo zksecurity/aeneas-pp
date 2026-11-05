@@ -2657,7 +2657,8 @@ type proj_ctx = {
 }
 
 let project_context (span : Meta.span) (fixed_aids : AbsId.Set.t)
-    (pm : proj_marker) (ctx : eval_ctx) : eval_ctx =
+    ~(receiving_aids : AbsId.Set.t) (pm : proj_marker) (ctx : eval_ctx) :
+    eval_ctx =
   [%cassert] span (pm = PLeft || pm = PRight) "Invalid input";
   let project_left = pm = PLeft in
 
@@ -2830,7 +2831,22 @@ let project_context (span : Meta.span) (fixed_aids : AbsId.Set.t)
         else
           let keep_value (e : tavalue) : bool = not (is_aignored e.value) in
           let avalues = List.filter keep_value abs.avalues in
-          if avalues = [] then None else Some (EAbs { abs with avalues })
+          if avalues <> [] then Some (EAbs { abs with avalues })
+          else if AbsId.Set.mem abs.abs_id receiving_aids then
+            (* The abstraction has no counterpart on this side: it is introduced
+               to hold the shared borrows the caller adds, which give nothing
+               back *)
+            let cont =
+              Option.map
+                (fun _ ->
+                  {
+                    output = Some (mk_etuple ~borrow_proj:true []);
+                    input = Some (mk_etuple ~borrow_proj:false []);
+                  })
+                abs.cont
+            in
+            Some (EAbs { abs with avalues; cont })
+          else None
     | EBinding _ | EFrame -> Some e
   in
   let env = List.filter_map update_binding ctx.env in

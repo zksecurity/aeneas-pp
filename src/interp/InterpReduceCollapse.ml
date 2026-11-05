@@ -1640,8 +1640,7 @@ let collapse_ctx_following_sequence (span : Meta.span)
   (* Update the ids used in the sequence of shared borrows *)
   let shared_borrows_seq =
     List.map
-      (fun (abs_id, i, pm, bid, ty) ->
-        (AbsId.Map.find abs_id !nabs_map, i, pm, bid, ty))
+      (fun (abs_id, i, pm, bid, ty) -> (get_id abs_id, i, pm, bid, ty))
       shared_borrows_seq
   in
   let ctx = add_shared_borrows span shared_borrows_seq ctx in
