@@ -289,8 +289,45 @@ def Engine.nat_value
     ok (some i1)
   | Slot.Other => ok none
 
+/-- [join_live_borrows::{join_live_borrows::Engine<'a>}::both_nat::{closure}]
+    Source: 'tests/src/join-live-borrows.rs', lines 129:21-129:77 -/
+@[reducible]
+def Engine.both_nat.closure := Unit
+
+/-- [join_live_borrows::{join_live_borrows::Engine<'a>}::both_nat::{impl core::ops::function::Fn<(&'_3 join_live_borrows::Engine<'_2>, usize), bool> for join_live_borrows::{join_live_borrows::Engine<'a>}::both_nat::{closure}<'a, '_1, '_2>}::call]:
+    Source: 'tests/src/join-live-borrows.rs', lines 129:21-129:77 -/
+def
+  Engine.both_nat.closure.Insts.CoreOpsFunctionFnPairShared2EngineUsizeBool.call
+  (c : Engine.both_nat.closure) (tupled_args : (Engine × Std.Usize)) :
+  Result Bool
+  := do
+  let (e, v) := tupled_args
+  let s ← Engine.slot e v
+  match s with
+  | Slot.Nat _ => ok true
+  | Slot.Other => ok false
+
+/-- [join_live_borrows::{join_live_borrows::Engine<'a>}::both_nat]:
+    Source: 'tests/src/join-live-borrows.rs', lines 128:4-131:5
+    Visibility: public -/
+def Engine.both_nat
+  (self : Engine) (x : Std.Usize) (y : Std.Usize) :
+  Result (Bool × Engine × (Engine → Engine))
+  := do
+  let b ←
+    Engine.both_nat.closure.Insts.CoreOpsFunctionFnPairShared2EngineUsizeBool.call
+      () (self, x)
+  let b1 ←
+    if b
+    then
+      Engine.both_nat.closure.Insts.CoreOpsFunctionFnPairShared2EngineUsizeBool.call
+        () (self, y)
+    else ok false
+  let back'a := fun (self1 : Engine) => { self with s := self1.s }
+  ok (b1, self, back'a)
+
 /-- [join_live_borrows::nat_or_zero]:
-    Source: 'tests/src/join-live-borrows.rs', lines 125:0-130:1
+    Source: 'tests/src/join-live-borrows.rs', lines 134:0-139:1
     Visibility: public -/
 def nat_or_zero (n : Option Std.U64) : Result Std.U64 := do
   match n with
@@ -298,7 +335,7 @@ def nat_or_zero (n : Option Std.U64) : Result Std.U64 := do
   | some n1 => ok n1
 
 /-- [join_live_borrows::test_nat_value]:
-    Source: 'tests/src/join-live-borrows.rs', lines 133:0-143:1
+    Source: 'tests/src/join-live-borrows.rs', lines 142:0-153:1
     Visibility: public -/
 def test_nat_value : Result Unit := do
   let v ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.U64) 7#u64
@@ -310,6 +347,11 @@ def test_nat_value : Result Unit := do
   let b ← nat_or_zero o1
   massert (a = 7#u64)
   massert (b = 0#u64)
+  let (b1, e, _) ←
+    Engine.both_nat { s := { nats := v }, slots := slots1 } 0#usize 0#usize
+  massert b1
+  let (b2, _, _) ← Engine.both_nat e 0#usize 1#usize
+  massert (¬ b2)
 
 /- Unit test for [join_live_borrows::test_nat_value] -/
 #guard (test_nat_value).reducesTo ()

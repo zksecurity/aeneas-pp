@@ -122,6 +122,15 @@ impl<'a> Engine<'a> {
     }
 }
 
+impl<'a> Engine<'a> {
+    // The closure's input abstractions hold meta-values which differ between
+    // the branches of its match.
+    pub fn both_nat(&mut self, x: usize, y: usize) -> bool {
+        let is_nat = |en: &Self, v: usize| matches!(en.slot(v), Slot::Nat(_));
+        is_nat(self, x) && is_nat(self, y)
+    }
+}
+
 pub fn nat_or_zero(n: Option<&u64>) -> u64 {
     match n {
         Some(n) => *n,
@@ -136,8 +145,9 @@ pub fn test_nat_value() {
     let mut slots = Vec::new();
     slots.push(Slot::Nat(0));
     slots.push(Slot::Other);
-    let e = Engine { s: &mut store, slots };
+    let mut e = Engine { s: &mut store, slots };
     let a = nat_or_zero(e.nat_value(0));
     let b = nat_or_zero(e.nat_value(1));
     assert!(a == 7 && b == 0);
+    assert!(e.both_nat(0, 0) && !e.both_nat(0, 1));
 }

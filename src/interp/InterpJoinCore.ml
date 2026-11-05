@@ -888,6 +888,7 @@ let compute_fixed_abs_ids (ctx0 : eval_ctx) (ctx1 : eval_ctx) : AbsId.Set.t =
          might remove/add continuations while the presence/absence shouldn't
          have an impact on the way we match/unify contexts. We also ignore the
          parents: a join gives fresh ids to the parents which are not fixed. *)
-      { a0 with cont = None; parents = AbsId.Set.empty }
-      = { a1 with cont = None; parents = AbsId.Set.empty })
+      equal_abs
+        { a0 with cont = None; parents = AbsId.Set.empty }
+        { a1 with cont = None; parents = AbsId.Set.empty })
     abs_ids
