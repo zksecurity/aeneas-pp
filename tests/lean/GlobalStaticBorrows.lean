@@ -21,29 +21,29 @@ set_option maxRecDepth 2048
 namespace global_static_borrows
 
 /-- [global_static_borrows::NAMES]
-    Source: 'tests/src/global-static-borrows.rs', lines 5:0-5:37 -/
+    Source: 'tests/src/global-static-borrows.rs', lines 6:0-6:37 -/
 @[global_simps, irreducible]
 def NAMES : Array Str 2#usize := Array.make 2#usize [ toStr "a", toStr "bc" ]
 
 /-- [global_static_borrows::LIMITS]
-    Source: 'tests/src/global-static-borrows.rs', lines 6:0-6:35 -/
+    Source: 'tests/src/global-static-borrows.rs', lines 7:0-7:35 -/
 @[global_simps, irreducible]
 def LIMITS : Array Std.U32 2#usize := Array.make 2#usize [ 3#u32, 7#u32 ]
 
 /-- [global_static_borrows::name]:
-    Source: 'tests/src/global-static-borrows.rs', lines 8:0-10:1 -/
+    Source: 'tests/src/global-static-borrows.rs', lines 9:0-11:1 -/
 def «name» (i : Std.Usize) : Result Str := do
   Array.index_usize NAMES i
 
 /-- [global_static_borrows::limit_sum]:
-    Source: 'tests/src/global-static-borrows.rs', lines 12:0-14:1 -/
+    Source: 'tests/src/global-static-borrows.rs', lines 13:0-15:1 -/
 def limit_sum : Result Std.U32 := do
   let i ← Array.index_usize LIMITS 0#usize
   let i1 ← Array.index_usize LIMITS 1#usize
   i + i1
 
 /-- [global_static_borrows::test_limit_sum]:
-    Source: 'tests/src/global-static-borrows.rs', lines 17:0-19:1 -/
+    Source: 'tests/src/global-static-borrows.rs', lines 18:0-20:1 -/
 def test_limit_sum : Result Unit := do
   let i ← limit_sum
   massert (i = 10#u32)
