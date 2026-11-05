@@ -745,6 +745,31 @@ let end_aproj_borrows (span : Meta.span) (ended_regions : region_set)
     ~include_owned:true ~include_outlive:true ~update_shared:None ~update_mut
     ~update_emut ended_regions proj ctx
 
+(** End the borrow projectors over a symbolic value whose type contains no
+    mutable borrows, for the regions of an abstraction we end. The shared
+    borrows give the value back unchanged: we don't introduce a fresh symbolic
+    value, and the loan projectors over the symbolic value (which may have other
+    borrowers) are left as they are. *)
+let end_shared_aproj_borrows (span : Meta.span) (ended_regions : region_set)
+    (proj : symbolic_proj) (ctx : eval_ctx) : eval_ctx =
+  [%sanity_check] span
+    (not (ty_has_mut_borrows ctx.type_ctx.type_infos proj.proj_ty));
+  let sv : symbolic_value = { sv_id = proj.sv_id; sv_ty = proj.proj_ty } in
+  let mvalues : ended_proj_borrow_meta =
+    { consumed = proj.sv_id; given_back = sv }
+  in
+  let update_mut ~owned ~outlive (_abs : abs) (aproj : aproj_borrows) : aproj =
+    [%sanity_check] span (owned && not outlive);
+    AEndedProjBorrows { mvalues; loans = aproj.loans }
+  in
+  let update_emut ~owned ~outlive (_abs : abs) (aproj : eproj_borrows) : eproj =
+    [%sanity_check] span (owned && not outlive);
+    EEndedProjBorrows { mvalues; loans = aproj.loans }
+  in
+  update_intersecting_aproj_borrows span ~fail_if_unchanged:true
+    ~include_owned:true ~include_outlive:false ~update_shared:None ~update_mut
+    ~update_emut ended_regions proj ctx
+
 (** Give back a *modified* symbolic value. *)
 let give_back_symbolic_value (_config : config) (span : Meta.span)
     (ended_regions : region_set) (proj : symbolic_proj) (nsv : symbolic_value)
@@ -1512,6 +1537,15 @@ and end_abs_borrows (config : config) (span : Meta.span) ~(snapshots : bool)
       (* Reexplore *)
       end_abs_borrows config span ~snapshots chain abs_id level ctx
   (* There are symbolic borrows: end them, then re-explore *)
+  | FoundAProjBorrows aproj
+    when not (ty_has_mut_borrows ctx.type_ctx.type_infos aproj.proj.proj_ty)
+    ->
+      [%ltrace
+        "found shared aproj borrows: "
+        ^ aproj_to_string ctx (AProjBorrows aproj)];
+      let ctx = end_shared_aproj_borrows span abs.regions.owned aproj.proj ctx in
+      (* Reexplore *)
+      end_abs_borrows config span ~snapshots chain abs_id level ctx
   | FoundAProjBorrows aproj ->
       [%ltrace
         "found aproj borrows: " ^ aproj_to_string ctx (AProjBorrows aproj)];
@@ -2332,6 +2366,12 @@ let abs_mut_borrows_loans_in_fixed span (ctx : eval_ctx)
       method! visit_aproj env proj =
         super#visit_aproj env proj;
         match proj with
+        | AProjBorrows proj
+          when not (ty_has_mut_borrows ctx.type_ctx.type_infos proj.proj.proj_ty)
+          ->
+            (* Ending it doesn't update the loan projectors (see
+               {!end_shared_aproj_borrows}) *)
+            ()
         | AProjBorrows proj ->
             (visit_proj_loans proj.proj)#visit_eval_ctx None ctx
         | AProjLoans _ | AEndedProjLoans _ | AEndedProjBorrows _ | AEmpty -> ()
