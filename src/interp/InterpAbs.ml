@@ -661,6 +661,11 @@ let tavalue_split_marker (span : Meta.span) (ctx : eval_ctx) (av : tavalue) :
             { av with value = ABorrow (ASharedBorrow (pm, bid, sid)) }
           in
           mk_opt_split pm mk_value
+      | AProjSharedBorrow (pm, asb) ->
+          let mk_value pm =
+            { av with value = ABorrow (AProjSharedBorrow (pm, asb)) }
+          in
+          mk_opt_split pm mk_value
       | _ -> [%internal_error] span)
   | ALoan lc -> (
       match lc with
@@ -852,13 +857,34 @@ let merge_abstractions_merge_loan_borrow_pairs (span : Meta.span)
               in
               let keep = keep !left_avalues in
               if keep then push_right_avalue av else ()
+          | AProjSharedBorrow (pm, asb) ->
+              (* An observation of a shared loan of the left abstraction is
+                 absorbed, like a shared borrow. An observation of a mutable
+                 loan is kept: it doesn't stand for the borrow of the loan *)
+              let observes_left_shared_loan (asb : abstract_shared_borrow) =
+                match asb with
+                | AsbBorrow (bid, _) ->
+                    List.exists
+                      (fun (av : tavalue) ->
+                        match av.value with
+                        | ALoan (ASharedLoan (pm', bid', _, _)) ->
+                            pm = pm' && bid = bid'
+                        | _ -> false)
+                      !left_avalues
+                | AsbProjReborrows _ -> false
+              in
+              let asb =
+                List.filter (fun asb -> not (observes_left_shared_loan asb)) asb
+              in
+              if asb <> [] then
+                push_right_avalue
+                  { av with value = ABorrow (AProjSharedBorrow (pm, asb)) }
           | AEndedIgnoredMutBorrow { child; given_back; given_back_meta = _ } ->
               add_avalue given_back;
               add_avalue child
           | AIgnoredMutBorrow _
           | AEndedMutBorrow _
-          | AEndedSharedBorrow
-          | AProjSharedBorrow _ ->
+          | AEndedSharedBorrow ->
               [%ltrace "Unexpected avalue: " ^ tavalue_to_string ctx av];
               [%craise] span "Unreachable"
         end
@@ -955,6 +981,12 @@ let merge_abstractions_merge_markers (span : Meta.span)
       when id0 = id1 ->
         [%sanity_check] span (complementary_markers pm0 pm1);
         Some (merge_funs.merge_ashared_borrows id0 ty0 pm0 sid0 ty1 pm1 sid1)
+    | ( AProjSharedBorrow (pm0, [ AsbBorrow (id0, sid0) ]),
+        AProjSharedBorrow (pm1, [ AsbBorrow (id1, _) ]) )
+      when id0 = id1 && complementary_markers pm0 pm1 ->
+        (* The two observations of the same loan become one *)
+        Some
+          { value = ABorrow (AProjSharedBorrow (PNone, [ AsbBorrow (id0, sid0) ])); ty = ty0 }
     | _ ->
         (* Nothing to merge *)
         None
@@ -2424,6 +2456,8 @@ let reorder_loans_borrows_in_fresh_abs (span : Meta.span) (allow_markers : bool)
               [%cassert] span (is_aignored child.value) "Not supported yet";
               [%cassert] span (is_aignored given_back.value) "Not supported yet";
               false
+          | AProjSharedBorrow (_, []) -> false
+          | AProjSharedBorrow (_, [ AsbBorrow _ ]) -> true
           | AProjSharedBorrow _ -> [%craise] span "Not supported yet")
       | AIgnored _ -> false
     in
@@ -2463,7 +2497,10 @@ let reorder_loans_borrows_in_fresh_abs (span : Meta.span) (allow_markers : bool)
     *)
     let get_borrow_id (av : tavalue) : BorrowId.id =
       match av.value with
-      | ABorrow (AMutBorrow (pm, bid, _) | ASharedBorrow (pm, bid, _)) ->
+      | ABorrow
+          ( AMutBorrow (pm, bid, _)
+          | ASharedBorrow (pm, bid, _)
+          | AProjSharedBorrow (pm, [ AsbBorrow (bid, _) ]) ) ->
           [%sanity_check] span (allow_markers || pm = PNone);
           bid
       | _ -> [%craise] span ("Unexpected value: " ^ tavalue_to_string ctx av)
@@ -2698,11 +2735,13 @@ let project_context (span : Meta.span) (fixed_aids : AbsId.Set.t)
         | ASharedBorrow (pm, bid, sid) ->
             if preserve pm then ABorrow (ASharedBorrow (PNone, bid, sid))
             else AIgnored None
+        | AProjSharedBorrow (pm, asb) ->
+            if preserve pm then ABorrow (AProjSharedBorrow (PNone, asb))
+            else AIgnored None
         | AIgnoredMutBorrow _
         | AEndedMutBorrow _
         | AEndedSharedBorrow
-        | AEndedIgnoredMutBorrow _
-        | AProjSharedBorrow _ ->
+        | AEndedIgnoredMutBorrow _ ->
             (* Those do not have projection markers *)
             super#visit_ABorrow env bc
 
@@ -2840,12 +2879,14 @@ let add_abs_cont_to_abs span (ctx : eval_ctx) (abs : abs) (abs_fun : abs_fun) :
               EBorrow (EMutBorrow (pm, bid, mk_eignored None child.ty))
             in
             borrows := { value; ty } :: !borrows
-        | ASharedBorrow _ -> (* We ignore shared borrows *) ()
+        | ASharedBorrow _ | AProjSharedBorrow _ ->
+            (* We ignore shared borrows, and the projected shared borrows (they
+               observe values without giving anything back) *)
+            ()
         | AIgnoredMutBorrow _
         | AEndedMutBorrow _
         | AEndedSharedBorrow
-        | AEndedIgnoredMutBorrow _
-        | AProjSharedBorrow _ -> [%internal_error] span)
+        | AEndedIgnoredMutBorrow _ -> [%internal_error] span)
     | ASymbolic (pm, aproj) -> (
         match aproj with
         | AProjLoans { proj = { sv_id; proj_ty }; consumed; borrows } ->

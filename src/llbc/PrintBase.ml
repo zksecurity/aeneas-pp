@@ -464,8 +464,9 @@ module Values = struct
         ^ tavalue_to_string ~span ~with_ended env given_back
         ^ ")"
     | AEndedSharedBorrow -> "@ended_shared_borrow"
-    | AProjSharedBorrow sb ->
+    | AProjSharedBorrow (pm, sb) ->
         "@proj_shared_borrow(" ^ abstract_shared_borrows_to_string env sb ^ ")"
+        |> add_proj_marker pm
 
   (** An environment specific to abstraction expressions. We use it to properly
       print the bound variables: as it is hard to interpret deBruijn indices, we

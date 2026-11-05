@@ -104,7 +104,12 @@ let get_non_marked_shared_loans span (ctx : eval_ctx) :
   collect_loans#visit_eval_ctx RegionSet.empty ctx;
   (!non_marked_loans, !non_marked_projs)
 
-type borrow_or_proj = Borrow of borrow_id | Proj of region_set * symbolic_proj
+type borrow_or_proj =
+  | Borrow of borrow_id
+  | Proj of region_set * symbolic_proj
+  | ProjShared of region_set * abstract_shared_borrow
+      (** A projected shared borrow (see {!Values.AProjSharedBorrow}), with the
+          type of its projection *)
 
 (** Attempts to eliminate remaining markers over shared borrows.
 
@@ -127,6 +132,13 @@ type borrow_or_proj = Borrow of borrow_id | Proj of region_set * symbolic_proj
     Note that we do the same for symbolic values: if a symbolic projection only
     projects shared borrows and there exists the corresponding loan projector,
     then we eliminate the marker. *)
+(** Raised when collapsing the result of a join if an abstraction of one of the
+    joined contexts observes a loan (see {!Values.AProjSharedBorrow}) which the
+    other context doesn't make observable (for instance, the observation of a
+    mutable loan which the other context doesn't freeze). We end the
+    abstraction in its context, and join again. *)
+exception MarkedObservation of proj_marker * shared_borrow_id
+
 let eliminate_shared_borrow_markers (span : Meta.span)
     (shared_borrows_seq :
       (abs_id * int * proj_marker * borrow_or_proj * ty) list ref option)
@@ -153,6 +165,16 @@ let eliminate_shared_borrow_markers (span : Meta.span)
             in
             super#visit_ASharedBorrow env pm bid sid
 
+          method! visit_AProjSharedBorrow env pm asb =
+            let pm =
+              match asb with
+              | [ AsbBorrow (bid, _) ] when BorrowId.Set.mem bid non_marked_loans
+                ->
+                  PNone
+              | _ -> pm
+            in
+            super#visit_AProjSharedBorrow env pm asb
+
           method! visit_ASymbolic regions pm aproj =
             match aproj with
             | AProjBorrows { proj; loans = [] } ->
@@ -176,8 +198,8 @@ let eliminate_shared_borrow_markers (span : Meta.span)
       (* We need to register the borrows out of which we eliminate the markers.
          For now, we can't register the addition of shared borrows at arbitrary
          positions. TODO: generalize. *)
-      let update_avalue (regions : region_set) (offset : int ref) (aid : abs_id)
-          (i : int) (av : tavalue) : tavalue =
+      let update_avalue (regions : region_set) (offset : int ref)
+          (aid : abs_id) (i : int) (av : tavalue) : tavalue =
         match av.value with
         | ABorrow (ASharedBorrow (pm, bid, sid)) ->
             let pm =
@@ -197,6 +219,29 @@ let eliminate_shared_borrow_markers (span : Meta.span)
               else pm
             in
             { av with value = ABorrow (ASharedBorrow (pm, bid, sid)) }
+        | ABorrow (AProjSharedBorrow (pm, ([ AsbBorrow (bid, _) ] as asb))) ->
+            let pm =
+              if pm <> PNone && BorrowId.Set.mem bid non_marked_loans then (
+                (* Register the fact that we need to introduce a new projected
+                   shared borrow *)
+                let pm' =
+                  match pm with
+                  | PNone -> [%internal_error] span
+                  | PLeft -> PRight
+                  | PRight -> PLeft
+                in
+                shared_borrows :=
+                  ( aid,
+                    i + !offset,
+                    pm',
+                    ProjShared (regions, List.hd asb),
+                    av.ty )
+                  :: !shared_borrows;
+                offset := !offset + 1;
+                PNone)
+              else pm
+            in
+            { av with value = ABorrow (AProjSharedBorrow (pm, asb)) }
         | ASymbolic (pm, AProjBorrows { proj; loans = [] }) ->
             [%ldebug "Found symbolic borrow proj:\n" ^ tavalue_to_string ctx av];
             let pm =
@@ -210,9 +255,8 @@ let eliminate_shared_borrow_markers (span : Meta.span)
                   | PLeft -> PRight
                   | PRight -> PLeft
                 in
-                let _, ty, _ = ty_get_ref av.ty in
                 shared_borrows :=
-                  (aid, i + !offset, pm', Proj (regions, proj), ty)
+                  (aid, i + !offset, pm', Proj (regions, proj), av.ty)
                   :: !shared_borrows;
                 offset := !offset + 1;
                 PNone)
@@ -228,11 +272,13 @@ let eliminate_shared_borrow_markers (span : Meta.span)
         object
           inherit [_] map_eval_ctx
 
-          method! visit_abs regions abs =
+          method! visit_abs _ abs =
             {
               abs with
               avalues =
-                List.mapi (update_avalue regions (ref 0) abs.abs_id) abs.avalues;
+                List.mapi
+                  (update_avalue abs.regions.owned (ref 0) abs.abs_id)
+                  abs.avalues;
             }
         end
       in
@@ -1138,6 +1184,22 @@ let collapse_ctx_aux config (span : Meta.span)
     "ctx after reduce, collapse and eliminate_ended_markers:\n"
     ^ eval_ctx_to_string ctx];
 
+  (* The observations which remain marked can't be shared by the joined
+     contexts *)
+  (let visitor =
+     object
+       inherit [_] iter_eval_ctx as super
+
+       method! visit_AProjSharedBorrow env pm asb =
+         (match (pm, asb) with
+         | (PLeft | PRight), AsbBorrow (_, sid) :: _ ->
+             raise (MarkedObservation (pm, sid))
+         | _ -> ());
+         super#visit_AProjSharedBorrow env pm asb
+     end
+   in
+   visitor#visit_eval_ctx () ctx);
+
   (* Sanity check: there are no markers remaining *)
   [%sanity_check] span (not (eval_ctx_has_markers ctx));
 
@@ -1426,7 +1488,7 @@ let add_shared_borrows (span : Meta.span)
               }
           | Proj (regions', proj) ->
               [%sanity_check] span
-                (let proj = normalize_symbolic_proj abs.regions.owned proj in
+                (let proj = normalize_symbolic_proj regions' proj in
                  NormSymbProj.Set.mem proj loan_projs);
               (* Substitute the regions with the one we picked *)
               let proj_ty =
@@ -1447,6 +1509,30 @@ let add_shared_borrows (span : Meta.span)
               let value = ASymbolic (pm, AProjBorrows { proj; loans = [] }) in
               let ty = proj.proj_ty in
               { value; ty }
+          | ProjShared (regions', asb) ->
+              let asb =
+                match asb with
+                | AsbBorrow (bid, _) ->
+                    [%sanity_check] span (BorrowId.Set.mem bid loans);
+                    AsbBorrow (bid, !ctx.fresh_shared_borrow_id ())
+                | AsbProjReborrows _ -> [%internal_error] span
+              in
+              (* Substitute the regions with the one we picked *)
+              let ty =
+                let visitor =
+                  object
+                    inherit [_] map_ty
+
+                    method! visit_region _ r' =
+                      match r' with
+                      | (RVar (Free _) | RStatic) when RegionSet.mem r' regions'
+                        -> r
+                      | _ -> r'
+                  end
+                in
+                visitor#visit_ty () ty
+              in
+              { value = ABorrow (AProjSharedBorrow (pm, [ asb ])); ty }
         in
         nv :: avl
       else

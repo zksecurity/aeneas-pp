@@ -1009,6 +1009,45 @@ let join_ctxs (span : Meta.span) (fresh_abs_kind : abs_kind)
     Ok join_info
   with ValueMatchFailure e -> Error e
 
+(** The abstraction of a context containing the projected shared borrow of id
+    [sid] (see {!InterpReduceCollapse.MarkedObservation}) *)
+let observing_abs (sid : shared_borrow_id) (ctx : eval_ctx) : abs option =
+  let observes (abs : abs) =
+    let visitor =
+      object
+        inherit [_] iter_abs
+        method! visit_AsbBorrow _ _ sid' = if sid' = sid then raise Utils.Found
+      end
+    in
+    try
+      visitor#visit_abs () abs;
+      false
+    with Utils.Found -> true
+  in
+  List.find_map
+    (fun (e : env_elem) ->
+      match e with
+      | EAbs abs when observes abs -> Some abs
+      | _ -> None)
+    ctx.env
+
+(** End the abstraction of a context containing the projected shared borrow of
+    id [sid], with [end_abs]. The failure to do so is recoverable. *)
+let end_observing_abs (span : Meta.span) ~(recoverable : bool)
+    (sid : shared_borrow_id) (end_abs : AbsId.id -> eval_ctx -> eval_ctx * 'a)
+    (ctx : eval_ctx) : eval_ctx * 'a =
+  match observing_abs sid ctx with
+  | Some abs when abs.can_end ->
+      let ctx, x = end_abs abs.abs_id ctx in
+      (* Make sure we made progress *)
+      [%cassert_recover] recoverable span
+        (observing_abs sid ctx = None)
+        "Could not end the abstraction of an observation";
+      (ctx, x)
+  | _ ->
+      [%craise_recover] recoverable span
+        "Could not end the abstraction of an observation"
+
 let join_ctxs_list (config : config) (span : Meta.span)
     (fresh_abs_kind : abs_kind) ?(preprocess_first_ctx : bool = true)
     ~(recoverable : bool) ~(with_abs_conts : bool) (ctxl : eval_ctx list) :
@@ -1068,7 +1107,7 @@ let join_ctxs_list (config : config) (span : Meta.span)
         in
         join_one_aux ctx
   in
-  let join_one (ctx : eval_ctx) : eval_ctx =
+  let rec join_one (ctx : eval_ctx) : eval_ctx =
     [%ltrace
       "join_one: initial ctx:\n" ^ eval_ctx_to_string ~span:(Some span) ctx];
 
@@ -1076,15 +1115,31 @@ let join_ctxs_list (config : config) (span : Meta.span)
     let ctx = preprocess_ctx ctx in
 
     (* Join the two contexts  *)
+    let joined_ctx0 = !joined_ctx in
     let ctx1 = join_one_aux ctx in
     [%ltrace
       "join_one: after join:\n"
       ^ eval_ctx_to_string ~span:(Some span) !joined_ctx];
 
-    (* Collapse to eliminate the markers *)
-    joined_ctx :=
+    (* Collapse to eliminate the markers. If an abstraction of one of the
+       contexts observes a loan in a way the other context can't share, we end
+       it and join again. *)
+    match
       collapse_ctx config span fresh_abs_kind ~recoverable ~with_abs_conts
-        !joined_ctx;
+        !joined_ctx
+    with
+    | exception InterpReduceCollapse.MarkedObservation (pm, sid) ->
+        joined_ctx := joined_ctx0;
+        let end_abs abs_id ctx =
+          (InterpBorrows.end_abs_no_synth config span abs_id 0 ctx, ())
+        in
+        if pm = PLeft then (
+          joined_ctx :=
+            fst (end_observing_abs span ~recoverable sid end_abs !joined_ctx);
+          join_one ctx1)
+        else join_one (fst (end_observing_abs span ~recoverable sid end_abs ctx1))
+    | collapsed ->
+    joined_ctx := collapsed;
     [%ltrace
       "join_one: after join-collapse:\n"
       ^ eval_ctx_to_string ~span:(Some span) !joined_ctx];
@@ -1255,16 +1310,34 @@ let loop_join_break_ctxs (config : config) (span : Meta.span)
             in
             join_one_aux ctx
       in
-      let join_one (ctx : eval_ctx) =
+      let rec join_one (ctx : eval_ctx) =
         (* Join the two contexts  *)
+        let joined_ctx0 = !joined_ctx in
         let ctx1 = join_one_aux ctx in
         [%ltrace
           "join_one: after join:\n" ^ eval_ctx_to_string ~span:(Some span) ctx1];
 
-        (* Collapse to eliminate the markers *)
-        joined_ctx :=
+        (* Collapse to eliminate the markers (see {!join_ctxs_list}) *)
+        match
           collapse_ctx config span fresh_abs_kind ~recoverable:false
-            ~with_abs_conts !joined_ctx;
+            ~with_abs_conts !joined_ctx
+        with
+        | exception InterpReduceCollapse.MarkedObservation (pm, sid) ->
+            joined_ctx := joined_ctx0;
+            let end_abs abs_id ctx =
+              (InterpBorrows.end_abs_no_synth config span abs_id 0 ctx, ())
+            in
+            if pm = PLeft then (
+              joined_ctx :=
+                fst
+                  (end_observing_abs span ~recoverable:false sid end_abs
+                     !joined_ctx);
+              join_one ctx1)
+            else
+              join_one
+                (fst (end_observing_abs span ~recoverable:false sid end_abs ctx1))
+        | collapsed ->
+        joined_ctx := collapsed;
         [%ltrace
           "join_one: after join-collapse:\n"
           ^ eval_ctx_to_string ~span:(Some span) !joined_ctx];
@@ -1439,7 +1512,34 @@ let destructure_shared_loans (span : Meta.span) (fixed_aids : AbsId.Set.t) :
 
   (ctx, cc)
 
-let match_ctx_with_target (config : config) (span : Meta.span)
+let rec match_ctx_with_target (config : config) (span : Meta.span)
+    (fresh_abs_kind : abs_kind) (fixed_aids : AbsId.Set.t)
+    (fixed_dids : DummyVarId.Set.t) (input_abs : AbsId.id list)
+    (input_svalues : SymbolicValueId.id list) ~(recoverable : bool)
+    ~(preserve_common_abs : bool) (src_ctx : eval_ctx) (tgt_ctx : eval_ctx) :
+    (eval_ctx * eval_ctx * tvalue SymbolicValueId.Map.t * abs AbsId.Map.t)
+    * (SymbolicAst.expr -> SymbolicAst.expr) =
+  (* If an abstraction of the target observes a loan in a way the source can't
+     share (see {!InterpReduceCollapse.MarkedObservation}), we end it and match
+     again *)
+  try
+    match_ctx_with_target_aux config span fresh_abs_kind fixed_aids fixed_dids
+      input_abs input_svalues ~recoverable ~preserve_common_abs src_ctx tgt_ctx
+  with InterpReduceCollapse.MarkedObservation (pm, sid) ->
+    [%cassert_recover] recoverable span (pm = PRight) "Unimplemented";
+    let tgt_ctx, cc =
+      end_observing_abs span ~recoverable sid
+        (fun abs_id ctx -> InterpBorrows.end_abs config span abs_id 0 ctx)
+        tgt_ctx
+    in
+    let res, cc' =
+      match_ctx_with_target config span fresh_abs_kind fixed_aids fixed_dids
+        input_abs input_svalues ~recoverable ~preserve_common_abs src_ctx
+        tgt_ctx
+    in
+    (res, Cps.cc_comp cc cc')
+
+and match_ctx_with_target_aux (config : config) (span : Meta.span)
     (fresh_abs_kind : abs_kind) (fixed_aids : AbsId.Set.t)
     (fixed_dids : DummyVarId.Set.t) (input_abs : AbsId.id list)
     (input_svalues : SymbolicValueId.id list) ~(recoverable : bool)

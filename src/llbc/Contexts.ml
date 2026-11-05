@@ -792,13 +792,13 @@ let abs_has_borrows_or_loans (ctx : eval_ctx) (abs : abs) : bool =
 
       method! visit_ABorrow env bc =
         (match bc with
-        | AMutBorrow _ | ASharedBorrow _ | AProjSharedBorrow (_ :: _) ->
+        | AMutBorrow _ | ASharedBorrow _ | AProjSharedBorrow (_, _ :: _) ->
             raise Utils.Found
         | AIgnoredMutBorrow _
         | AEndedMutBorrow _
         | AEndedSharedBorrow
         | AEndedIgnoredMutBorrow _
-        | AProjSharedBorrow [] -> ());
+        | AProjSharedBorrow (_, []) -> ());
         super#visit_ABorrow env bc
 
       method! visit_ASymbolic env pm proj =

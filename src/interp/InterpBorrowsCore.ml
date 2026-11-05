@@ -119,7 +119,7 @@ class virtual ['self] iter_eval_ctx_with_abs_levels =
       | AEndedSharedBorrow -> self#visit_AEndedSharedBorrow state
       | AEndedMutBorrow (m, child) -> self#visit_AEndedMutBorrow state m child
       | AEndedIgnoredMutBorrow bc -> self#visit_AEndedIgnoredMutBorrow state bc
-      | AProjSharedBorrow asbl -> self#visit_AProjSharedBorrow state asbl
+      | AProjSharedBorrow (pm, asbl) -> self#visit_AProjSharedBorrow state pm asbl
 
     method! visit_AMutBorrow state pm bid child =
       super#visit_AMutBorrow state pm bid child
@@ -819,7 +819,7 @@ let lookup_borrow_opt (span : Meta.span) (ek : exploration_kind)
         | AEndedIgnoredMutBorrow
             { given_back = _; child = _; given_back_meta = _ }
         | AEndedSharedBorrow -> super#visit_aborrow_content env bc
-        | AProjSharedBorrow asb -> (
+        | AProjSharedBorrow (_, asb) -> (
             match l with
             | UShared (_, l) ->
                 if borrow_in_asb l asb then
@@ -1028,11 +1028,11 @@ let update_aborrow (span : Meta.span) (ek : exploration_kind)
         | AEndedMutBorrow _
         | AEndedSharedBorrow
         | AEndedIgnoredMutBorrow _ -> super#visit_ABorrow env bc
-        | AProjSharedBorrow asb -> (
+        | AProjSharedBorrow (pm, asb) -> (
             match l with
             | UShared (_, l) ->
                 if borrow_in_asb l asb then update ()
-                else ABorrow (super#visit_AProjSharedBorrow env asb)
+                else ABorrow (super#visit_AProjSharedBorrow env pm asb)
             | UMut _ -> super#visit_ABorrow env bc)
 
       method! visit_EBorrow env bc =
@@ -1925,8 +1925,8 @@ let get_max_sub_abs_visitor ?(with_ended = false) ?(with_evalues = false)
       | AEndedMutBorrow _
       | AEndedSharedBorrow
       | AEndedIgnoredMutBorrow _
-      | AProjSharedBorrow (_ :: _) -> save_level level
-      | AProjSharedBorrow [] -> if with_ended then save_level level);
+      | AProjSharedBorrow (_, _ :: _) -> save_level level
+      | AProjSharedBorrow (_, []) -> if with_ended then save_level level);
       super#visit_aborrow_content level bc
 
     method! visit_aproj level proj =

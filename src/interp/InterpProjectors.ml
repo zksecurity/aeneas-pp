@@ -222,7 +222,7 @@ let rec apply_proj_borrows (span : Meta.span) (check_symbolic_no_ended : bool)
                           ref_ty
                     | _ -> [%craise] span "Unexpected"
                   in
-                  AProjSharedBorrow asb
+                  AProjSharedBorrow (PNone, asb)
               | VReservedMutBorrow _, _ ->
                   [%craise] span
                     "Can't apply a proj_borrow over a reserved mutable borrow"

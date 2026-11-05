@@ -103,6 +103,8 @@ package «tests» {}
 @[default_target] lean_lib NestedMutBorrowJoins
 @[default_target] lean_lib NestedSharedBorrowJoins
 @[default_target] lean_lib NestedSharedBorrows
+@[default_target] lean_lib NestedSharedCallJoins
+@[default_target] lean_lib NestedSharedObservationLive
 @[default_target] lean_lib NoNestedBorrows
 @[default_target] lean_lib OpaqueMutRegion
 @[default_target] lean_lib Options

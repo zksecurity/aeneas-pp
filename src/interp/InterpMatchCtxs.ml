@@ -131,6 +131,29 @@ let compute_abs_borrows_loans_maps (span : Meta.span) (explore : abs -> bool)
       false non_unique_borrow_to_abs (pm, bid) abs.abs_id
   in
 
+  (* The shared loans: the projected shared borrows observing them (see
+     {!Values.AProjSharedBorrow}) are shared instances of those loans. The ones
+     observing mutable loans (which are then frozen) are not borrows of those
+     loans, which their mutable borrows stand for. *)
+  let shared_loans =
+    let loans = ref BorrowId.Set.empty in
+    let visitor =
+      object
+        inherit [_] iter_eval_ctx as super
+
+        method! visit_ASharedLoan env pm lid sv child =
+          loans := BorrowId.Set.add lid !loans;
+          super#visit_ASharedLoan env pm lid sv child
+
+        method! visit_VSharedLoan env lid sv =
+          loans := BorrowId.Set.add lid !loans;
+          super#visit_VSharedLoan env lid sv
+      end
+    in
+    visitor#visit_eval_ctx () ctx;
+    !loans
+  in
+
   let register_loan_id (abs : abs) pm bid =
     RAbsLoan.register_mapping
       (binding_to_string abs_id_to_string loan_to_string)
@@ -230,10 +253,20 @@ let compute_abs_borrows_loans_maps (span : Meta.span) (explore : abs -> bool)
         | ASharedBorrow (npm, bid, sid) ->
             (* Add the current marker when visiting the borrow id *)
             register_borrow_id abs npm bid (Some sid)
-        | AProjSharedBorrow _ ->
-            [%sanity_check] span (pm = PNone);
-            (* Process those normally *)
-            super#visit_aborrow_content (abs, pm) bc
+        | AProjSharedBorrow (npm, asb) ->
+            (* The projected borrows are shared instances of the loans they
+               observe *)
+            List.iter
+              (fun (asb : abstract_shared_borrow) ->
+                match asb with
+                | AsbBorrow (bid, sid) ->
+                    if BorrowId.Set.mem bid shared_loans then
+                      register_borrow_id abs npm bid (Some sid)
+                | AsbProjReborrows _ ->
+                    [%craise] span
+                      "Unimplemented: projected reborrows of symbolic shared \
+                       values")
+              asb
         | AIgnoredMutBorrow (_, child)
         | AEndedIgnoredMutBorrow { child; given_back = _; given_back_meta = _ }
           ->
@@ -552,15 +585,23 @@ module MakeMatcher (M : PrimMatcher) : Matcher = struct
             let given_back = match_arec given_back0 given_back1 in
             M.match_aended_ignored_mut_borrow match_rec ctx0 ctx1 (v0.ty, bc0)
               (v1.ty, bc1) ty child given_back
-        | AProjSharedBorrow asb0, AProjSharedBorrow asb1 -> (
+        | AProjSharedBorrow (pm0, asb0), AProjSharedBorrow (pm1, asb1) -> (
+            [%cassert_recover] M.recover M.span (pm0 = pm1) "Unimplemented";
             match (asb0, asb1) with
             | [], [] ->
                 (* This case actually stands for ignored shared borrows, when
                    there are no nested borrows *)
                 v0
-            | _ ->
+            | _ -> (
                 (* We get there when there are nested borrows *)
-                M.match_aproj_shared_borrows ctx0 ctx1 v0.ty asb0 v1.ty asb1 ty)
+                let v =
+                  M.match_aproj_shared_borrows ctx0 ctx1 v0.ty asb0 v1.ty asb1
+                    ty
+                in
+                match v.value with
+                | ABorrow (AProjSharedBorrow (_, asb)) ->
+                    { v with value = ABorrow (AProjSharedBorrow (pm0, asb)) }
+                | _ -> [%internal_error] M.span))
         | _ ->
             (* TODO: getting there is not necessarily inconsistent (it may
                just be because the environments don't match) so we may want
@@ -2234,7 +2275,7 @@ struct
       | _ -> raise (Distinct "match_aproj_shared_borrows: distinct borrows")
     in
     let asb = List.map2 match_asb asb0 asb1 in
-    { value = ABorrow (AProjSharedBorrow asb); ty }
+    { value = ABorrow (AProjSharedBorrow (PNone, asb)); ty }
 
   let match_avalues (_ : tvalue_matcher) (ctx0 : eval_ctx) (ctx1 : eval_ctx) v0
       v1 =

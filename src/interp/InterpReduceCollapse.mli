@@ -58,7 +58,12 @@ val reduce_ctx :
   eval_ctx ->
   eval_ctx
 
-type borrow_or_proj = Borrow of borrow_id | Proj of region_set * symbolic_proj
+type borrow_or_proj =
+  | Borrow of borrow_id
+  | Proj of region_set * symbolic_proj
+  | ProjShared of region_set * abstract_shared_borrow
+      (** A projected shared borrow (see {!Values.AProjSharedBorrow}), with the
+          type of its projection *)
 
 (** Collapse an environment, merging the duplicated borrows/loans.
 
@@ -84,6 +89,11 @@ type borrow_or_proj = Borrow of borrow_id | Proj of region_set * symbolic_proj
     - fixed ids
     - with_abs_conts
     - ctx *)
+(** Raised when collapsing the result of a join if an abstraction of one of the
+    joined contexts observes a loan which the other context doesn't make
+    observable: see the implementation *)
+exception MarkedObservation of proj_marker * shared_borrow_id
+
 val collapse_ctx :
   config ->
   Meta.span ->

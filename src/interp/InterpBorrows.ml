@@ -227,7 +227,7 @@ let end_concrete_borrow_get_borrow_core (span : Meta.span)
             let child = self#visit_tavalue outer child in
             ABorrow
               (AEndedIgnoredMutBorrow { given_back; child; given_back_meta })
-        | AProjSharedBorrow asb -> (
+        | AProjSharedBorrow (pm, asb) -> (
             (* Check if the borrow we are looking for is in the asb *)
             match l with
             | UShared (_, l) ->
@@ -240,7 +240,7 @@ let end_concrete_borrow_get_borrow_core (span : Meta.span)
                   (* Update the value - note that we are necessarily in the second
                    * of the two cases described above *)
                   let asb = remove_borrow_from_asb span l asb in
-                  ABorrow (AProjSharedBorrow asb))
+                  ABorrow (AProjSharedBorrow (pm, asb)))
                 else (* Nothing special to do *)
                   super#visit_ABorrow outer bc
             | UMut _ -> super#visit_ABorrow outer bc)
@@ -1399,7 +1399,7 @@ and end_abs_borrows (config : config) (span : Meta.span) ~(snapshots : bool)
         | AMutBorrow _ | ASharedBorrow _ ->
             (* Raise an exception *)
             if check_level level then raise (FoundABorrowContent bc)
-        | AProjSharedBorrow asb ->
+        | AProjSharedBorrow (_, asb) ->
             (* Raise an exception only if the asb contains borrows *)
             if
               check_level level
@@ -1484,7 +1484,7 @@ and end_abs_borrows (config : config) (span : Meta.span) ~(snapshots : bool)
             update_aborrow span ek_all
               (UShared (bid, sid))
               ended_borrow None ctx
-        | AProjSharedBorrow asb ->
+        | AProjSharedBorrow (_, asb) ->
             (* Retrieve the borrow ids *)
             let bids =
               List.filter_map
@@ -2067,12 +2067,13 @@ let destructure_abs (span : Meta.span) (abs_kind : abs_kind) ~(can_end : bool)
             let allow_borrows = allow_borrows - 1 in
             list_avalues allow_borrows push_avalue child_av;
             list_avalues allow_borrows push_avalue given_back
-        | AProjSharedBorrow asb ->
-            (* We don't support nested borrows *)
-            [%cassert] span (asb = [])
-              "Found a case of unsupported nested borrows";
-            (* Nothing specific to do *)
-            ()
+        | AProjSharedBorrow (pm, asb) ->
+            (* Every projected borrow gets its own node (with its own
+               marker); an empty projection stands for an ignored shared
+               borrow *)
+            List.iter
+              (fun asb -> push { av with value = ABorrow (AProjSharedBorrow (pm, [ asb ])) })
+              asb
         | AEndedMutBorrow _ | AEndedSharedBorrow ->
             (* If we get there it means the abstraction ended: it should not
                be in the context anymore (if we end *one* borrow in an abstraction,

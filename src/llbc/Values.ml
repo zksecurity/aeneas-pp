@@ -934,7 +934,7 @@ and aborrow_content =
       (** We don't really need {!AEndedSharedBorrow}: we simply want to be
           precise, and not insert ⊥ when ending borrows. *)
   | AEndedIgnoredMutBorrow of aended_ignored_mut_borrow
-  | AProjSharedBorrow of abstract_shared_borrows
+  | AProjSharedBorrow of proj_marker * abstract_shared_borrows
       (** A projected shared borrow.
 
           When giving shared borrows as arguments to function calls, we
@@ -977,6 +977,12 @@ and aborrow_content =
           subvalues is redundant. However, if the borrow doesn't belong to the
           abstraction, we need to project the shared values because it may
           contain some borrows which *do* belong to the current abstraction.
+
+          The projected borrows are observations: they keep the referents
+          shared (or, for a mutable loan, frozen) as long as the abstraction
+          lives, without being owners of the loans. When joining contexts, we
+          destructure the abstractions so that every projected borrow is in its
+          own [AProjSharedBorrow], with its own marker.
 
           TODO: maybe we should factorized [ASharedBorrow] and
           [AProjSharedBorrow]. *)

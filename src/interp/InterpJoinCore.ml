@@ -797,6 +797,9 @@ let tavalue_add_marker (span : Meta.span) (ctx : eval_ctx) (pm : proj_marker)
         | ASharedBorrow (pm0, bid, sid) ->
             [%sanity_check] span (pm0 = PNone);
             super#visit_aborrow_content env (ASharedBorrow (pm, bid, sid))
+        | AProjSharedBorrow (pm0, asb) ->
+            [%sanity_check] span (pm0 = PNone);
+            AProjSharedBorrow (pm, asb)
         | _ -> [%internal_error] span
     end
   in

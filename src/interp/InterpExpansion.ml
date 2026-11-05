@@ -395,7 +395,7 @@ let expand_symbolic_value_shared_borrow (span : Meta.span)
 
       (* Note that there is no equivalent [EProjSharedBorrow] (we don't need to track shared borrows/loans
          in abstraction expressions *)
-      method! visit_AProjSharedBorrow proj_regions asb =
+      method! visit_AProjSharedBorrow proj_regions pm asb =
         let expand_asb (asb : abstract_shared_borrow) : abstract_shared_borrows
             =
           match asb with
@@ -406,7 +406,7 @@ let expand_symbolic_value_shared_borrow (span : Meta.span)
               | Some asb -> asb)
         in
         let asb = List.concat (List.map expand_asb asb) in
-        AProjSharedBorrow asb
+        AProjSharedBorrow (pm, asb)
 
       (** We carefully updated {!visit_ASymbolic} so that {!visit_aproj} is
           called only on child projections (i.e., projections which appear in
@@ -450,7 +450,7 @@ let expand_symbolic_value_shared_borrow (span : Meta.span)
             (* Check if we need to reborrow *)
             match reborrow_ashared (Option.get proj_regions) proj with
             | None -> super#visit_ASymbolic proj_regions pm aproj
-            | Some asb -> ABorrow (AProjSharedBorrow asb))
+            | Some asb -> ABorrow (AProjSharedBorrow (pm, asb)))
         | AEndedProjLoans _ ->
             (* Sanity check: make sure there is nothing to expand inside the
              * children projections *)
