@@ -1391,6 +1391,212 @@ let align_fixed_abs_expansions (span : Meta.span) (fixed_aids : AbsId.Set.t)
   in
   align (List.map (fun ctx -> (ctx, fun e -> e)) ctxl)
 
+(** In the contexts reaching a join, fold the expansions of the values shared
+    by the frozen abstractions which exist before the branching: branches which
+    match on such a value (e.g., on the variant of a shared enumeration) expand
+    it differently, while the frozen abstractions must be the same in all the
+    contexts we join. Values under shared loans are immutable: the expansions
+    are branch refinements of the values of [ctx0]. Comparing the frozen
+    abstractions of a branch with the ones of [ctx0] gives a witness of the
+    expansions: the expanded symbolic values with the values they were expanded
+    to, and the projectors over them with their expansions. We put back the
+    symbolic values and the projectors everywhere in the branch (the frozen
+    abstractions, but also the copies of the shared values in the abstractions
+    introduced since [ctx0]).
+
+    This folds the borrow graph of the expansions with the values: we require
+    the borrows, loans and symbolic values the expansions introduced not to
+    appear anywhere else in the folded context (a branch may for instance
+    return a borrow of a field of the expanded variant). Each branch keeps its
+    synthesis: the folded symbolic values are bound before the branching. *)
+let fold_frozen_abs_expansions (config : config) (span : Meta.span)
+    ~(recoverable : bool) (ctx0 : eval_ctx)
+    (ctxl : (eval_ctx * (SymbolicAst.expr -> SymbolicAst.expr)) list) :
+    (eval_ctx * (SymbolicAst.expr -> SymbolicAst.expr)) list =
+  let strip (abs : abs) = { abs with cont = None; parents = AbsId.Set.empty } in
+  let frozen =
+    List.filter
+      (fun (abs : abs) -> not abs.can_end)
+      (List.map snd (AbsId.Map.bindings (ctx_get_abs ctx0)))
+  in
+  let fail () =
+    [%craise_recover] recoverable span
+      "Could not fold the expansion of a value shared by a frozen abstraction"
+  in
+  (* Collect the expansions of the symbolic values of [x0] in [x1] *)
+  let rec walk_value values (x0 : tvalue) (x1 : tvalue) : unit =
+    if x0 <> x1 then (
+      if x0.ty <> x1.ty then fail ();
+      match (x0.value, x1.value) with
+      | VSymbolic _, _ -> values := (x0, x1) :: !values
+      | VAdt a0, VAdt a1
+        when a0.variant_id = a1.variant_id
+             && List.length a0.fields = List.length a1.fields ->
+          List.iter2 (walk_value values) a0.fields a1.fields
+      | VBorrow (VMutBorrow (b0, y0)), VBorrow (VMutBorrow (b1, y1)) when b0 = b1
+        ->
+          walk_value values y0 y1
+      | VLoan (VSharedLoan (l0, y0)), VLoan (VSharedLoan (l1, y1)) when l0 = l1
+        ->
+          walk_value values y0 y1
+      | _ -> fail ())
+  in
+  let rec walk_avalue values projs (x0 : tavalue) (x1 : tavalue) : unit =
+    let walk = walk_avalue values projs in
+    if x0 <> x1 then (
+      if x0.ty <> x1.ty then fail ();
+      match (x0.value, x1.value) with
+      | ( ASymbolic
+            ( _,
+              ( AProjLoans { consumed = []; borrows = []; _ }
+              | AProjBorrows { loans = []; _ } ) ),
+          _ ) ->
+          projs := (x0, x1) :: !projs
+      | AAdt a0, AAdt a1
+        when a0.variant_id = a1.variant_id
+             && List.length a0.fields = List.length a1.fields ->
+          List.iter2 walk a0.fields a1.fields
+      | ( ALoan (ASharedLoan (pm0, l0, v0, c0)),
+          ALoan (ASharedLoan (pm1, l1, v1, c1)) )
+        when pm0 = pm1 && l0 = l1 ->
+          walk_value values v0 v1;
+          walk c0 c1
+      | ALoan (AMutLoan (pm0, l0, c0)), ALoan (AMutLoan (pm1, l1, c1))
+        when pm0 = pm1 && l0 = l1 ->
+          walk c0 c1
+      | ALoan (AIgnoredSharedLoan c0), ALoan (AIgnoredSharedLoan c1) ->
+          walk c0 c1
+      | ALoan (AIgnoredMutLoan (l0, c0)), ALoan (AIgnoredMutLoan (l1, c1))
+        when l0 = l1 ->
+          walk c0 c1
+      | ABorrow (AMutBorrow (pm0, b0, c0)), ABorrow (AMutBorrow (pm1, b1, c1))
+        when pm0 = pm1 && b0 = b1 ->
+          walk c0 c1
+      | ( ABorrow (AIgnoredMutBorrow (b0, c0)),
+          ABorrow (AIgnoredMutBorrow (b1, c1)) )
+        when b0 = b1 ->
+          walk c0 c1
+      | AIgnored (Some m0), AIgnored (Some m1) -> walk_value values m0 m1
+      | _ -> fail ())
+  in
+  let fold (ctx : eval_ctx) : eval_ctx =
+    let values = ref [] and projs = ref [] in
+    List.iter
+      (fun (abs0 : abs) ->
+        match ctx_lookup_abs_opt ctx abs0.abs_id with
+        | Some abs when not (equal_abs (strip abs) (strip abs0)) ->
+            if
+              not
+                (equal_abs
+                   { (strip abs) with avalues = [] }
+                   { (strip abs0) with avalues = [] }
+                && List.length abs.avalues = List.length abs0.avalues)
+            then fail ();
+            List.iter2 (walk_avalue values projs) abs0.avalues abs.avalues
+        | _ -> ())
+      frozen;
+    if !values = [] && !projs = [] then ctx
+    else
+      let values =
+        List.map (fun (v0, v) -> (v0, value_erase_shared_borrow_ids v)) !values
+      in
+      let projs = !projs in
+      let visitor =
+        object
+          inherit [_] map_env as super
+
+          method! visit_tvalue env v =
+            match
+              List.find_opt
+                (fun ((v0 : tvalue), v') ->
+                  v0.ty = v.ty && value_erase_shared_borrow_ids v = v')
+                values
+            with
+            | Some (v0, _) -> v0
+            | None -> super#visit_tvalue env v
+
+          method! visit_tavalue env v =
+            match List.find_opt (fun (_, p) -> p = v) projs with
+            | Some (p0, _) -> p0
+            | None -> super#visit_tavalue env v
+        end
+      in
+      let env = visitor#visit_env () ctx.env in
+      [%ltrace
+        "- values:\n"
+        ^ String.concat "\n"
+            (List.map
+               (fun (v0, v) ->
+                 tvalue_to_string ctx v0 ^ " -> " ^ tvalue_to_string ctx v)
+               values)
+        ^ "\n- projs:\n"
+        ^ String.concat "\n"
+            (List.map
+               (fun (p0, p1) ->
+                 tavalue_to_string ctx p0 ^ " -> " ^ tavalue_to_string ctx p1)
+               projs)
+        ^ "\n- ctx:\n"
+        ^ eval_ctx_to_string ~span:(Some span) ctx
+        ^ "\n- folded ctx:\n"
+        ^ eval_ctx_to_string ~span:(Some span) { ctx with env }];
+      (* The borrows, loans and symbolic values with borrows the expansions
+         introduced must not appear anymore. The other symbolic values are
+         plain values the branch may have copied (they are bound by its
+         synthesis). *)
+      let obj, get_ids, get_ids_to_values = compute_ids () in
+      List.iter (fun (_, v) -> obj#visit_tvalue () v) values;
+      List.iter (fun (_, p) -> obj#visit_tavalue () p) projs;
+      let ids = get_ids () in
+      let ids0 = fst (compute_env_ids ctx0.env) in
+      let fids = fst (compute_env_ids env) in
+      let fresh_blids = BorrowId.Set.diff ids.blids ids0.blids in
+      let fresh_sids =
+        SymbolicValueId.Map.filter
+          (fun sid (sv : symbolic_value) ->
+            (not (SymbolicValueId.Set.mem sid ids0.sids))
+            && ty_has_borrows (Some span) ctx.type_ctx.type_infos sv.sv_ty)
+          (get_ids_to_values ()).sids_to_values
+      in
+      [%cassert_recover] recoverable span
+        (BorrowId.Set.disjoint fresh_blids fids.blids
+        && SymbolicValueId.Map.for_all
+             (fun sid _ -> not (SymbolicValueId.Set.mem sid fids.sids))
+             fresh_sids)
+        "Could not fold the expansion of a value shared by a frozen \
+         abstraction: a part of the expansion escapes";
+      let ctx = { ctx with env } in
+      [%cassert_recover] recoverable span
+        (List.for_all
+           (fun (abs0 : abs) ->
+             match ctx_lookup_abs_opt ctx abs0.abs_id with
+             | Some abs -> equal_abs (strip abs) (strip abs0)
+             | None -> true)
+           frozen)
+        "Could not fold the expansion of a value shared by a frozen \
+         abstraction";
+      ctx
+  in
+  (* We only fold if the frozen abstractions differ between the contexts *)
+  let differ =
+    List.exists
+      (fun (abs0 : abs) ->
+        let versions =
+          List.filter_map
+            (fun ctx ->
+              Option.map strip (ctx_lookup_abs_opt (fst ctx) abs0.abs_id))
+            ctxl
+        in
+        List.exists (fun abs -> not (equal_abs abs (List.hd versions))) versions)
+      frozen
+  in
+  (* The dead values may borrow parts of the expansions: we first eliminate
+     them (as {!join_ctxs_list} does) *)
+  let simplify_fold (ctx, wrap) =
+    let ctx, cc = simplify_dummy_values_useless_abs config span ctx in
+    (fold ctx, fun e -> wrap (cc e))
+  in
+  if differ then List.map simplify_fold ctxl else ctxl
+
 let join_ctxs_list (config : config) (span : Meta.span)
     (fresh_abs_kind : abs_kind) ?(preprocess_first_ctx : bool = true)
     ~(recoverable : bool) ~(with_abs_conts : bool) (ctxl : eval_ctx list) :
