@@ -1225,8 +1225,7 @@ let drop_locals_uninit_in_some_ctx (ctxl : eval_ctx list) : eval_ctx list =
     borrow observes the shared parts anymore in any of the contexts [ctxl] to
     join, we restore the abstractions of [ctx0], so that joining the contexts
     doesn't have to join their shared values. If one of the contexts still
-    observes them, we leave the abstraction unchanged in all the contexts: the
-    other contexts were aligned with it (see {!align_fixed_abs_expansions}). *)
+    observes them, we leave the abstraction unchanged in all the contexts. *)
 let restore_frozen_abs (span : Meta.span) (ctx0 : eval_ctx)
     (ctxl : eval_ctx list) : eval_ctx list =
   (* Check that the abstraction [abs] of [ctx] refines [abs0] *)
@@ -1721,8 +1720,8 @@ let fold_frozen_abs_expansions (config : config) (span : Meta.span)
 
 let join_ctxs_list (config : config) (span : Meta.span)
     (fresh_abs_kind : abs_kind) ?(preprocess_first_ctx : bool = true)
-    ~(recoverable : bool) ~(with_abs_conts : bool) ~(ancestor : eval_ctx)
-    (ctxl : eval_ctx list) : eval_ctx list * eval_ctx =
+    ~(recoverable : bool) ~(with_abs_conts : bool) (ctxl : eval_ctx list) :
+    eval_ctx list * eval_ctx =
   (* The list of contexts should be non empty *)
   let ctx0, ctxl =
     match ctxl with
@@ -1743,13 +1742,6 @@ let join_ctxs_list (config : config) (span : Meta.span)
   in
 
   let ctx0 = if preprocess_first_ctx then preprocess_ctx ctx0 else ctx0 in
-  let ctx0, ctxl =
-    match
-      restore_frozen_abs span ancestor (ctx0 :: List.map preprocess_ctx ctxl)
-    with
-    | ctx0 :: ctxl -> (ctx0, ctxl)
-    | [] -> [%internal_error] span
-  in
 
   (* # Join with the new contexts, one by one
 
@@ -1901,7 +1893,7 @@ let loop_join_origin_with_continue_ctxs (config : config) (span : Meta.span)
 
   let ctxl', joined_ctx =
     join_ctxs_list config span (Loop loop_id) ~preprocess_first_ctx:false
-      ~recoverable:false ~with_abs_conts:false ~ancestor:ctx0 (ctx0 :: ctxl)
+      ~recoverable:false ~with_abs_conts:false (ctx0 :: ctxl)
   in
   [%sanity_check] span (List.length ctxl' = List.length ctxl + 1);
   ((List.hd ctxl', List.tl ctxl'), joined_ctx)

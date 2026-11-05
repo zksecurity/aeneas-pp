@@ -162,8 +162,7 @@ val fold_frozen_abs_expansions :
     Parameters:
     - [config]
     - [loop_id]
-    - [ancestor]: the context in which the evaluation of the contexts started
-      (see {!restore_frozen_abs})
+    - [old_ctx]
     - [ctxl] *)
 val join_ctxs_list :
   config ->
@@ -172,7 +171,6 @@ val join_ctxs_list :
   ?preprocess_first_ctx:bool ->
   recoverable:bool ->
   with_abs_conts:bool ->
-  ancestor:eval_ctx ->
   eval_ctx list ->
   eval_ctx list * eval_ctx
 

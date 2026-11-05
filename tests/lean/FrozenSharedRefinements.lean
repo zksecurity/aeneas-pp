@@ -101,16 +101,17 @@ def Eng.find_loop.body
       let i2 ←
         alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
           self.s.v i
-      let s1 : _root_.Sum Unit (Std.U32 × Std.Usize) ←
+      let s1 : _root_.Sum ((alloc.vec.Vec Std.U32) × Std.U32) (Std.U32 ×
+        Std.Usize) ←
         if i2 = x
-        then ok (Sum.inl ())
+        then ok (Sum.inl (self.env.v, self.env.n))
         else
           do
           let i3 ←
             alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
               self.env.v 0#usize
           if i3 = x
-          then ok (Sum.inl ())
+          then ok (Sum.inl (self.env.v, self.env.n))
           else let i4 ← i + 1#usize
                ok (Sum.inr (x, i4))
       match s1 with
