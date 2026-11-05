@@ -601,6 +601,21 @@ let compute_ctx_fresh_ordered_symbolic_values (span : Meta.span)
 
   input_svalues
 
+(** Find a symbolic value in a context, from its id *)
+let ctx_find_symbolic_value (ctx : eval_ctx) (sid : SymbolicValueId.id) :
+    symbolic_value option =
+  let found = ref None in
+  let visitor =
+    object
+      inherit [_] iter_eval_ctx
+
+      method! visit_symbolic_value _ sv =
+        if sv.sv_id = sid then found := Some sv
+    end
+  in
+  visitor#visit_eval_ctx () ctx;
+  !found
+
 let refresh_non_fixed_abs_ids (_span : Meta.span) (fixed_aids : AbsId.Set.t)
     (ctx : eval_ctx) : eval_ctx * abs_id AbsId.Map.t =
   (* Note that abstraction ids appear both inside of region abstractions
@@ -1891,11 +1906,17 @@ and match_ctx_with_target_aux (config : config) (span : Meta.span)
                  src_to_joined_maps.sid_to_value_map
              with
              | Some v -> v
-             | None ->
-                 [%craise] span
-                   ("Could not find symbolic value @"
-                   ^ SymbolicValueId.to_string sid
-                   ^ " in src_to_joined_map")
+             | None -> (
+                 (* The symbolic values of the fixed abstractions (for instance
+                    the shared values of the frozen input abstractions) are
+                    not matched: they are the same in the joined context *)
+                 match ctx_find_symbolic_value joined_ctx sid with
+                 | Some sv -> mk_tvalue_from_symbolic_value sv
+                 | None ->
+                     [%craise] span
+                       ("Could not find symbolic value @"
+                       ^ SymbolicValueId.to_string sid
+                       ^ " in src_to_joined_map"))
            in
            (* Update the symbolic values appearing in [v] *)
            let subst =
