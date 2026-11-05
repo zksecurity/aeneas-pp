@@ -648,16 +648,17 @@ let refresh_non_fixed_abs_ids (_span : Meta.span) (fixed_aids : AbsId.Set.t)
     branch). The joined context keeps the abstraction, but the region must
     remain ended for the values coming from [other]: we rename it in [ctx].
 
-    We only rename regions which no symbolic value (nor projection) mentions:
-    renaming those would change the types of symbolic values without changing
-    their ids. This includes the meta-values, which the synthesis uses (for
-    instance, the values given back by ended borrows), except the ones of the
-    ignored values ([AIgnored], and [EIgnored] in the continuations), whose
-    synthesis doesn't depend on the regions: they are translated as values,
-    whose types the translation erases, and whose symbolic values and borrows
-    are looked up by id. *)
-let freshen_regions_ended_in_other (span : Meta.span) ~(recoverable : bool)
-    (ctx : eval_ctx) (other : eval_ctx) : eval_ctx =
+    The symbolic values whose types (or projections) mention such a region get
+    fresh ids, renamed consistently everywhere in [ctx] (including the
+    meta-values): their types change. When we match a branch with the joined
+    context, the renamed values of the joined context are fresh, and map to the
+    values of the branch.
+
+    In a loop join (with [fresh_abs_kind = Loop _]), the fixed point must be
+    computed modulo such a renaming, which we don't support: we only rename the
+    regions which no symbolic value mentions. *)
+let freshen_regions_ended_in_other (span : Meta.span) (fresh_abs_kind : abs_kind)
+    ~(recoverable : bool) (ctx : eval_ctx) (other : eval_ctx) : eval_ctx =
   let owned =
     List.fold_left
       (fun owned (e : env_elem) ->
@@ -688,52 +689,73 @@ let freshen_regions_ended_in_other (span : Meta.span) ~(recoverable : bool)
     let mentions_rids (ty : ty) : bool =
       ty_has_regions_in_set ctx.type_ctx.type_infos regions ty
     in
-    let symbolic_mentions_rids =
+    (* The symbolic values whose types or projections mention the regions.
+       [~in_ignored]: whether we include the meta-values of the ignored values
+       ([AIgnored], and [EIgnored] in the continuations), whose synthesis doesn't
+       depend on the regions: they are translated as values, whose types the
+       translation erases. *)
+    let mentioning_svs ~(in_ignored : bool) =
+      let svs = ref SymbolicValueId.Set.empty in
+      let add id = svs := SymbolicValueId.Set.add id !svs in
       let visitor =
         object (self)
-          inherit [_] iter_eval_ctx
+          inherit [_] iter_eval_ctx as super
 
           method! visit_symbolic_value _ sv =
-            if mentions_rids sv.sv_ty then raise Utils.Found
+            if mentions_rids sv.sv_ty then add sv.sv_id
 
           method! visit_symbolic_proj _ proj =
-            if mentions_rids proj.proj_ty then raise Utils.Found
+            if mentions_rids proj.proj_ty then add proj.sv_id
 
           method! visit_esymbolic_proj _ proj =
-            if mentions_rids proj.proj_ty then raise Utils.Found
+            if mentions_rids proj.proj_ty then add proj.sv_id
 
           method! visit_mvalue env v = self#visit_tvalue env v
           method! visit_msymbolic_value env sv = self#visit_symbolic_value env sv
 
-          method! visit_ended_proj_borrow_meta env m =
-            self#visit_msymbolic_value env m.given_back
+          method! visit_AIgnored env mv =
+            if in_ignored then super#visit_AIgnored env mv
 
-          method! visit_aended_mut_borrow_meta env m =
-            self#visit_msymbolic_value env m.given_back
-
-          method! visit_eended_mut_borrow_meta env m =
-            self#visit_msymbolic_value env m.given_back
-
-          method! visit_AIgnored _ _ = ()
-          method! visit_EIgnored _ _ = ()
+          method! visit_EIgnored env mv =
+            if in_ignored then super#visit_EIgnored env mv
         end
       in
-      try
-        visitor#visit_eval_ctx () ctx;
-        false
-      with Utils.Found -> true
+      visitor#visit_eval_ctx () ctx;
+      !svs
     in
-    [%cassert_recover] recoverable span (not symbolic_mentions_rids)
-      "Unimplemented";
+    let svs =
+      if SymbolicValueId.Set.is_empty (mentioning_svs ~in_ignored:false) then
+        SymbolicValueId.Set.empty
+      else (
+        [%cassert_recover] recoverable span
+          (match fresh_abs_kind with
+          | Loop _ -> false
+          | _ -> true)
+          "Unimplemented";
+        mentioning_svs ~in_ignored:true)
+    in
     let rsubst =
       RegionId.Set.fold
         (fun rid m -> RegionId.Map.add rid (ctx.fresh_region_id ()) m)
         rids RegionId.Map.empty
     in
+    let ssubst =
+      SymbolicValueId.Set.fold
+        (fun sid m ->
+          SymbolicValueId.Map.add sid (ctx.fresh_symbolic_value_id ()) m)
+        svs SymbolicValueId.Map.empty
+    in
     let env =
-      Substitute.env_subst_rids
-        (fun rid ->
-          Option.value (RegionId.Map.find_opt rid rsubst) ~default:rid)
+      Substitute.env_subst_ids
+        {
+          Substitute.empty_id_subst with
+          r_subst =
+            (fun rid ->
+              Option.value (RegionId.Map.find_opt rid rsubst) ~default:rid);
+          ssubst =
+            (fun sid ->
+              Option.value (SymbolicValueId.Map.find_opt sid ssubst) ~default:sid);
+        }
         ctx.env
     in
     { ctx with env }
@@ -741,8 +763,12 @@ let freshen_regions_ended_in_other (span : Meta.span) ~(recoverable : bool)
 let join_ctxs (span : Meta.span) (fresh_abs_kind : abs_kind)
     ~(recoverable : bool) ~(with_abs_conts : bool) (ctx0 : eval_ctx)
     (ctx1 : eval_ctx) : join_info_or_update =
-  let ctx0 = freshen_regions_ended_in_other span ~recoverable ctx0 ctx1 in
-  let ctx1 = freshen_regions_ended_in_other span ~recoverable ctx1 ctx0 in
+  let ctx0 =
+    freshen_regions_ended_in_other span fresh_abs_kind ~recoverable ctx0 ctx1
+  in
+  let ctx1 =
+    freshen_regions_ended_in_other span fresh_abs_kind ~recoverable ctx1 ctx0
+  in
   (* Debug *)
   [%ltrace
     "- ctx0:\n"
@@ -1053,11 +1079,32 @@ let end_observing_abs (span : Meta.span) ~(recoverable : bool)
     (ctx : eval_ctx) : eval_ctx * 'a =
   match observing_abs sid ctx with
   | Some abs when abs.can_end ->
+      let ctx0 = ctx in
       let ctx, x = end_abs abs.abs_id ctx in
       (* Make sure we made progress *)
       [%cassert_recover] recoverable span
         (observing_abs sid ctx = None)
         "Could not end the abstraction of an observation";
+      (* Ending the abstraction must not invalidate the values of the local
+         variables (they may be used after the join) *)
+      let locals (ctx : eval_ctx) =
+        List.filter_map
+          (fun (e : env_elem) ->
+            match e with
+            | EBinding (BVar var, v) -> Some (var.index, v)
+            | _ -> None)
+          ctx.env
+      in
+      [%cassert_recover] recoverable span
+        (List.for_all
+           (fun (lid, (v : tvalue)) ->
+             bottom_in_value ctx0.ended_regions v
+             || match List.assoc_opt lid (locals ctx) with
+                | Some v' -> not (bottom_in_value ctx.ended_regions v')
+                | None -> true)
+           (locals ctx0))
+        "Could not end the abstraction of an observation without invalidating \
+         a local variable";
       (ctx, x)
   | _ ->
       [%craise_recover] recoverable span

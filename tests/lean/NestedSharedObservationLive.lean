@@ -43,12 +43,15 @@ def Engine.maybe_node
   if b
   then
     let r ← Engine.node self e
-    let x ← match r with
-              | none => ok 0#u32
-              | some x1 => ok x1
-    let v ← alloc.vec.Vec.push self.log x
-    let back'a := fun (self1 : Engine) => { self with log := self1.log }
-    ok (x, { self with log := v }, back'a)
+    match r with
+    | none =>
+      let v ← alloc.vec.Vec.push self.log 0#u32
+      let back'a := fun (self1 : Engine) => { self with log := self1.log }
+      ok (0#u32, { self with log := v }, back'a)
+    | some x =>
+      let v ← alloc.vec.Vec.push self.log x
+      let back'a := fun (self1 : Engine) => { self with log := self1.log }
+      ok (x, { self with log := v }, back'a)
   else
     let v ← alloc.vec.Vec.push self.log 0#u32
     let back'a := fun (self1 : Engine) => { self with log := self1.log }

@@ -103,12 +103,15 @@ def Engine.pick
     else do
          let i ← e + 1#usize
          Engine.node self i
-  let x ← match r with
-            | none => ok 0#u32
-            | some x1 => ok x1
-  let v ← alloc.vec.Vec.push self.log x
-  let back'a := fun (self1 : Engine) => { self with log := self1.log }
-  ok (x, { self with log := v }, back'a)
+  match r with
+  | none =>
+    let v ← alloc.vec.Vec.push self.log 0#u32
+    let back'a := fun (self1 : Engine) => { self with log := self1.log }
+    ok (0#u32, { self with log := v }, back'a)
+  | some x =>
+    let v ← alloc.vec.Vec.push self.log x
+    let back'a := fun (self1 : Engine) => { self with log := self1.log }
+    ok (x, { self with log := v }, back'a)
 
 /-- [nested_shared_call_joins::{nested_shared_call_joins::Engine<'a>}::sum]: loop body 0:
     Source: 'tests/src/nested-shared-call-joins.rs', lines 62:8-67:9
@@ -122,11 +125,12 @@ def Engine.sum_loop.body
   if i < n
   then
     let o ← Engine.node { nodes := s, log := v } i
-    let s2 ← match o with
-               | none => ok s1
-               | some x => s1 + x
-    let i1 ← i + 1#usize
-    ok (cont (s2, i1))
+    match o with
+    | none => let i1 ← i + 1#usize
+              ok (cont (s1, i1))
+    | some x => let s2 ← s1 + x
+                let i1 ← i + 1#usize
+                ok (cont (s2, i1))
   else ok (done s1)
 
 /-- [nested_shared_call_joins::{nested_shared_call_joins::Engine<'a>}::sum]: loop 0:
