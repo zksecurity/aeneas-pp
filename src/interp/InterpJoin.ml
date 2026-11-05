@@ -660,13 +660,16 @@ let refresh_non_fixed_abs_ids (_span : Meta.span) (fixed_aids : AbsId.Set.t)
     fresh ids, renamed consistently everywhere in [ctx] (including the
     meta-values): their types change. When we match a branch with the joined
     context, the renamed values of the joined context are fresh, and map to the
-    values of the branch.
+    values of the branch. We return the renamed values, paired with their
+    fresh counterparts (a value which appears in projections only gets the
+    type of a projection).
 
     In a loop join (with [fresh_abs_kind = Loop _]), the fixed point must be
     computed modulo such a renaming, which we don't support: we only rename the
     regions which no symbolic value mentions. *)
 let freshen_regions_ended_in_other (span : Meta.span) (fresh_abs_kind : abs_kind)
-    ~(recoverable : bool) (ctx : eval_ctx) (other : eval_ctx) : eval_ctx =
+    ~(recoverable : bool) (ctx : eval_ctx) (other : eval_ctx) :
+    eval_ctx * (symbolic_value * symbolic_value) list =
   let owned =
     List.fold_left
       (fun owned (e : env_elem) ->
@@ -688,7 +691,7 @@ let freshen_regions_ended_in_other (span : Meta.span) (fresh_abs_kind : abs_kind
         && not (RegionId.Set.mem rid ctx.ended_regions))
       owned
   in
-  if RegionId.Set.is_empty rids then ctx
+  if RegionId.Set.is_empty rids then (ctx, [])
   else
     let regions =
       RegionSet.of_list
@@ -709,9 +712,12 @@ let freshen_regions_ended_in_other (span : Meta.span) (fresh_abs_kind : abs_kind
       let svs = ref SymbolicValueId.Set.empty in
       let typed = ref SymbolicValueId.Set.empty in
       let proj_svs = ref SymbolicValueId.Set.empty in
+      let tys = ref SymbolicValueId.Map.empty in
       let add_proj sv_id proj_ty =
-        if mentions_rids proj_ty then
-          proj_svs := SymbolicValueId.Set.add sv_id !proj_svs
+        if mentions_rids proj_ty then (
+          proj_svs := SymbolicValueId.Set.add sv_id !proj_svs;
+          if not (SymbolicValueId.Map.mem sv_id !tys) then
+            tys := SymbolicValueId.Map.add sv_id proj_ty !tys)
       in
       let visitor =
         object (self)
@@ -719,8 +725,9 @@ let freshen_regions_ended_in_other (span : Meta.span) (fresh_abs_kind : abs_kind
 
           method! visit_symbolic_value _ sv =
             typed := SymbolicValueId.Set.add sv.sv_id !typed;
-            if mentions_rids sv.sv_ty then
-              svs := SymbolicValueId.Set.add sv.sv_id !svs
+            if mentions_rids sv.sv_ty then (
+              svs := SymbolicValueId.Set.add sv.sv_id !svs;
+              tys := SymbolicValueId.Map.add sv.sv_id sv.sv_ty !tys)
 
           method! visit_symbolic_proj _ proj = add_proj proj.sv_id proj.proj_ty
           method! visit_esymbolic_proj _ proj = add_proj proj.sv_id proj.proj_ty
@@ -736,12 +743,17 @@ let freshen_regions_ended_in_other (span : Meta.span) (fresh_abs_kind : abs_kind
         end
       in
       visitor#visit_eval_ctx () ctx;
-      SymbolicValueId.Set.union !svs
-        (SymbolicValueId.Set.diff !proj_svs !typed)
+      let svs =
+        SymbolicValueId.Set.union !svs
+          (SymbolicValueId.Set.diff !proj_svs !typed)
+      in
+      List.map
+        (fun sv_id ->
+          { sv_id; sv_ty = SymbolicValueId.Map.find sv_id !tys })
+        (SymbolicValueId.Set.elements svs)
     in
     let svs =
-      if SymbolicValueId.Set.is_empty (mentioning_svs ~in_ignored:false) then
-        SymbolicValueId.Set.empty
+      if mentioning_svs ~in_ignored:false = [] then []
       else (
         [%cassert_recover] recoverable span
           (match fresh_abs_kind with
@@ -756,38 +768,47 @@ let freshen_regions_ended_in_other (span : Meta.span) (fresh_abs_kind : abs_kind
         rids RegionId.Map.empty
     in
     let ssubst =
-      SymbolicValueId.Set.fold
-        (fun sid m ->
-          SymbolicValueId.Map.add sid (ctx.fresh_symbolic_value_id ()) m)
-        svs SymbolicValueId.Map.empty
+      List.fold_left
+        (fun m (sv : symbolic_value) ->
+          SymbolicValueId.Map.add sv.sv_id (ctx.fresh_symbolic_value_id ()) m)
+        SymbolicValueId.Map.empty svs
     in
     [%ldebug
       "- renamed regions: "
       ^ RegionId.Map.to_string None RegionId.to_string rsubst
       ^ "\n- renamed symbolic values: "
       ^ SymbolicValueId.Map.to_string None SymbolicValueId.to_string ssubst];
-    let env =
-      Substitute.env_subst_ids
-        {
-          Substitute.empty_id_subst with
-          r_subst =
-            (fun rid ->
-              Option.value (RegionId.Map.find_opt rid rsubst) ~default:rid);
-          ssubst =
-            (fun sid ->
-              Option.value (SymbolicValueId.Map.find_opt sid ssubst) ~default:sid);
-        }
-        ctx.env
+    let subst =
+      {
+        Substitute.empty_id_subst with
+        r_subst =
+          (fun rid ->
+            Option.value (RegionId.Map.find_opt rid rsubst) ~default:rid);
+        ssubst =
+          (fun sid ->
+            Option.value (SymbolicValueId.Map.find_opt sid ssubst) ~default:sid);
+      }
     in
-    { ctx with env }
+    let env = Substitute.env_subst_ids subst ctx.env in
+    let renamed =
+      List.map
+        (fun (sv : symbolic_value) ->
+          ( sv,
+            {
+              sv_id = subst.ssubst sv.sv_id;
+              sv_ty = Substitute.ty_subst_ids subst sv.sv_ty;
+            } ))
+        svs
+    in
+    ({ ctx with env }, renamed)
 
 let join_ctxs (span : Meta.span) (fresh_abs_kind : abs_kind)
     ~(recoverable : bool) ~(with_abs_conts : bool) (ctx0 : eval_ctx)
     (ctx1 : eval_ctx) : join_info_or_update =
-  let ctx0 =
+  let ctx0, _ =
     freshen_regions_ended_in_other span fresh_abs_kind ~recoverable ctx0 ctx1
   in
-  let ctx1 =
+  let ctx1, renamed1 =
     freshen_regions_ended_in_other span fresh_abs_kind ~recoverable ctx1 ctx0
   in
   (* Debug *)
@@ -1075,7 +1096,7 @@ let join_ctxs (span : Meta.span) (fresh_abs_kind : abs_kind)
        them again *)
     let ctx = InterpBorrowsCore.ctx_freeze_mut_borrows_in_shared_values ctx in
     let join_info : join_info =
-      { joined_ctx = ctx; symbolic_to_value = !symbolic_to_value }
+      { joined_ctx = ctx; symbolic_to_value = !symbolic_to_value; renamed1 }
     in
 
     (* Sanity check *)
@@ -1490,6 +1511,213 @@ let align_fixed_abs_expansions (span : Meta.span) (fixed_aids : AbsId.Set.t)
              ctxl)
   in
   align (List.map (fun ctx -> (ctx, fun e -> e)) ctxl)
+
+(** In the contexts reaching a join, fold the expansions of the values shared
+    by the frozen abstractions which exist before the branching: branches which
+    match on such a value (e.g., on the variant of a shared enumeration) expand
+    it differently, while the frozen abstractions must be the same in all the
+    contexts we join. Values under shared loans are immutable: the expansions
+    are branch refinements of the values of [ctx0]. Comparing the frozen
+    abstractions of a branch with the ones of [ctx0] gives a witness of the
+    expansions: the expanded symbolic values with the values they were expanded
+    to, and the projectors over them with their expansions. We put back the
+    symbolic values and the projectors everywhere in the branch (the frozen
+    abstractions, but also the copies of the shared values in the abstractions
+    introduced since [ctx0]).
+
+    This folds the borrow graph of the expansions with the values: we require
+    the borrows, loans and symbolic values the expansions introduced not to
+    appear anywhere else in the folded context (a branch may for instance
+    return a borrow of a field of the expanded variant). Each branch keeps its
+    synthesis: the folded symbolic values are bound before the branching. *)
+let fold_frozen_abs_expansions (config : config) (span : Meta.span)
+    ~(recoverable : bool) (ctx0 : eval_ctx)
+    (ctxl : (eval_ctx * (SymbolicAst.expr -> SymbolicAst.expr)) list) :
+    (eval_ctx * (SymbolicAst.expr -> SymbolicAst.expr)) list =
+  let strip (abs : abs) = { abs with cont = None; parents = AbsId.Set.empty } in
+  let frozen =
+    List.filter
+      (fun (abs : abs) -> not abs.can_end)
+      (List.map snd (AbsId.Map.bindings (ctx_get_abs ctx0)))
+  in
+  let fail () =
+    [%craise_recover] recoverable span
+      "Could not fold the expansion of a value shared by a frozen abstraction"
+  in
+  (* Collect the expansions of the symbolic values of [x0] in [x1] *)
+  let rec walk_value values (x0 : tvalue) (x1 : tvalue) : unit =
+    if x0 <> x1 then (
+      if x0.ty <> x1.ty then fail ();
+      match (x0.value, x1.value) with
+      | VSymbolic _, _ -> values := (x0, x1) :: !values
+      | VAdt a0, VAdt a1
+        when a0.variant_id = a1.variant_id
+             && List.length a0.fields = List.length a1.fields ->
+          List.iter2 (walk_value values) a0.fields a1.fields
+      | VBorrow (VMutBorrow (b0, y0)), VBorrow (VMutBorrow (b1, y1)) when b0 = b1
+        ->
+          walk_value values y0 y1
+      | VLoan (VSharedLoan (l0, y0)), VLoan (VSharedLoan (l1, y1)) when l0 = l1
+        ->
+          walk_value values y0 y1
+      | _ -> fail ())
+  in
+  let rec walk_avalue values projs (x0 : tavalue) (x1 : tavalue) : unit =
+    let walk = walk_avalue values projs in
+    if x0 <> x1 then (
+      if x0.ty <> x1.ty then fail ();
+      match (x0.value, x1.value) with
+      | ( ASymbolic
+            ( _,
+              ( AProjLoans { consumed = []; borrows = []; _ }
+              | AProjBorrows { loans = []; _ } ) ),
+          _ ) ->
+          projs := (x0, x1) :: !projs
+      | AAdt a0, AAdt a1
+        when a0.variant_id = a1.variant_id
+             && List.length a0.fields = List.length a1.fields ->
+          List.iter2 walk a0.fields a1.fields
+      | ( ALoan (ASharedLoan (pm0, l0, v0, c0)),
+          ALoan (ASharedLoan (pm1, l1, v1, c1)) )
+        when pm0 = pm1 && l0 = l1 ->
+          walk_value values v0 v1;
+          walk c0 c1
+      | ALoan (AMutLoan (pm0, l0, c0)), ALoan (AMutLoan (pm1, l1, c1))
+        when pm0 = pm1 && l0 = l1 ->
+          walk c0 c1
+      | ALoan (AIgnoredSharedLoan c0), ALoan (AIgnoredSharedLoan c1) ->
+          walk c0 c1
+      | ALoan (AIgnoredMutLoan (l0, c0)), ALoan (AIgnoredMutLoan (l1, c1))
+        when l0 = l1 ->
+          walk c0 c1
+      | ABorrow (AMutBorrow (pm0, b0, c0)), ABorrow (AMutBorrow (pm1, b1, c1))
+        when pm0 = pm1 && b0 = b1 ->
+          walk c0 c1
+      | ( ABorrow (AIgnoredMutBorrow (b0, c0)),
+          ABorrow (AIgnoredMutBorrow (b1, c1)) )
+        when b0 = b1 ->
+          walk c0 c1
+      | AIgnored (Some (_, m0)), AIgnored (Some (_, m1)) ->
+          walk_value values m0 m1
+      | _ -> fail ())
+  in
+  let fold (ctx : eval_ctx) : eval_ctx =
+    let values = ref [] and projs = ref [] in
+    List.iter
+      (fun (abs0 : abs) ->
+        match ctx_lookup_abs_opt ctx abs0.abs_id with
+        | Some abs when not (equal_abs (strip abs) (strip abs0)) ->
+            if
+              not
+                (equal_abs
+                   { (strip abs) with avalues = [] }
+                   { (strip abs0) with avalues = [] }
+                && List.length abs.avalues = List.length abs0.avalues)
+            then fail ();
+            List.iter2 (walk_avalue values projs) abs0.avalues abs.avalues
+        | _ -> ())
+      frozen;
+    if !values = [] && !projs = [] then ctx
+    else
+      let values =
+        List.map (fun (v0, v) -> (v0, value_erase_shared_borrow_ids v)) !values
+      in
+      let projs = !projs in
+      let visitor =
+        object
+          inherit [_] map_env as super
+
+          method! visit_tvalue env v =
+            match
+              List.find_opt
+                (fun ((v0 : tvalue), v') ->
+                  v0.ty = v.ty && value_erase_shared_borrow_ids v = v')
+                values
+            with
+            | Some (v0, _) -> v0
+            | None -> super#visit_tvalue env v
+
+          method! visit_tavalue env v =
+            match List.find_opt (fun (_, p) -> p = v) projs with
+            | Some (p0, _) -> p0
+            | None -> super#visit_tavalue env v
+        end
+      in
+      let env = visitor#visit_env () ctx.env in
+      [%ltrace
+        "- values:\n"
+        ^ String.concat "\n"
+            (List.map
+               (fun (v0, v) ->
+                 tvalue_to_string ctx v0 ^ " -> " ^ tvalue_to_string ctx v)
+               values)
+        ^ "\n- projs:\n"
+        ^ String.concat "\n"
+            (List.map
+               (fun (p0, p1) ->
+                 tavalue_to_string ctx p0 ^ " -> " ^ tavalue_to_string ctx p1)
+               projs)
+        ^ "\n- ctx:\n"
+        ^ eval_ctx_to_string ~span:(Some span) ctx
+        ^ "\n- folded ctx:\n"
+        ^ eval_ctx_to_string ~span:(Some span) { ctx with env }];
+      (* The borrows, loans and symbolic values with borrows the expansions
+         introduced must not appear anymore. The other symbolic values are
+         plain values the branch may have copied (they are bound by its
+         synthesis). *)
+      let obj, get_ids, get_ids_to_values = compute_ids () in
+      List.iter (fun (_, v) -> obj#visit_tvalue () v) values;
+      List.iter (fun (_, p) -> obj#visit_tavalue () p) projs;
+      let ids = get_ids () in
+      let ids0 = fst (compute_env_ids ctx0.env) in
+      let fids = fst (compute_env_ids env) in
+      let fresh_blids = BorrowId.Set.diff ids.blids ids0.blids in
+      let fresh_sids =
+        SymbolicValueId.Map.filter
+          (fun sid (sv : symbolic_value) ->
+            (not (SymbolicValueId.Set.mem sid ids0.sids))
+            && ty_has_borrows (Some span) ctx.type_ctx.type_infos sv.sv_ty)
+          (get_ids_to_values ()).sids_to_values
+      in
+      [%cassert_recover] recoverable span
+        (BorrowId.Set.disjoint fresh_blids fids.blids
+        && SymbolicValueId.Map.for_all
+             (fun sid _ -> not (SymbolicValueId.Set.mem sid fids.sids))
+             fresh_sids)
+        "Could not fold the expansion of a value shared by a frozen \
+         abstraction: a part of the expansion escapes";
+      let ctx = { ctx with env } in
+      [%cassert_recover] recoverable span
+        (List.for_all
+           (fun (abs0 : abs) ->
+             match ctx_lookup_abs_opt ctx abs0.abs_id with
+             | Some abs -> equal_abs (strip abs) (strip abs0)
+             | None -> true)
+           frozen)
+        "Could not fold the expansion of a value shared by a frozen \
+         abstraction";
+      ctx
+  in
+  (* We only fold if the frozen abstractions differ between the contexts *)
+  let differ =
+    List.exists
+      (fun (abs0 : abs) ->
+        let versions =
+          List.filter_map
+            (fun ctx ->
+              Option.map strip (ctx_lookup_abs_opt (fst ctx) abs0.abs_id))
+            ctxl
+        in
+        List.exists (fun abs -> not (equal_abs abs (List.hd versions))) versions)
+      frozen
+  in
+  (* The dead values may borrow parts of the expansions: we first eliminate
+     them (as {!join_ctxs_list} does) *)
+  let simplify_fold (ctx, wrap) =
+    let ctx, cc = simplify_dummy_values_useless_abs config span ctx in
+    (fold ctx, fun e -> wrap (cc e))
+  in
+  if differ then List.map simplify_fold ctxl else ctxl
 
 let join_ctxs_list (config : config) (span : Meta.span)
     (fresh_abs_kind : abs_kind) ?(preprocess_first_ctx : bool = true)
@@ -2060,6 +2288,21 @@ and match_ctx_with_target_aux (config : config) (span : Meta.span)
     | _ -> [%internal_error] span
   in
 
+  (* The join turns the function call abstractions it outputs into join
+     abstractions (see {!InterpStatements.eval_switch_with_join}): we do the
+     same with their counterparts in the target context, so that we identify
+     them as common abstractions. *)
+  let tgt_ctx =
+    if preserve_common_abs then
+      let src_abs = ctx_get_abs src_ctx in
+      ctx_map_abs
+        (fun abs ->
+          match (abs.kind, AbsId.Map.find_opt abs.abs_id src_abs) with
+          | FunCall _, Some { kind = Join; _ } -> { abs with kind = Join }
+          | _ -> abs)
+        tgt_ctx
+    else tgt_ctx
+  in
   (* The abstractions of the joined context which are fresh with respect to
      the context before the branching are destructured (see
      {!InterpAbs.add_abs_cont_to_abs}): when the destructured values of an
@@ -2119,6 +2362,44 @@ and match_ctx_with_target_aux (config : config) (span : Meta.span)
     | Error _ -> [%craise] span "Could not join the contexts"
   in
   let joined_ctx = join_info.joined_ctx in
+  (* The join renames the values of the target whose types mention a region
+     ended in the source (see {!freshen_regions_ended_in_other}): the joined
+     context refers to them with fresh ids. A renamed value defined in the
+     target context (it appears outside of the outputs of the abstraction
+     continuations, which produce their values when the abstractions end) is
+     the value of its fresh id at this point of the branch: we bind it. The
+     other renamed values are produced by the continuations, which refer to
+     them with the fresh ids. *)
+  let cc =
+    let defined = ref SymbolicValueId.Set.empty in
+    let visitor =
+      object (self)
+        inherit [_] iter_eval_ctx
+
+        method! visit_symbolic_value_id _ sid =
+          defined := SymbolicValueId.Set.add sid !defined
+
+        method! visit_abs_cont env cont =
+          self#visit_option self#visit_tevalue env cont.input
+
+        method! visit_mvalue env v = self#visit_tvalue env v
+        method! visit_msymbolic_value env sv = self#visit_symbolic_value env sv
+      end
+    in
+    visitor#visit_eval_ctx () tgt_ctx;
+    cc_comp cc (fun e ->
+        List.fold_right
+          (fun ((sv, fresh_sv) : symbolic_value * symbolic_value) e ->
+            if SymbolicValueId.Set.mem sv.sv_id !defined then
+              SymbolicAst.IntroSymbolic
+                ( tgt_ctx,
+                  None,
+                  fresh_sv,
+                  VaSingleValue (mk_tvalue_from_symbolic_value sv),
+                  e )
+            else e)
+          join_info.renamed1 e)
+  in
   [%ltrace
     "Result of the join:\n- joined_ctx:\n"
     ^ eval_ctx_to_string joined_ctx

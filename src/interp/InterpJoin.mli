@@ -133,6 +133,19 @@ val align_fixed_abs_expansions :
   eval_ctx list ->
   (eval_ctx * (SymbolicAst.expr -> SymbolicAst.expr)) list
 
+(** In the contexts reaching a join, put back the values of the frozen
+    abstractions of the context before the branching where the branches expanded
+    them differently, together with the borrows and loans of the expansions.
+    Fails if a part of an expansion escapes. Takes and returns the contexts
+    with the expressions to synthesize at the end of their branches. *)
+val fold_frozen_abs_expansions :
+  config ->
+  Meta.span ->
+  recoverable:bool ->
+  eval_ctx ->
+  (eval_ctx * (SymbolicAst.expr -> SymbolicAst.expr)) list ->
+  (eval_ctx * (SymbolicAst.expr -> SymbolicAst.expr)) list
+
 (** Join a list of contexts, which must be non empty.
 
     As we may have to end loans in the environments before doing the join, we

@@ -505,10 +505,11 @@ let rec tavalue_to_consumed_aux ~(filter : bool) (ctx : bs_ctx)
              the meta-value was produced by a projector (and not introduced
              because of a join, because when doing joins we destructure the
              values): there **must** be a meta-value. The consumed value
-             is the meta-value. *)
+             is the meta-value, which we translate in the environment in
+             which it was introduced. *)
           match mv with
           | None -> [%craise] ctx.span "Unreachable"
-          | Some mv -> Some (tvalue_to_texpr ctx ectx mv))
+          | Some (env, mv) -> Some (tvalue_to_texpr ctx { ectx with env } mv))
   in
   (* Sanity check - Rk.: we do this at every recursive call, which is a bit
    * expansive... *)

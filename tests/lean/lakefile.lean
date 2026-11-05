@@ -49,6 +49,7 @@ package «tests» {}
 @[default_target] lean_lib DynamicSize
 @[default_target] lean_lib FnItemsLateBound
 @[default_target] lean_lib FnPtrGeneric
+@[default_target] lean_lib ForwardScopeAlignedJoins
 @[default_target] lean_lib ForwardScopes
 @[default_target] lean_lib FromTo
 @[default_target] lean_lib FrozenMutBorrows
@@ -86,10 +87,12 @@ package «tests» {}
 @[default_target] lean_lib Iterators
 @[default_target] lean_lib IteratorsArray
 @[default_target] lean_lib IteratorsScalar
+@[default_target] lean_lib JoinCommonCalls
 @[default_target] lean_lib JoinDeadLocals
 @[default_target] lean_lib JoinDuplicate
 @[default_target] lean_lib JoinInnerLoans
 @[default_target] lean_lib JoinLiveBorrows
+@[default_target] lean_lib JoinRenamedCallOutputs
 @[default_target] lean_lib Joins
 @[default_target] lean_lib JoinSharedProjections
 @[default_target] lean_lib JoinTargetSharedBorrows
@@ -132,6 +135,7 @@ package «tests» {}
 @[default_target] lean_lib Scalars
 @[default_target] lean_lib SharedBorrowsInSharedValues
 @[default_target] lean_lib SharedBorrowsReborrowedAtJoins
+@[default_target] lean_lib SharedEnumJoins
 @[default_target] lean_lib Slices
 @[default_target] lean_lib Static
 @[default_target] lean_lib StepBy

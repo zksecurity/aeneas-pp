@@ -45,6 +45,22 @@ impl<'a> Eng<'a> {
         let shift = |e: &Self, x: u32| e.d + x;
         both_pairs(v, |a, b| shift(self, b) == shift(self, a) + 1)
     }
+
+    fn record(&mut self, x: u32, y: u32) -> bool {
+        self.t.push(x);
+        x + self.d == y
+    }
+
+    /// The closure captures [*self] and shared borrows of two locals, which the
+    /// value given back to the inner borrows of [*self] must keep.
+    pub fn shifted(&mut self, a: u32, b: u32) -> bool {
+        (0..2).all(|i| self.record(a + i, b + i))
+    }
+
+    /// The same closure, in a branch.
+    pub fn shifted_below(&mut self, a: u32, b: u32) -> bool {
+        a < 9 && (0..2).all(|i| self.record(a + i, b + i))
+    }
 }
 
 fn call_mut_twice(v: &mut Vec<u32>, mut f: impl FnMut(&mut Vec<u32>) -> u32) -> u32 {
