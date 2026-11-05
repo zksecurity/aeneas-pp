@@ -25,39 +25,37 @@ namespace shared_borrows_in_shared_values
     Visibility: public -/
 @[rust_loop_body]
 def all_nonzero_loop.body
-  (xs : Slice Std.U32) (iter : core.slice.iter.Iter Std.U32) :
-  Result (ControlFlow ((Slice Std.U32) × (core.slice.iter.Iter Std.U32))
-    (core.result.Result Unit Unit))
+  (iter : core.slice.iter.Iter Std.U32) :
+  Result (ControlFlow (core.slice.iter.Iter Std.U32) (core.result.Result Unit
+    Unit))
   := do
   let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
-  let s : _root_.Sum Unit (_root_.Sum ((Slice Std.U32) × (core.slice.iter.Iter
-    Std.U32)) ((core.result.Result Unit Unit) × (Slice Std.U32))) ←
+  let s : _root_.Sum Unit (_root_.Sum (core.slice.iter.Iter Std.U32)
+    (core.result.Result Unit Unit)) ←
     match o with
-    | none => ok (Sum.inr (Sum.inr (core.result.Result.Ok (), xs)))
+    | none => ok (Sum.inr (Sum.inr (core.result.Result.Ok ())))
     | some x =>
       if x = 0#u32
       then ok (Sum.inl ())
-      else ok (Sum.inr (Sum.inl (xs, iter1)))
+      else ok (Sum.inr (Sum.inl iter1))
   match s with
   | Sum.inl _ => ok (done (core.result.Result.Err ()))
   | Sum.inr s1 =>
     match s1 with
-    | Sum.inl p => let (s2, i) := p
-                   ok (cont (s2, i))
-    | Sum.inr p => let (r, _) := p
-                   ok (done r)
+    | Sum.inl i => ok (cont i)
+    | Sum.inr r => ok (done r)
 
 /-- [shared_borrows_in_shared_values::all_nonzero]: loop 0:
     Source: 'tests/src/shared-borrows-in-shared-values.rs', lines 10:13-16:1
     Visibility: public -/
 @[rust_loop]
 def all_nonzero_loop
-  (xs : Slice Std.U32) (iter : core.slice.iter.Iter Std.U32) :
+  (iter : core.slice.iter.Iter Std.U32) :
   Result (core.result.Result Unit Unit)
   := do
   loop
-    (fun (xs1, iter1) => all_nonzero_loop.body xs1 iter1)
-    (xs, iter)
+    (fun iter1 => all_nonzero_loop.body iter1)
+    iter
 
 /-- [shared_borrows_in_shared_values::all_nonzero]:
     Source: 'tests/src/shared-borrows-in-shared-values.rs', lines 9:0-16:1
@@ -66,7 +64,7 @@ def all_nonzero
   (xs : Slice Std.U32) : Result (core.result.Result Unit Unit) := do
   let iter ←
     SharedSlice.Insts.CoreIterTraitsCollectIntoIteratorSharedIter.into_iter xs
-  all_nonzero_loop xs iter
+  all_nonzero_loop iter
 
 /-- [shared_borrows_in_shared_values::sum_refs]: loop body 0:
     Source: 'tests/src/shared-borrows-in-shared-values.rs', lines 21:4-23:5
