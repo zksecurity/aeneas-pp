@@ -387,7 +387,7 @@ let prepare_eval_operand_reorganize (config : config) (span : Meta.span)
       access_rplace_reorganize config span greedy_expand access p ctx
 
 (** Evaluate an operand, without reorganizing the context before *)
-let eval_operand_no_reorganize (config : config) (span : Meta.span)
+let rec eval_operand_no_reorganize (config : config) (span : Meta.span)
     (op : operand) (ctx : eval_ctx) :
     tvalue * eval_ctx * (SymbolicAst.expr -> SymbolicAst.expr) =
   (* Debug *)
@@ -555,6 +555,47 @@ let eval_operand_no_reorganize (config : config) (span : Meta.span)
               (ctx, None, tvalue_as_symbolic span sv, SymbolicAst.VaFnDef ptr, e)
           in
           (sv, ctx, cf)
+      | CArray _ | CRepeat _ -> (
+          (* The constant repeats come from literals (byte strings like
+             [b"}}"]): we list their elements *)
+          let elems =
+            match cv.kind with
+            | CArray elems -> elems
+            | CRepeat (value, count, _) ->
+                List.init
+                  (Z.to_int (get_val (constant_expr_as_integer count)))
+                  (fun _ -> value)
+            | _ -> [%internal_error] span
+          in
+          match cv.ty with
+          | TArray (ety, _, _)
+            when not (ty_has_borrows (Some span) ctx.type_ctx.type_infos ety)
+            ->
+              (* As for the aggregated arrays, we introduce a symbolic value
+                 equal to the array *)
+              let (ctx, cc), values =
+                List.fold_left_map
+                  (fun (ctx, cc) (elem : constant_expr) ->
+                    let v, ctx, cc' =
+                      eval_operand_no_reorganize config span (Constant elem) ctx
+                    in
+                    ((ctx, cc_comp cc cc'), v))
+                  (ctx, fun e -> e)
+                  elems
+              in
+              let sv = mk_fresh_symbolic_tvalue span ctx cv.ty in
+              let cf e =
+                SymbolicAst.IntroSymbolic
+                  ( ctx,
+                    None,
+                    ValuesUtils.value_as_symbolic span sv.value,
+                    VaArray values,
+                    e )
+              in
+              (sv, ctx, cc_comp cc cf)
+          | _ ->
+              [%craise] span
+                ("Found unexpected constant: " ^ constant_expr_to_string ctx cv))
       | CRawMemory _ ->
           [%craise] span "Raw memory cannot be interpreted by the interpreter"
       | COpaque reason ->
