@@ -475,6 +475,14 @@ let convert_value_to_input_avalues (span : Meta.span) (ctx : eval_ctx)
   (* Apply *)
   to_input v
 
+(** The union of two projection markers *)
+let join_proj_markers (pm0 : proj_marker) (pm1 : proj_marker) : proj_marker =
+  match (pm0, pm1) with
+  | PNone, _ | _, PNone -> PNone
+  | PLeft, PRight | PRight, PLeft -> PNone
+  | PRight, PRight -> PRight
+  | PLeft, PLeft -> PLeft
+
 (** Simplify the duplicated shared borrows in a region abstraction.
 
     {[
@@ -485,14 +493,6 @@ let convert_value_to_input_avalues (span : Meta.span) (ctx : eval_ctx)
     borrows we take the union of the markers. *)
 let abs_simplify_duplicated_borrows (_span : Meta.span) (_ctx : eval_ctx)
     (abs : abs) : abs =
-  let join_pm (pm0 : proj_marker) (pm1 : proj_marker) : proj_marker =
-    match (pm0, pm1) with
-    | PNone, _ | _, PNone -> PNone
-    | PLeft, PRight | PRight, PLeft -> PNone
-    | PRight, PRight -> PRight
-    | PLeft, PLeft -> PLeft
-  in
-
   (* We first filter the borrows which are duplicated *)
   let shared_borrows = ref BorrowId.Map.empty in
   let keep_avalue (av : tavalue) : bool =
@@ -503,7 +503,7 @@ let abs_simplify_duplicated_borrows (_span : Meta.span) (_ctx : eval_ctx)
             shared_borrows := BorrowId.Map.add bid pm !shared_borrows;
             true
         | Some pm' ->
-            let pm = join_pm pm pm' in
+            let pm = join_proj_markers pm pm' in
             shared_borrows := BorrowId.Map.add bid pm !shared_borrows;
             false
       end
@@ -986,8 +986,15 @@ let merge_abstractions_merge_markers (span : Meta.span)
         Some (merge_funs.merge_amut_borrows id0 ty0 pm0 child0 ty1 pm1 child1)
     | ASharedBorrow (pm0, id0, sid0), ASharedBorrow (pm1, id1, sid1)
       when id0 = id1 ->
-        [%sanity_check] span (complementary_markers pm0 pm1);
-        Some (merge_funs.merge_ashared_borrows id0 ty0 pm0 sid0 ty1 pm1 sid1)
+        (* The merged abstraction holds a single instance of the shared
+           borrow. The two instances may come from the same side (see
+           [abs_simplify_duplicated_borrows]): we then take the union of their
+           markers. *)
+        if complementary_markers pm0 pm1 then
+          Some (merge_funs.merge_ashared_borrows id0 ty0 pm0 sid0 ty1 pm1 sid1)
+        else
+          let pm = join_proj_markers pm0 pm1 in
+          Some { value = ABorrow (ASharedBorrow (pm, id0, sid0)); ty = ty0 }
     | ( AProjSharedBorrow (pm0, [ AsbBorrow (id0, sid0) ]),
         AProjSharedBorrow (pm1, [ AsbBorrow (id1, _) ]) )
       when id0 = id1 && complementary_markers pm0 pm1 ->
@@ -2184,6 +2191,12 @@ let merge_abstractions (span : Meta.span) (abs_kind : abs_kind)
   [%ldebug
     "avalues after removing markers:\n"
     ^ String.concat "\n" (List.map (tavalue_to_string ctx) avalues)];
+
+  (* Phase 4: the two abstractions may hold instances of the same shared
+     borrows: the merged abstraction holds a single instance of each. *)
+  let avalues =
+    (abs_simplify_duplicated_borrows span ctx { abs0 with avalues }).avalues
+  in
 
   (* Merge the expressions used for the pure translation. *)
   let cont = merge_abs_conts span ctx ~with_abs_conts abs0 abs1 in
