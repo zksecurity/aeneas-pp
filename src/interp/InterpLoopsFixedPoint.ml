@@ -11,7 +11,12 @@ open InterpJoin
 let log = Logging.loops_fixed_point_log
 
 (** Update the abstractions introduced by a loop with additional information,
-    such as region group ids, continuation expressions, etc. *)
+    such as region group ids, continuation expressions, etc.
+
+    The abstractions which exist before the loop are left untouched: when the
+    loop is evaluated inside the body of an enclosing loop, they include the
+    loop abstractions of the enclosing loop's fixed point, which get their
+    continuations once that fixed point is computed. *)
 let loop_abs_reorder_and_add_info (span : Meta.span) (fixed_ids : ids_sets)
     (ctx : eval_ctx) : eval_ctx =
   (* Introduce continuation expressions. *)
@@ -24,9 +29,11 @@ let loop_abs_reorder_and_add_info (span : Meta.span) (fixed_ids : ids_sets)
         inherit [_] map_eval_ctx
 
         method! visit_abs _ abs =
-          match abs.kind with
-          | Loop loop_id -> add_abs_cont_to_abs abs loop_id
-          | _ -> abs
+          if AbsId.Set.mem abs.abs_id fixed_ids.aids then abs
+          else
+            match abs.kind with
+            | Loop loop_id -> add_abs_cont_to_abs abs loop_id
+            | _ -> abs
       end
     in
     visitor#visit_eval_ctx () ctx
