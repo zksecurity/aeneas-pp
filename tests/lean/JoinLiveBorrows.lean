@@ -221,4 +221,32 @@ def test_field_at_number : Result Unit := do
 /- Unit test for [join_live_borrows::test_field_at_number] -/
 #guard (test_field_at_number).reducesTo ()
 
+/-- [join_live_borrows::exit_code]:
+    Source: 'tests/src/join-live-borrows.rs', lines 76:0-81:1
+    Visibility: public -/
+def exit_code (v : Value) : Result Std.U32 := do
+  match v with
+  | Value.Num _ => ok 1#u32
+  | Value.Obj _ => ok 2#u32
+
+/-- [join_live_borrows::status]:
+    Source: 'tests/src/join-live-borrows.rs', lines 83:0-88:1
+    Visibility: public -/
+def status (v : Option Value) : Result Std.U32 := do
+  match v with
+  | none => ok 0#u32
+  | some v1 => exit_code v1
+
+/-- [join_live_borrows::test_status]:
+    Source: 'tests/src/join-live-borrows.rs', lines 91:0-94:1
+    Visibility: public -/
+def test_status : Result Unit := do
+  let i ← status none
+  massert (i = 0#u32)
+  let i1 ← status (some (Value.Num 3#u64))
+  massert (i1 = 1#u32)
+
+/- Unit test for [join_live_borrows::test_status] -/
+#guard (test_status).reducesTo ()
+
 end join_live_borrows

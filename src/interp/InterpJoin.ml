@@ -689,26 +689,33 @@ let freshen_regions_ended_in_other (span : Meta.span) (fresh_abs_kind : abs_kind
     let mentions_rids (ty : ty) : bool =
       ty_has_regions_in_set ctx.type_ctx.type_infos regions ty
     in
-    (* The symbolic values whose types or projections mention the regions.
+    (* The symbolic values whose types mention the regions. A value projected
+       at the regions doesn't depend on them (the renaming of the regions
+       updates the projection): we use the type of a projection only for the
+       values which appear in projections only.
        [~in_ignored]: whether we include the meta-values of the ignored values
        ([AIgnored], and [EIgnored] in the continuations), whose synthesis doesn't
        depend on the regions: they are translated as values, whose types the
        translation erases. *)
     let mentioning_svs ~(in_ignored : bool) =
       let svs = ref SymbolicValueId.Set.empty in
-      let add id = svs := SymbolicValueId.Set.add id !svs in
+      let typed = ref SymbolicValueId.Set.empty in
+      let proj_svs = ref SymbolicValueId.Set.empty in
+      let add_proj sv_id proj_ty =
+        if mentions_rids proj_ty then
+          proj_svs := SymbolicValueId.Set.add sv_id !proj_svs
+      in
       let visitor =
         object (self)
           inherit [_] iter_eval_ctx as super
 
           method! visit_symbolic_value _ sv =
-            if mentions_rids sv.sv_ty then add sv.sv_id
+            typed := SymbolicValueId.Set.add sv.sv_id !typed;
+            if mentions_rids sv.sv_ty then
+              svs := SymbolicValueId.Set.add sv.sv_id !svs
 
-          method! visit_symbolic_proj _ proj =
-            if mentions_rids proj.proj_ty then add proj.sv_id
-
-          method! visit_esymbolic_proj _ proj =
-            if mentions_rids proj.proj_ty then add proj.sv_id
+          method! visit_symbolic_proj _ proj = add_proj proj.sv_id proj.proj_ty
+          method! visit_esymbolic_proj _ proj = add_proj proj.sv_id proj.proj_ty
 
           method! visit_mvalue env v = self#visit_tvalue env v
           method! visit_msymbolic_value env sv = self#visit_symbolic_value env sv
@@ -721,7 +728,8 @@ let freshen_regions_ended_in_other (span : Meta.span) (fresh_abs_kind : abs_kind
         end
       in
       visitor#visit_eval_ctx () ctx;
-      !svs
+      SymbolicValueId.Set.union !svs
+        (SymbolicValueId.Set.diff !proj_svs !typed)
     in
     let svs =
       if SymbolicValueId.Set.is_empty (mentioning_svs ~in_ignored:false) then

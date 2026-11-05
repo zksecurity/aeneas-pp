@@ -70,3 +70,25 @@ pub fn test_field_at_number() {
     assert!(matches!(field_at_number(&v, 3), Err(0)));
     assert!(matches!(field_at_number(&Value::Num(5), 1), Err(1)));
 }
+
+// The input is projected at the region of the call in one branch only: the join
+// renames that region, not the input.
+pub fn exit_code(v: &Value) -> u32 {
+    match v {
+        Value::Num(_) => 1,
+        _ => 2,
+    }
+}
+
+pub fn status(v: Option<&Value>) -> u32 {
+    match v {
+        None => 0,
+        Some(v) => exit_code(v),
+    }
+}
+
+#[verify::test]
+pub fn test_status() {
+    assert!(status(None) == 0);
+    assert!(status(Some(&Value::Num(3))) == 1);
+}
