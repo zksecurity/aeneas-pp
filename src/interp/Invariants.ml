@@ -610,6 +610,12 @@ let check_typing_invariant_visitor span ctx (lookups : bool) =
           List.iter
             (fun ((v, ty) : tavalue * ty) -> [%sanity_check] span (v.ty = ty))
             fields_with_types
+      | AAdt av, TArray (inner_ty, len, _) ->
+          [%sanity_check] span
+            (List.for_all (fun (v : tavalue) -> v.ty = inner_ty) av.fields);
+          (* The length is necessarily concrete *)
+          let len = Scalars.get_val (TypesUtils.constant_expr_as_integer len) in
+          [%sanity_check] span (Z.of_int (List.length av.fields) = len)
       (* Builtin type case *)
       | AAdt av, TAdt { generics; builtin = Some aty_id; _ } -> (
           [%sanity_check] span (av.variant_id = None);
