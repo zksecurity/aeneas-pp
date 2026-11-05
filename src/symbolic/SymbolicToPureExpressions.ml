@@ -225,6 +225,62 @@ let compute_back_fun_name (ctx : bs_ctx) (decl : LlbcAst.fun_decl) : string =
           (* We shouldn't get there *)
           [%craise] decl.item_meta.span "Unexpected")
 
+(** The type of the values of one of several types [tys]: the right-nested sum
+    of the types *)
+let rec mk_sums_ty (span : Meta.span) (tys : ty list) : ty =
+  match tys with
+  | [] -> [%internal_error] span
+  | [ ty ] -> ty
+  | ty :: tys -> mk_sum_ty ty (mk_sums_ty span tys)
+
+(** Inject a value of the [i]th type of [tys] in {!mk_sums_ty} *)
+let rec mk_sums_inject (span : Meta.span) (tys : ty list) (i : int) (v : texpr) :
+    texpr =
+  match tys with
+  | [] -> [%internal_error] span
+  | [ _ ] ->
+      [%sanity_check] span (i = 0);
+      v
+  | ty :: tys' ->
+      if i = 0 then mk_sum_left_texpr span v (mk_sums_ty span tys')
+      else mk_sum_right_texpr span ty (mk_sums_inject span tys' (i - 1) v)
+
+(** Match a value of type {!mk_sums_ty}: [branches] give, for each type, a
+    pattern for the values of this type and the expression to evaluate.
+
+    The constructor patterns bind variables, which the branches destructure:
+    Lean's [do] notation fails on some nested patterns ([duplicate binder]). *)
+let rec mk_sums_match (ctx : bs_ctx) (scrut : texpr)
+    (branches : (tpat * texpr) list) : texpr =
+  match branches with
+  | [] -> [%internal_error] ctx.span
+  | [ (pat, e) ] -> [%add_loc] mk_closed_checked_let ctx false pat scrut e
+  | (pat, e) :: branches' ->
+      let rest_ty =
+        mk_sums_ty ctx.span (List.map (fun ((p : tpat), _) -> p.ty) branches')
+      in
+      let ctx, rest = fresh_var None rest_ty ctx in
+      let pat, e =
+        match pat.pat with
+        | POpen _ | PIgnored -> (pat, e)
+        | _ ->
+            let ctx, v = fresh_var None pat.ty ctx in
+            ( mk_tpat_from_fvar None v,
+              [%add_loc] mk_closed_checked_let ctx false pat
+                (mk_texpr_from_fvar v) e )
+      in
+      let inl = mk_adt_pat scrut.ty (Some sum_left_id) [ pat ] in
+      let inr =
+        mk_adt_pat scrut.ty (Some sum_right_id) [ mk_tpat_from_fvar None rest ]
+      in
+      mk_switch __FILE__ __LINE__ ctx.span scrut
+        (Match
+           [
+             close_branch ctx.span inl e;
+             close_branch ctx.span inr
+               (mk_sums_match ctx (mk_texpr_from_fvar rest) branches');
+           ])
+
 let rec translate_expr (e : S.expr) (ctx : bs_ctx) : texpr =
   [%ldebug "e:\n" ^ bs_ctx_expr_to_string ctx e];
   match e with
@@ -255,10 +311,10 @@ let rec translate_expr (e : S.expr) (ctx : bs_ctx) : texpr =
   | Loop loop -> translate_loop loop ctx
   | Error (span, msg) -> translate_error span msg
   | LoopContinue (ectx, loop_id, input_values, input_abs) ->
-      translate_continue_break ctx ~continue:true ectx loop_id input_values
+      translate_continue_break ctx ExitLoopContinue ectx loop_id input_values
         input_abs
-  | LoopBreak (ectx, loop_id, input_values, input_abs) ->
-      translate_continue_break ctx ~continue:false ectx loop_id input_values
+  | LoopBreak (ectx, loop_id, exit, input_values, input_abs) ->
+      translate_continue_break ctx (ExitLoop exit) ectx loop_id input_values
         input_abs
   | Let lete -> translate_let ctx lete
   | Join (join_id, ectx, input_values, input_abs) ->
@@ -1967,21 +2023,38 @@ and translate_loop (loop : S.loop) (ctx0 : bs_ctx) : texpr =
     ^ "\n\n- loop translated inputs:\n"
     ^ String.concat "\n\n" (List.map (texpr_to_string ctx) inputs)];
 
-  (* Introduce the binders for the loop outputs *)
-  let ctx, break_abs, break_values =
-    bind_inputs ctx loop.break_abs loop.break_svalues
+  (* Introduce the binders for the outputs of the loop at each exit, and
+     translate the expression following the exit. Every exit starts from the
+     context before the loop: the exits may share symbolic values (the values
+     the loop doesn't modify), which each exit binds to its own outputs. *)
+  let exit_outputs =
+    List.map
+      (fun (exit : S.loop_exit_info) ->
+        let ctx, exit_abs, exit_values =
+          bind_inputs ctx exit.exit_abs exit.exit_svalues
+        in
+        let exit_e = translate_expr exit.exit_expr ctx in
+        ( exit_values @ exit_abs,
+          mk_simpl_tuple_pat (exit_values @ exit_abs),
+          exit_e ))
+      loop.exits
   in
-  let outputs = break_values @ break_abs in
-  let output = mk_simpl_tuple_pat outputs in
+  let output_tys =
+    List.map (fun (_, (pat : tpat), _) -> pat.ty) exit_outputs
+  in
+  let num_exit_values =
+    List.map
+      (fun (exit : S.loop_exit_info) -> List.length exit.exit_svalues)
+      loop.exits
+  in
+  (* If the loop has several exits, it outputs the sum of the outputs at the
+     exits *)
+  let break_ty = mk_sums_ty ctx.span output_tys in
 
   [%ldebug
-    "- loop output values:\n"
+    "- loop translated outputs:\n"
     ^ String.concat "\n"
-        (List.map (symbolic_value_to_string ctx) loop.break_svalues)
-    ^ "\n\n- loop output abstractions:\n"
-    ^ String.concat "\n\n" (List.map (abs_to_string ctx) loop.break_abs)
-    ^ "\n\n- loop translated outputs:\n"
-    ^ String.concat "\n" (List.map (tpat_to_string ctx) outputs)];
+        (List.map (fun (_, pat, _) -> tpat_to_string ctx pat) exit_outputs)];
 
   (* Translate the body *)
   let loop_body =
@@ -1993,7 +2066,6 @@ and translate_loop (loop : S.loop) (ctx0 : bs_ctx) : texpr =
     (* Update [mk_panic], [mk_return] and the exit handlers *)
     let continue_ty = List.map (fun (e : texpr) -> e.ty) inputs in
     let continue_ty = mk_simpl_tuple_ty continue_ty in
-    let break_ty = output.ty in
     [%ldebug
       "- continue_ty:\n"
       ^ pure_ty_to_string ctx continue_ty
@@ -2010,12 +2082,18 @@ and translate_loop (loop : S.loop) (ctx0 : bs_ctx) : texpr =
           payload_ty = continue_ty;
           deliver = (fun ctx v -> mk_continue_texpr ctx.span v break_ty);
         };
-        {
-          target = ExitLoopBreak;
-          payload_ty = break_ty;
-          deliver = (fun ctx v -> mk_break_texpr ctx.span continue_ty v);
-        };
       ]
+      @ List.mapi
+          (fun i (exit : S.loop_exit_info) : exit_handler ->
+            {
+              target = ExitLoop exit.exit;
+              payload_ty = List.nth output_tys i;
+              deliver =
+                (fun ctx v ->
+                  mk_break_texpr ctx.span continue_ty
+                    (mk_sums_inject ctx.span output_tys i v));
+            })
+          loop.exits
     in
     let ctx =
       { ctx with mk_panic = Some mk_panic; mk_return = None; exit_handlers }
@@ -2037,8 +2115,14 @@ and translate_loop (loop : S.loop) (ctx0 : bs_ctx) : texpr =
     {
       loop_id;
       span = loop.span;
-      output_tys = List.map (fun (pat : tpat) -> pat.ty) outputs;
-      num_output_values = List.length break_values;
+      output_tys =
+        (match exit_outputs with
+        | [ (outputs, _, _) ] -> List.map (fun (p : tpat) -> p.ty) outputs
+        | _ -> [ break_ty ]);
+      num_output_values =
+        (match num_exit_values with
+        | [ n ] -> n
+        | _ -> 1);
       inputs = input_abs @ input_values;
       num_input_conts = List.length input_abs;
       loop_body;
@@ -2047,20 +2131,26 @@ and translate_loop (loop : S.loop) (ctx0 : bs_ctx) : texpr =
   in
   [%sanity_check] loop.span
     (List.length loop_e.loop_body.inputs = List.length loop_e.inputs);
-  let loop_ty = mk_result_ty output.ty in
+  let loop_ty = mk_result_ty break_ty in
   let loop_e : texpr = { e = Loop loop_e; ty = loop_ty } in
 
   [%ltrace
     "- loop expression:\n" ^ texpr_to_string ctx loop_e ^ "\n\n- num inputs: "
     ^ string_of_int (List.length inputs)];
 
-  (* Translate the next expression *)
-  let next_e = translate_expr loop.next_expr ctx in
+  (* Create the let-binding, and dispatch the output to the exits *)
+  match exit_outputs with
+  | [ (_, output, exit_e) ] ->
+      [%add_loc] mk_closed_checked_let ctx true output loop_e exit_e
+  | _ ->
+      let ctx, x = fresh_var None break_ty ctx in
+      [%add_loc] mk_closed_checked_let ctx true
+        (mk_tpat_from_fvar None x)
+        loop_e
+        (mk_sums_match ctx (mk_texpr_from_fvar x)
+           (List.map (fun (_, pat, exit_e) -> (pat, exit_e)) exit_outputs))
 
-  (* Create the let-binding *)
-  [%add_loc] mk_closed_checked_let ctx true output loop_e next_e
-
-and translate_continue_break (ctx : bs_ctx) ~(continue : bool)
+and translate_continue_break (ctx : bs_ctx) (target : S.exit_target)
     (ectx : C.eval_ctx) (_loop_id : V.loop_id) (input_values : V.tvalue list)
     (input_abs : V.abs list) : texpr =
   [%ldebug
@@ -2077,9 +2167,10 @@ and translate_continue_break (ctx : bs_ctx) ~(continue : bool)
     ^ String.concat "\n\n" (List.map (texpr_to_string ctx) conts)];
   (* Note that the order between the values and the continuations is not the same
      depending on whether we reach a break or a continue *)
-  let outputs, target =
-    if continue then (conts @ values, S.ExitLoopContinue)
-    else (values @ conts, S.ExitLoopBreak)
+  let outputs =
+    match target with
+    | ExitLoopContinue -> conts @ values
+    | _ -> values @ conts
   in
   let output = mk_simpl_tuple_texpr ctx.span outputs in
   deliver_exit ctx target output
@@ -2165,39 +2256,20 @@ and translate_let (ctx0 : bs_ctx) (lete : S.let_expr) : texpr =
           "No handler for the exit target")
       lete.exits
   in
-  let rec payload_ty (exits : exit_handler list) : ty =
-    match exits with
-    | [] -> [%internal_error] ctx.span
-    | [ h ] -> h.payload_ty
-    | h :: exits -> mk_sum_ty h.payload_ty (payload_ty exits)
+  let bound_tys =
+    output.ty :: List.map (fun (h : exit_handler) -> h.payload_ty) exits
   in
-  let bound_ty =
-    if exits = [] then output.ty else mk_sum_ty output.ty (payload_ty exits)
-  in
+  let bound_ty = mk_sums_ty ctx.span bound_tys in
 
   (* Translate the bound expression *)
   let bound_e =
     let mk_ok (v : texpr) : texpr = mk_result_ok_texpr ctx.span v in
     let own_handler : exit_handler =
-      if exits = [] then
-        { target = own; payload_ty = output.ty; deliver = (fun _ v -> mk_ok v) }
-      else
-        let payload_ty = payload_ty exits in
-        {
-          target = own;
-          payload_ty = output.ty;
-          deliver =
-            (fun ctx v -> mk_ok (mk_sum_left_texpr ctx.span v payload_ty));
-        }
-    in
-    (* Inject a value in the payload, at the position of the [i]th exit *)
-    let rec inject (i : int) (exits : exit_handler list) (v : texpr) : texpr =
-      match exits with
-      | [] -> [%internal_error] ctx.span
-      | [ _ ] -> v
-      | h :: exits' ->
-          if i = 0 then mk_sum_left_texpr ctx.span v (payload_ty exits')
-          else mk_sum_right_texpr ctx.span h.payload_ty (inject (i - 1) exits' v)
+      {
+        target = own;
+        payload_ty = output.ty;
+        deliver = (fun ctx v -> mk_ok (mk_sums_inject ctx.span bound_tys 0 v));
+      }
     in
     let exit_handlers =
       List.mapi
@@ -2205,9 +2277,7 @@ and translate_let (ctx0 : bs_ctx) (lete : S.let_expr) : texpr =
           {
             h with
             deliver =
-              (fun ctx v ->
-                mk_ok
-                  (mk_sum_right_texpr ctx.span output.ty (inject i exits v)));
+              (fun ctx v -> mk_ok (mk_sums_inject ctx.span bound_tys (i + 1) v));
           })
         exits
     in
@@ -2236,40 +2306,22 @@ and translate_let (ctx0 : bs_ctx) (lete : S.let_expr) : texpr =
   let next_e = translate_expr lete.next_expr ctx in
 
   (* Create the let-binding *)
-  if exits <> [] then (
-    (* [let x <- bound_e in match x with | inl output => next_e | inr p => ...] *)
+  if exits <> [] then
+    (* [let x <- bound_e in match x with | inl output => next_e | inr p => ...],
+       where we forward the payload [p] to the handlers of the current context *)
     let ctx, x = fresh_var None bound_ty ctx in
-    (* Forward the payload to the handlers of the current context *)
-    let rec dispatch (ctx : bs_ctx) (exits : exit_handler list) (p : texpr) :
-        texpr =
-      match exits with
-      | [] -> [%internal_error] ctx.span
-      | [ h ] -> h.deliver ctx p
-      | h :: exits' ->
+    let ctx, exit_branches =
+      List.fold_left_map
+        (fun ctx (h : exit_handler) ->
           let ctx, v = fresh_var None h.payload_ty ctx in
-          let ctx, p' = fresh_var None (payload_ty exits') ctx in
-          let inl = mk_adt_pat p.ty (Some sum_left_id) [ mk_tpat_from_fvar None v ] in
-          let inr = mk_adt_pat p.ty (Some sum_right_id) [ mk_tpat_from_fvar None p' ] in
-          mk_switch __FILE__ __LINE__ ctx.span p
-            (Match
-               [
-                 close_branch ctx.span inl (h.deliver ctx (mk_texpr_from_fvar v));
-                 close_branch ctx.span inr
-                   (dispatch ctx exits' (mk_texpr_from_fvar p'));
-               ])
-    in
-    let ctx, p = fresh_var None (payload_ty exits) ctx in
-    let inl = mk_adt_pat bound_ty (Some sum_left_id) [ output ] in
-    let inr = mk_adt_pat bound_ty (Some sum_right_id) [ mk_tpat_from_fvar None p ] in
-    let exit_e = dispatch ctx exits (mk_texpr_from_fvar p) in
-    let match_e =
-      mk_switch __FILE__ __LINE__ ctx.span (mk_texpr_from_fvar x)
-        (Match
-           [ close_branch ctx.span inl next_e; close_branch ctx.span inr exit_e ])
+          (ctx, (mk_tpat_from_fvar None v, h.deliver ctx (mk_texpr_from_fvar v))))
+        ctx exits
     in
     [%add_loc] mk_closed_checked_let ctx true
       (mk_tpat_from_fvar None x)
-      bound_e match_e)
+      bound_e
+      (mk_sums_match ctx (mk_texpr_from_fvar x)
+         ((output, next_e) :: exit_branches))
   else [%add_loc] mk_closed_checked_let ctx true output bound_e next_e
 
 and translate_join (ctx : bs_ctx) (join_id : S.symbolic_expr_id)

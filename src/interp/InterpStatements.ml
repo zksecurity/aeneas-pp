@@ -638,58 +638,49 @@ let eval_global_as_fresh_symbolic_value (span : Meta.span)
       in
       (ctx, mk_tvalue_from_symbolic_value sval, ty, cc)
 
-(** Where [break i] goes: the end of the [i]th enclosing loop, which is a
-    forward scope (see {!LlbcAstUtils.loop_is_forward_scope}) or the innermost
-    loop which may iterate. [None] if the break leaves a loop which may iterate
-    to reach an outer one. *)
-let break_target (config : config) (i : int) : SA.exit_target option =
+(** Where [break i] goes: the end of the [i]th enclosing loop if it is a
+    forward scope (see {!LlbcAstUtils.loop_is_forward_scope}) not enclosing the
+    innermost loop which may iterate, otherwise an exit of this loop *)
+let break_target (span : Meta.span) (config : config) (i : int) :
+    SA.exit_target =
   let rec find (scopes : loop_scope list) (i : int) =
-    match (scopes, i) with
-    | ForwardScope id :: _, 0 -> Some (SA.ExitJoin id)
-    | RealLoop :: _, 0 -> Some SA.ExitLoopBreak
-    | ForwardScope _ :: scopes, _ -> find scopes (i - 1)
-    | RealLoop :: _, _ | [], _ -> None
+    match scopes with
+    | ForwardScope id :: scopes -> if i = 0 then SA.ExitJoin id else find scopes (i - 1)
+    | RealLoop :: _ -> SA.ExitLoop (LoopExitBreak i)
+    | [] -> [%internal_error] span
   in
   find config.loop_scopes i
 
-(** Where [continue i] goes: the next iteration of the innermost loop which
-    may iterate, if it is the [i]th enclosing loop. *)
-let continue_target (config : config) (i : int) : SA.exit_target option =
+(** Where [continue i] goes: the next iteration of the innermost loop which may
+    iterate, or an exit of this loop if the [continue] targets an outer loop *)
+let continue_target (span : Meta.span) (config : config) (i : int) :
+    SA.exit_target =
   let rec find (scopes : loop_scope list) (i : int) =
-    match (scopes, i) with
-    | RealLoop :: _, 0 -> Some SA.ExitLoopContinue
-    | ForwardScope _ :: scopes, _ when i > 0 -> find scopes (i - 1)
-    | _ -> None
+    match scopes with
+    | ForwardScope _ :: scopes ->
+        [%sanity_check] span (i > 0);
+        find scopes (i - 1)
+    | RealLoop :: _ ->
+        if i = 0 then SA.ExitLoopContinue else SA.ExitLoop (LoopExitContinue i)
+    | [] -> [%internal_error] span
   in
   find config.loop_scopes i
 
-(** Whether we can join the contexts at the end of the branches of a switch:
-    the [break] and [continue] statements exiting the branches must have exit
-    targets (see {!break_target} and {!continue_target}). *)
-let branches_can_join (config : config) (branches : block list) : bool =
-  List.for_all
-    (fun b ->
-      let e = block_control_effects b in
-      Collections.IntSet.for_all
-        (fun i -> Option.is_some (continue_target config i))
-        e.continues
-      && Collections.IntSet.for_all
-           (fun i -> Option.is_some (break_target config i))
-           e.breaks)
-    branches
+(** Where a [return] goes: the end of the function, or an exit of the innermost
+    loop which may iterate *)
+let return_target (config : config) : SA.exit_target =
+  if List.mem RealLoop config.loop_scopes then SA.ExitLoop LoopExitReturn
+  else SA.ExitReturn
 
 (** Where a branch which doesn't reach the join of a switch or of a forward
     scope goes *)
 let exit_target_of_result (config : config) (span : Meta.span)
     (res : statement_eval_res) : SA.exit_target =
-  let target =
-    match res with
-    | Return -> Some SA.ExitReturn
-    | Break i -> break_target config i
-    | Continue i -> continue_target config i
-    | Unit | Panic -> None
-  in
-  [%unwrap_with_span] span target "Internal error"
+  match res with
+  | Return -> return_target config
+  | Break i -> break_target span config i
+  | Continue i -> continue_target span config i
+  | Unit | Panic -> [%internal_error] span
 
 (** Evaluate a statement. *)
 let rec eval_statement (config : config) (st : statement) : stl_cm_fun =
@@ -962,10 +953,6 @@ and eval_switch_raw (config : config) (span : Meta.span) (data : switch_data)
                 (S.mk_opt_place_from_op span op ctx)
                 ctx
             in
-            (* Check if we should join the states after the if then else *)
-            let join =
-              branches_can_join config [ true_block; false_block ]
-            in
             let resl_true = eval_block config true_block true_ctx in
             let resl_false = eval_block config false_block false_ctx in
             let ctx_resl, cf_branches =
@@ -976,16 +963,14 @@ and eval_switch_raw (config : config) (span : Meta.span) (data : switch_data)
               | [ e_true; e_false ] -> cf_bool (e_true, e_false)
               | _ -> [%internal_error] span
             in
-            if join then
-              try
-                eval_switch_with_join config span
-                  (ctx0.fresh_symbolic_expr_id ())
-                  ~always_bind:false cc ctx0 ctx_resl
-              with Errors.RFailure ->
-                (* If the join threw a recoverable error we do not join
-                   and simply duplicate the code *)
-                (ctx_resl, cc)
-            else (ctx_resl, cc)
+            (try
+              eval_switch_with_join config span
+                (ctx0.fresh_symbolic_expr_id ())
+                ~always_bind:false cc ctx0 ctx_resl
+            with Errors.RFailure ->
+              (* If the join threw a recoverable error we do not join
+                 and simply duplicate the code *)
+              (ctx_resl, cc))
         | VLiteral (VScalar sv), TScalar (TInteger _ as int_ty) ->
             (* Sanity check *)
             [%sanity_check] span (Scalars.get_ty sv = scalar_as_integer int_ty);
@@ -1022,10 +1007,6 @@ and eval_switch_raw (config : config) (span : Meta.span) (data : switch_data)
             (* Then evaluate the "otherwise" branch *)
             let resl_otherwise = eval_block config otherwise ctx_otherwise in
 
-            (* Should we join the contexts after the switch? *)
-            let join =
-              branches_can_join config (otherwise :: target_blocks)
-            in
             let resl, cf =
               comp_seqs __FILE__ __LINE__ span
                 (resl_branches @ [ resl_otherwise ])
@@ -1035,19 +1016,15 @@ and eval_switch_raw (config : config) (span : Meta.span) (data : switch_data)
               cf_int (el, e_otherwise)
             in
             let cf = cc_comp cc cf in
-            if join then
-              (* Join the contexts *)
-              try
-                eval_switch_with_join config span
-                  (ctx0.fresh_symbolic_expr_id ())
-                  ~always_bind:false cf ctx0 resl
-              with Errors.RFailure ->
-                (* If the join threw a recoverable error we do not join
-                   and simply duplicate the code *)
-                (resl, cf)
-            else
-              (* Do not join the contexts: compose the continuations and continue *)
-              (resl, cf)
+            (* Join the contexts *)
+            (try
+              eval_switch_with_join config span
+                (ctx0.fresh_symbolic_expr_id ())
+                ~always_bind:false cf ctx0 resl
+            with Errors.RFailure ->
+              (* If the join threw a recoverable error we do not join
+                 and simply duplicate the code *)
+              (resl, cf))
         | _ -> [%craise] span "Unsupported switch scrutinee"
       in
       (* Compose *)
@@ -1091,24 +1068,17 @@ and eval_switch_raw (config : config) (span : Meta.span) (data : switch_data)
                 (fun ctx -> (eval_switch config span data branches) ctx)
                 ctxl
             in
-            (* Should we join the contexts after the match? *)
-            let join =
-              branches_can_join config branches
-            in
             let ctx_resl, cf = comp_seqs __FILE__ __LINE__ span resl in
             let cc = cc_comp cf_expand cf in
-            if join then (* Join the contexts *)
-              try
-                eval_switch_with_join config span
-                  (ctx0.fresh_symbolic_expr_id ())
-                  ~always_bind:false cc ctx0 ctx_resl
-              with Errors.RFailure ->
-                (* If the join threw a recoverable error we do not join
-                   and simply duplicate the code *)
-                (ctx_resl, cc)
-            else
-              (* Compose the continuations *)
-              (ctx_resl, cc)
+            (* Join the contexts *)
+            (try
+              eval_switch_with_join config span
+                (ctx0.fresh_symbolic_expr_id ())
+                ~always_bind:false cc ctx0 ctx_resl
+            with Errors.RFailure ->
+              (* If the join threw a recoverable error we do not join
+                 and simply duplicate the code *)
+              (ctx_resl, cc))
         | _ -> [%craise] span "Inconsistent state"
       in
       (* Compose *)
@@ -1206,13 +1176,33 @@ and eval_switch_with_join (config : config) (span : Meta.span)
       InterpJoin.join_ctxs_list config span ~recoverable:!Config.recover_joins
         ~with_abs_conts:true Join ctx_to_join
     in
+    (* When there is a single context to join, [join_ctxs_list] performs no
+       join: the context contains the fresh dummy values and abstractions of
+       the branch as is. We normalize it the way
+       {!InterpJoin.match_ctx_with_target} normalizes the contexts of the
+       branches (a join of several contexts already lifts the fresh dummy
+       values into abstractions and reduces them), so that we can match the
+       branch with it. *)
+    let joined_ctx =
+      if List.length ctx_to_join > 1 then joined_ctx
+      else
+      let fixed_aids = InterpJoinCore.compute_fixed_abs_ids ctx0 joined_ctx in
+      let fixed_dids = Contexts.ctx_get_dummy_var_ids ctx0 in
+      let joined_ctx, _ =
+        InterpJoin.destructure_shared_loans span fixed_aids joined_ctx
+      in
+      InterpReduceCollapse.reduce_ctx config span ~with_abs_conts:true Join
+        fixed_aids fixed_dids joined_ctx
+    in
     [%ldebug "Joined ctx:\n" ^ eval_ctx_to_string joined_ctx];
     let ctx0_aids = env_get_abs_ids ctx0.env in
     [%ldebug "ctx0_aids:\n" ^ AbsId.Set.to_string None ctx0_aids];
 
     (* We need to update the fresh abstraction continuations in the joined context,
        to reflect the fact that in the symbolic AST they should be introduced by
-       the branching expression (they are bound by the let-binding we introduce) *)
+       the branching expression (they are bound by the let-binding we introduce).
+       This includes the abstractions which come unchanged from a single context
+       (for instance, function call abstractions). *)
     let joined_ctx =
       Contexts.ctx_map_abs
         (fun abs ->
@@ -1220,7 +1210,16 @@ and eval_switch_with_join (config : config) (span : Meta.span)
           else
             (* The abstraction is fresh and is thus introduced by the join:
                 we need to update its continuation *)
-            InterpAbs.add_abs_cont_to_abs span joined_ctx abs (EJoin abs.abs_id))
+            let abs =
+              InterpAbs.add_abs_cont_to_abs span joined_ctx abs
+                (EJoin abs.abs_id)
+            in
+            (* The end of a function call abstraction is translated from the
+               call, which is not in scope after the join: the abstraction
+               becomes a join output *)
+            match abs.kind with
+            | FunCall _ -> { abs with kind = Join }
+            | _ -> abs)
         joined_ctx
     in
     [%ldebug

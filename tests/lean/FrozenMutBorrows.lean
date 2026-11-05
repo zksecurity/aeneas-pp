@@ -157,7 +157,8 @@ def Eng.iota
         else ok (Sum.inl (self, val, fun (e : Eng) => let ⟨ v, _ ⟩ := e
                                                       v))
       match s1 with
-      | Sum.inl (self1, major, back) =>
+      | Sum.inl t =>
+        let (self1, major, back) := t
         let i ← major + val
         ok (Sum.inr (core.result.Result.Ok (some i), self1.t, self1.env,
           self.env, fun v => back { self1 with t := v }))
@@ -172,7 +173,8 @@ def Eng.iota
                          v))
   let (r1, v, e, back) ←
     match s with
-    | Sum.inl (r2, self1, _, back1) =>
+    | Sum.inl t =>
+      let (r2, self1, _, back1) := t
       ok (r2, self1.t, self1.env, fun v1 => back1 { self1 with t := v1 })
     | Sum.inr t => ok (let (r2, v1, e1, _, f) := t
                        (r2, v1, e1, f))
@@ -322,7 +324,8 @@ def Eval.iota
                 fun e => let e1 := kc_back e
                          (e1.t, e1.s)))
           match s1 with
-          | Sum.inl (r3, self3, _, back1) =>
+          | Sum.inl t =>
+            let (r3, self3, _, back1) := t
             ok (Sum.inr (r3, self3.t, self3.env, self3.s, val,
               fun v s2 => back1 { self3 with t := v, s := s2 }))
           | Sum.inr t => ok (Sum.inl t)
@@ -336,8 +339,9 @@ def Eval.iota
         ((core.result.Result (Option Std.U32) Std.U32) × Eval × Env × (Eval
         → ((alloc.vec.Vec Std.U32) × Store))) ←
         match s with
-        | Sum.inl (self2, major, back1) =>
+        | Sum.inl t =>
           do
+          let (self2, major, back1) := t
           let b ←
             Eval.iota.closure.Insts.CoreOpsFunctionFnPairShared2EvalU32Bool.call
               () (self2, major)
@@ -371,8 +375,9 @@ def Eval.iota
             ((core.result.Result (Option Std.U32) Std.U32) × Eval × Env ×
             (Eval → ((alloc.vec.Vec Std.U32) × Store))) ←
             match s2 with
-            | Sum.inl (self3, major1, back2) =>
+            | Sum.inl t1 =>
               do
+              let (self3, major1, back2) := t1
               let (r2, self4, whnf_back) ← Eval.whnf self3 major1
               let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r2
               match cf1 with
@@ -391,17 +396,19 @@ def Eval.iota
                   fun e =>
                     let e1 := whnf_back e
                     back2 { e1 with env := self3.env }))
-            | Sum.inr t => ok (Sum.inl t)
+            | Sum.inr t1 => ok (Sum.inl t1)
           match s3 with
-          | Sum.inl (r2, self3, major1, back2) =>
+          | Sum.inl t1 =>
+            let (r2, self3, major1, back2) := t1
             ok (Sum.inl (r2, self3.t, self3.env, self3.s, major1,
               fun v s4 =>
                 let (v1, s5) := back2 { self3 with t := v, s := s4 }
                 back1 { self2 with t := v1, s := s5 }))
-          | Sum.inr t => ok (Sum.inr t)
+          | Sum.inr t1 => ok (Sum.inr t1)
         | Sum.inr t => ok (Sum.inl t)
       match s1 with
-      | Sum.inl (r2, v, e, s2, _, back1) =>
+      | Sum.inl t =>
+        let (r2, v, e, s2, _, back1) := t
         ok (r2, ({ t := v, env := e, s := s2 } : Eval),
           fun (e1 : Eval) => let ⟨ v1, _, s3 ⟩ := e1
                              back1 v1 s3)

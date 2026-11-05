@@ -170,9 +170,8 @@ let compute_loop_entry_fixed_point (config : config) (span : Meta.span)
             (* See the comment in {!eval_loop} *)
             [%craise] span "Unreachable"
         | Continue i ->
-            (* For now we don't support continues to outer loops *)
-            [%cassert] span (i = 0) "Continues to outer loops not supported yet";
-            Some ctx
+            (* The continues to outer loops are exits of the loop *)
+            if i = 0 then Some ctx else None
       in
       let continue_ctxs = List.filter_map keep_continue_ctx ctx_resl in
 
@@ -237,15 +236,30 @@ let compute_loop_entry_fixed_point (config : config) (span : Meta.span)
   (fp, !fixed_ids)
 
 type break_ctx =
-  | NoBreak  (** The loop doesn't contain any break *)
   | Single
-      (** There is a single break statement, so we don't join the break contexts
-      *)
-  | Multiple of (eval_ctx * abs list)  (** We joined multiple break contexts *)
+      (** There is a single exit with this destination, so we don't join the
+          contexts *)
+  | Multiple of (eval_ctx * abs list)
+      (** We joined multiple contexts with this destination *)
 
-let compute_loop_break_context (config : config) (span : Meta.span)
+(** The exit of a loop where a result of its body goes, if it exits the loop *)
+let loop_exit_of_result (span : Meta.span) (res : statement_eval_res) :
+    SymbolicAst.loop_exit option =
+  match res with
+  | Break i -> Some (LoopExitBreak i)
+  | Continue 0 | Panic -> None
+  | Continue i -> Some (LoopExitContinue i)
+  | Return -> Some LoopExitReturn
+  | Unit ->
+      (* See the comment in {!eval_loop} *)
+      [%craise] span "Unreachable"
+
+(** Compute the contexts at the exits of a loop, for each destination (see
+    {!SymbolicAst.loop_exit}), in the order in which they appear *)
+let compute_loop_exit_contexts (config : config) (span : Meta.span)
     (loop_id : LoopId.id) (eval_loop_body : stl_cm_fun) (fp_ctx : eval_ctx)
-    (fixed_aids : AbsId.Set.t) (fixed_dids : DummyVarId.Set.t) : break_ctx =
+    (fixed_aids : AbsId.Set.t) (fixed_dids : DummyVarId.Set.t) :
+    (SymbolicAst.loop_exit * break_ctx) list =
   [%ltrace
     "Initial fixed-point context:\n"
     ^ eval_ctx_to_string ~span:(Some span) ~filter:false fp_ctx];
@@ -274,24 +288,30 @@ let compute_loop_break_context (config : config) (span : Meta.span)
      leading to a unification issue. In order to address the issue, we reevaluate
      the body once to refresh the ids: joining all the resulting break contexts
      then introduces all the necessary abstractions. *)
-  let eval_break_ctxs () =
-    (* Evaluate the loop body to register the different contexts at a break. *)
+  let eval_exit_ctxs () =
+    (* Evaluate the loop body to register the different contexts at the exits *)
     let ctx_resl, _ = eval_loop_body fp_ctx in
-    let keep_break_ctx (ctx, res) : eval_ctx option =
-      [%ltrace "register_break_ctx"];
-      match res with
-      | Return | Panic | Continue _ -> None
-      | Unit ->
-          (* See the comment in {!eval_loop} *)
-          [%craise] span "Unreachable"
-      | Break i ->
-          (* We don't support breaks to outer loops *)
-          [%cassert] span (i = 0) "Breaks to outer loops not supported yet";
-          Some ctx
-    in
-    List.filter_map keep_break_ctx ctx_resl
+    List.filter_map
+      (fun (ctx, res) ->
+        Option.map (fun exit -> (exit, ctx)) (loop_exit_of_result span res))
+      ctx_resl
   in
-  let break_ctxs = eval_break_ctxs () in
+  let exit_ctxs = eval_exit_ctxs () in
+  (* The second evaluation is shared by all the exits whose contexts we join *)
+  let refreshed_exit_ctxs = lazy (eval_exit_ctxs ()) in
+  (* The destinations, in the order in which they appear *)
+  let exits =
+    List.fold_left
+      (fun exits (exit, _) ->
+        if List.mem exit exits then exits else exits @ [ exit ])
+      [] exit_ctxs
+  in
+  let exit_ctxs_to (exit : SymbolicAst.loop_exit)
+      (ctxs : (SymbolicAst.loop_exit * eval_ctx) list) : eval_ctx list =
+    List.filter_map (fun (e, ctx) -> if e = exit then Some ctx else None) ctxs
+  in
+  let compute_break_ctx (exit : SymbolicAst.loop_exit) : break_ctx =
+  let break_ctxs = exit_ctxs_to exit exit_ctxs in
 
   [%ltrace
     "about to join the contexts at the breaks:\n"
@@ -305,16 +325,14 @@ let compute_loop_break_context (config : config) (span : Meta.span)
 
   (* Compute the join *)
   match break_ctxs with
-  | [] ->
-      (* There is no break! *)
-      NoBreak
+  | [] -> [%internal_error] span
   | [ _ ] ->
       (* Single break context *)
       Single
   | ctxs ->
       (* Evaluate a second time so that the same break paths contain fresh IDs,
          then join all the contexts as before. *)
-      let ctxs = ctxs @ eval_break_ctxs () in
+      let ctxs = ctxs @ exit_ctxs_to exit (Lazy.force refreshed_exit_ctxs) in
       (* Join the contexts *)
       let break_ctx =
         loop_join_break_ctxs config span loop_id fixed_aids fixed_dids ctxs
@@ -379,3 +397,5 @@ let compute_loop_break_context (config : config) (span : Meta.span)
       let abs = List.rev (List.filter_map get_fresh_abs break_ctx.env) in
 
       Multiple (break_ctx, abs)
+  in
+  List.map (fun exit -> (exit, compute_break_ctx exit)) exits

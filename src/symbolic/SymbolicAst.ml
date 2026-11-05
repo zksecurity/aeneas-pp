@@ -228,7 +228,9 @@ type expr =
           useful anymore? *)
   | LoopContinue of
       (Contexts.eval_ctx[@opaque]) * loop_id * tvalue list * abs list
-  | LoopBreak of (Contexts.eval_ctx[@opaque]) * loop_id * tvalue list * abs list
+  | LoopBreak of
+      (Contexts.eval_ctx[@opaque]) * loop_id * loop_exit * tvalue list * abs list
+      (** Exit the loop: see {!loop_exit} *)
   | Loop of loop  (** Loop: call to a loop *)
   | Let of let_expr  (** A let binding. See the comments for [let_expr]. *)
   | Join of
@@ -287,14 +289,11 @@ and loop = {
           (i.e., the type of the loop) and doing this avoids a lookup. *)
   input_value_to_value : tvalue symbolic_value_id_map;
   input_abs_to_abs : abs abs_id_map;
-  break_svalues : symbolic_value list;
-      (** The symbolic values introduced in the break environment (those are
-          output by the loop) *)
-  break_abs : abs list;
-      (** The abstractions introduced in the break environment (those are output
-          by the loop) *)
+  exits : loop_exit_info list;
+      (** The exits of the loop. The loop can only exit through those: they
+          summarize the environments at all the exits of the body which have
+          the same destination. *)
   loop_expr : expr;  (** The symbolically executed loop body *)
-  next_expr : expr;  (** The expression for *after* the loop call *)
   span : Meta.span;  (** Information about the origin of the loop body *)
 }
 
@@ -344,7 +343,29 @@ and exit_target =
   | ExitJoin of symbolic_expr_id
       (** The join of an enclosing let-binding *)
   | ExitLoopContinue  (** The next iteration of the enclosing loop *)
-  | ExitLoopBreak  (** The exit of the enclosing loop *)
+  | ExitLoop of loop_exit  (** An exit of the enclosing loop *)
+
+(** Where the control flow goes when it exits a loop *)
+and loop_exit =
+  | LoopExitBreak of int
+      (** [break i] out of the [i]th enclosing loop, from the loop: [0] is the
+          loop itself (it is the normal exit of the loop) *)
+  | LoopExitContinue of int
+      (** [continue i] with [i > 0]: the next iteration of the [i]th enclosing
+          loop, from the loop *)
+  | LoopExitReturn  (** A return from the function *)
+
+(** An exit of a loop: see {!loop} *)
+and loop_exit_info = {
+  exit : loop_exit;
+  exit_svalues : symbolic_value list;
+      (** The symbolic values introduced in the environment at the exit (those
+          are output by the loop) *)
+  exit_abs : abs list;
+      (** The abstractions introduced in the environment at the exit (those are
+          output by the loop) *)
+  exit_expr : expr;  (** The expression for what happens after the exit *)
+}
 
 (* Remark: this type doesn't have to be mutually recursive with the other
    types, but it makes it easy to generate the visitors *)

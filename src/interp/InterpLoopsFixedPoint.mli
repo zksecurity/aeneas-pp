@@ -28,13 +28,19 @@ val compute_loop_entry_fixed_point :
   eval_ctx * ids_sets
 
 type break_ctx =
-  | NoBreak  (** The loop doesn't contain any break *)
   | Single
-      (** There is a single break statement, so we don't join the break contexts
-      *)
-  | Multiple of (eval_ctx * abs list)  (** We joined multiple break contexts *)
+      (** There is a single exit with this destination, so we don't join the
+          contexts *)
+  | Multiple of (eval_ctx * abs list)
+      (** We joined multiple contexts with this destination *)
 
-val compute_loop_break_context :
+(** The exit of a loop where a result of its body goes, if it exits the loop *)
+val loop_exit_of_result :
+  Meta.span -> statement_eval_res -> SymbolicAst.loop_exit option
+
+(** Compute the contexts at the exits of a loop, for each destination (see
+    {!SymbolicAst.loop_exit}), in the order in which they appear *)
+val compute_loop_exit_contexts :
   config ->
   Meta.span ->
   LoopId.id ->
@@ -42,4 +48,4 @@ val compute_loop_break_context :
   eval_ctx ->
   AbsId.Set.t ->
   DummyVarId.Set.t ->
-  break_ctx
+  (SymbolicAst.loop_exit * break_ctx) list

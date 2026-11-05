@@ -166,8 +166,9 @@ def let_else_chain
               × Val × Std.U32) ((core.result.Result (Option Std.U32) Std.U32)
               × Val × Val × Std.U32) ←
               match s1 with
-              | Sum.inl (w1, y) =>
+              | Sum.inl p =>
                 do
+                let (w1, y) := p
                 let acc3 ← acc2 + 10#u32
                 let i ← val + y
                 let i1 ← i + sp
@@ -175,7 +176,8 @@ def let_else_chain
                 ok (Sum.inr (core.result.Result.Ok (some i2), v, w1, acc3))
               | Sum.inr t => ok (Sum.inl t)
             match s2 with
-            | Sum.inl (r1, w1, _) => ok (Sum.inl (r1, w1))
+            | Sum.inl t => let (r1, w1, _) := t
+                           ok (Sum.inl (r1, w1))
             | Sum.inr t => ok (Sum.inr t)
           | core.ops.control_flow.ControlFlow.Break residual =>
             do
@@ -184,7 +186,8 @@ def let_else_chain
                 (Option Std.U32) (core.convert.FromSame Std.U32) residual
             ok (Sum.inl (r1, w))
         match s with
-        | Sum.inl (r1, _) => ok (r1, acc2)
+        | Sum.inl p => let (r1, _) := p
+                       ok (r1, acc2)
         | Sum.inr t => ok (let (r1, _, _, i) := t
                            (r1, i))
       | Class.Other => ok (core.result.Result.Ok none, acc1)
@@ -274,7 +277,8 @@ def scopes_in_loop_loop.body
                               ok (Sum.inl (n1, Class.Ctor))
               | Class.Other => ok (Sum.inr (Sum.inr (i2, v, v)))
             match s2 with
-            | Sum.inl (n1, _) =>
+            | Sum.inl p =>
+              let (n1, _) := p
               let n2 ← n1 + 1#u32
               ok (Sum.inr (Sum.inl (a, n2, i2)))
             | Sum.inr s3 =>
@@ -284,7 +288,8 @@ def scopes_in_loop_loop.body
         | Val.Nat _ => ok (Sum.inl (i2, v, v))
         | Val.Sort => ok (Sum.inl (i2, Val.Sort, v))
       match s1 with
-      | Sum.inl (i3, _, _) => ok (Sum.inr (a, n, i3))
+      | Sum.inl t => let (i3, _, _) := t
+                     ok (Sum.inr (a, n, i3))
       | Sum.inr s2 =>
         match s2 with
         | Sum.inl t => ok (Sum.inr t)
@@ -388,7 +393,8 @@ def panic_or_return (v : Val) (x : Std.U32) : Result Std.U32 := do
     | Val.Sort => ok (Sum.inr (x, Val.Sort))
   let s1 : _root_.Sum (Std.U32 × Val) (Std.U32 × Val) ←
     match s with
-    | Sum.inl (v1, y) =>
+    | Sum.inl p =>
+      let (v1, y) := p
       if y > x
       then do
            let z ← y - x
@@ -397,7 +403,8 @@ def panic_or_return (v : Val) (x : Std.U32) : Result Std.U32 := do
       else ok (Sum.inl (y, v1))
     | Sum.inr p => ok (Sum.inl p)
   match s1 with
-  | Sum.inl (i, _) => ok i
+  | Sum.inl p => let (i, _) := p
+                 ok i
   | Sum.inr p => ok (let (i, _) := p
                      i)
 
@@ -439,7 +446,8 @@ def loop_in_scope (v : Val) (n : Std.U32) : Result Std.U32 := do
       ok (Sum.inl (Val.Nat i, k))
     | Val.Sort => ok (Sum.inr (n, Val.Sort))
   match s with
-  | Sum.inl (_, k) => k + n
+  | Sum.inl p => let (_, k) := p
+                 k + n
   | Sum.inr p => ok (let (i, _) := p
                      i)
 
@@ -469,7 +477,8 @@ def live_borrow
           let r3 ← r2 + 100#u32
           ok (Sum.inr (0#u32, v, Val.Sort, r3, index_mut_back))
       match s1 with
-      | Sum.inl (w1, m) =>
+      | Sum.inl p =>
+        let (w1, m) := p
         let r3 ← r2 + m
         let a1 := index_mut_back r3
         let i ← Array.index_usize a1 1#usize
@@ -480,8 +489,9 @@ def live_borrow
       | Sum.inr t => ok (Sum.inl t)
     | Val.Sort => ok (Sum.inl (r1, Val.Sort, w, r1, index_mut_back))
   match s with
-  | Sum.inl (i, _, _, r2, back) => let a1 := back r2
-                                   ok (i, a1)
+  | Sum.inl t => let (i, _, _, r2, back) := t
+                 let a1 := back r2
+                 ok (i, a1)
   | Sum.inr t => ok (let (i, a1, _, _) := t
                      (i, a1))
 
@@ -552,8 +562,9 @@ def shared_from_call
       ok (Sum.inl (v, s1, a1))
     | Val.Sort => ok (Sum.inr (0#u32, a, Val.Sort))
   match s with
-  | Sum.inl (_, s1, back) => let i ← s1 + 1#u32
-                             ok (i, back)
+  | Sum.inl t => let (_, s1, back) := t
+                 let i ← s1 + 1#u32
+                 ok (i, back)
   | Sum.inr t => ok (let (i, a1, _) := t
                      (i, a1))
 
@@ -676,7 +687,7 @@ def call_then_maybe_call
           Std.U32 (core.convert.FromSame Std.U32) residual
       ok (Sum.inl (r1, v1))
   match s with
-  | Sum.inl (r1, v2) => ok (r1, v2)
+  | Sum.inl p => ok p
   | Sum.inr p => ok p
 
 /-- [forward_scopes::test_let_else_chain]:

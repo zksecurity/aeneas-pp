@@ -73,7 +73,8 @@ def chain
         ok (Sum.inr r1)
     | V.C _ => ok (Sum.inl (v0, 0#u32))
   match s with
-  | Sum.inl (_, r) =>
+  | Sum.inl p =>
+    let (_, r) := p
     let s1 : _root_.Sum (V × Std.U32) (core.result.Result Std.U32 Std.U32) ←
       match v1 with
       | V.A x =>
@@ -103,7 +104,8 @@ def chain
           ok (Sum.inr r2)
       | V.C _ => ok (Sum.inl (v1, r))
     match s1 with
-    | Sum.inl (_, r1) =>
+    | Sum.inl p1 =>
+      let (_, r1) := p1
       let s2 : _root_.Sum (V × Std.U32) (core.result.Result Std.U32 Std.U32)
         ←
         match v2 with
@@ -134,7 +136,8 @@ def chain
             ok (Sum.inr r3)
         | V.C _ => ok (Sum.inl (v2, r1))
       match s2 with
-      | Sum.inl (_, r2) =>
+      | Sum.inl p2 =>
+        let (_, r2) := p2
         let s3 : _root_.Sum (V × Std.U32) (core.result.Result Std.U32 Std.U32)
           ←
           match v3 with
@@ -165,7 +168,8 @@ def chain
               ok (Sum.inr r4)
           | V.C _ => ok (Sum.inl (v3, r2))
         match s3 with
-        | Sum.inl (_, r3) =>
+        | Sum.inl p3 =>
+          let (_, r3) := p3
           let s4 : _root_.Sum (V × Std.U32) (core.result.Result Std.U32
             Std.U32) ←
             match v4 with
@@ -196,7 +200,8 @@ def chain
                 ok (Sum.inr r5)
             | V.C _ => ok (Sum.inl (v4, r3))
           match s4 with
-          | Sum.inl (_, r4) =>
+          | Sum.inl p4 =>
+            let (_, r4) := p4
             match v5 with
             | V.A x =>
               let r5 ← check x
@@ -282,7 +287,8 @@ def nested (v : V) (w : V) : Result (core.result.Result Std.U32 Std.U32) := do
             ok (Sum.inr r1)
         | V.C _ => ok (Sum.inl (w, x))
       match s1 with
-      | Sum.inl (v1, i) => ok (Sum.inl (v, v1, i))
+      | Sum.inl p => let (v1, i) := p
+                     ok (Sum.inl (v, v1, i))
       | Sum.inr r => ok (Sum.inr r)
     | V.B x =>
       do
@@ -298,8 +304,10 @@ def nested (v : V) (w : V) : Result (core.result.Result Std.U32 Std.U32) := do
         ok (Sum.inr r1)
     | V.C x => ok (Sum.inl (v, w, x))
   match s with
-  | Sum.inl (_, _, a) => let i ← a + 1#u32
-                         ok (core.result.Result.Ok i)
+  | Sum.inl t =>
+    let (_, _, a) := t
+    let i ← a + 1#u32
+    ok (core.result.Result.Ok i)
   | Sum.inr r => ok r
 
 /-- [switch_early_returns::update_then_error]:
@@ -338,7 +346,8 @@ def update_then_error
         ok (Sum.inr (r1, acc1))
     | V.C x => ok (Sum.inl (v, x))
   match s with
-  | Sum.inl (_, x) =>
+  | Sum.inl p =>
+    let (_, x) := p
     let acc2 ← acc1 + 10#u32
     ok (core.result.Result.Ok x, acc2)
   | Sum.inr p => ok p
@@ -357,7 +366,8 @@ def panic_or_return (v : V) : Result Std.U32 := do
       ok (Sum.inl (v, x1))
     | V.C _ => ok (Sum.inr 7#u32)
   match s with
-  | Sum.inl (_, x) => x + 1#u32
+  | Sum.inl p => let (_, x) := p
+                 x + 1#u32
   | Sum.inr i => ok i
 
 /-- [switch_early_returns::Ck]
@@ -447,12 +457,13 @@ def struct_calls
                         let v2 := c.s
                         (v1, v2)))
   match s1 with
-  | Sum.inl (_, ck, x, back) =>
+  | Sum.inl t1 =>
+    let (_, ck, x, back) := t1
     let (r, c, push_back) ← Ck.push ck x
     let c1 := push_back c
-    let (t1, _) := back c1
+    let (t2, _) := back c1
     let (_, s2) := back c1
-    ok (r, t1, s2)
+    ok (r, t2, s2)
   | Sum.inr t1 => ok t1
 
 /-- [switch_early_returns::inner_loop]: loop body 0:

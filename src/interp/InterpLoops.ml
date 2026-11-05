@@ -136,8 +136,11 @@ let eval_loop_symbolic_synthesize_loop_body (config : config) (span : span)
     (eval_loop_body : stl_cm_fun) (loop_id : LoopId.id) (fp_ctx : eval_ctx)
     (fp_input_abs : AbsId.id list) (fp_input_svalues : SymbolicValueId.id list)
     (fixed_aids : AbsId.Set.t) (fixed_dids : DummyVarId.Set.t)
-    (break_info : (eval_ctx * AbsId.id list * SymbolicValueId.id list) option) :
-    (eval_ctx * abs list * symbolic_value list) option * SA.expr =
+    (exits :
+      (SA.loop_exit * (eval_ctx * AbsId.id list * SymbolicValueId.id list) option)
+      list) :
+    (SA.loop_exit * (eval_ctx * abs list * symbolic_value list)) list * SA.expr
+    =
   [%ldebug "fp_ctx:\n" ^ eval_ctx_to_string fp_ctx];
 
   (* Save a snapshot of the context as meta-information: it is useful to
@@ -157,36 +160,35 @@ let eval_loop_symbolic_synthesize_loop_body (config : config) (span : span)
     List.map (fun id -> SymbolicValueId.Map.find id map) values
   in
 
-  let ctx_info_at_break = ref None in
+  (* The information about the exits with a single context *)
+  let ctx_info_at_exits = ref [] in
 
-  (* Then, do a special treatment of the break and continue cases.
-     For now, we forbid having breaks in loops (and eliminate breaks
-     in the prepasses) *)
-  let eval_after_loop_iter (ctx, res) : SA.expr =
+  (* Then, do a special treatment of the exits and continue cases *)
+  let rec eval_after_loop_iter (ctx, res) : SA.expr =
     [%ltrace ""];
     match res with
-    | Return ->
-        (* We don't support early returns *)
-        [%craise] span "Unexpected return"
     | Panic -> SA.Panic
-    | Break i -> (
+    | Unit ->
+        (* For why we can't get [Unit], see the comments inside {!eval_loop_concrete}. *)
+        [%craise] span "Unreachable"
+    | Continue 0 -> eval_continue ctx
+    | Return | Break _ | Continue _ -> (
+        let exit = Option.get (loop_exit_of_result span res) in
         [%ltrace
-          "about to match the fixed-point context with the context at a break:"
+          "about to match the fixed-point context with the context at an exit:"
           ^ "\n- fixed_aids: "
           ^ AbsId.Set.to_string None fixed_aids
           ^ "\n- src ctx (fixed-point ctx):\n"
           ^ eval_ctx_to_string ~span:(Some span) fp_ctx
-          ^ "\n\n-tgt ctx (ctx at break):\n"
+          ^ "\n\n-tgt ctx (ctx at exit):\n"
           ^ eval_ctx_to_string ~span:(Some span) ctx];
 
-        (* We don't support nested loops for now *)
-        [%cassert] span (i = 0) "Nested loops are not supported yet";
-
         (* Case disjunction depending on whether we need to join or not *)
-        match break_info with
+        match List.assoc exit exits with
         | None ->
             (* There is a single context: we perform no join *)
-            [%sanity_check] span (!ctx_info_at_break = None);
+            [%sanity_check] span
+              (not (List.mem_assoc exit !ctx_info_at_exits));
 
             (* Reduce the context *)
             let ctx, cc =
@@ -265,7 +267,9 @@ let eval_loop_symbolic_synthesize_loop_body (config : config) (span : span)
             in
 
             (* Save the information *)
-            ctx_info_at_break := Some (output_ctx, output_abs, output_svalues);
+            ctx_info_at_exits :=
+              (exit, (output_ctx, output_abs, output_svalues))
+              :: !ctx_info_at_exits;
 
             (* Create the symbolic expression.
 
@@ -273,7 +277,8 @@ let eval_loop_symbolic_synthesize_loop_body (config : config) (span : span)
             let break_values =
               List.map ValuesUtils.mk_tvalue_from_symbolic_value output_svalues
             in
-            cc (SA.LoopBreak (output_ctx, loop_id, break_values, break_abs))
+            cc
+              (SA.LoopBreak (output_ctx, loop_id, exit, break_values, break_abs))
         | Some (break_ctx, break_input_abs, break_input_svalues) ->
             (* Join with the break context *)
             [%ltrace
@@ -305,10 +310,8 @@ let eval_loop_symbolic_synthesize_loop_body (config : config) (span : span)
             in
             let input_abs = reorder_input_abs input_abs break_input_abs in
             (* Create the symbolic expression *)
-            cc (SA.LoopBreak (tgt_ctx, loop_id, input_values, input_abs)))
-    | Continue i ->
-        (* We don't support nested loops for now *)
-        [%cassert] span (i = 0) "Nested loops are not supported yet";
+            cc (SA.LoopBreak (tgt_ctx, loop_id, exit, input_values, input_abs)))
+  and eval_continue (ctx : eval_ctx) : SA.expr =
         [%ltrace
           "about to match the fixed-point context with the context at a \
            continue:" ^ "\n- fixed_aids: "
@@ -332,19 +335,15 @@ let eval_loop_symbolic_synthesize_loop_body (config : config) (span : span)
           let ctx = Print.Contexts.eval_ctx_to_fmt_env ctx in
           PrintSymbolicAst.expr_to_string ctx "" "  " e];
         e
-    | Unit ->
-        (* For why we can't get [Unit], see the comments inside {!eval_loop_concrete}. *)
-        [%craise] span "Unreachable"
   in
 
   (* Apply and compose *)
   let el = List.map eval_after_loop_iter ctx_resl in
-  let break_info = !ctx_info_at_break in
-  (break_info, cf_loop el)
+  (!ctx_info_at_exits, cf_loop el)
 
 (** Evaluate a loop in symbolic mode *)
 let eval_loop_symbolic (config : config) (span : span)
-    (eval_loop_body : stl_cm_fun) : st_cm_fun =
+    (eval_loop_body : stl_cm_fun) : stl_cm_fun =
  fun ctx ->
   (* Debug *)
   [%ltrace "Context:\n" ^ eval_ctx_to_string ~span:(Some span) ctx ^ "\n"];
@@ -374,25 +373,31 @@ let eval_loop_symbolic (config : config) (span : span)
     ^ "):\n- fp:\n"
     ^ eval_ctx_to_string ~span:(Some span) fp_ctx];
 
-  (* Compute the context at the breaks *)
+  (* Compute the contexts at the exits *)
   let fixed_aids = InterpJoinCore.compute_fixed_abs_ids ctx fp_ctx in
   let fixed_dids = ctx_get_dummy_var_ids ctx in
-  let break_info =
-    compute_loop_break_context config span loop_id eval_loop_body fp_ctx
+  let exit_ctxs =
+    compute_loop_exit_contexts config span loop_id eval_loop_body fp_ctx
       fixed_aids fixed_dids
   in
+  [%cassert] span (exit_ctxs <> [])
+    "Loops which can't be exited are not supported yet";
   (* Debug *)
   [%ltrace
     "- Initial context:\n"
     ^ eval_ctx_to_string ~span:(Some span) ctx
     ^ "\n\n- Fixed point:\n"
     ^ eval_ctx_to_string ~span:(Some span) ~filter:false fp_ctx
-    ^ "\n\n- break_ctx:\n"
-    ^
-    match break_info with
-    | NoBreak -> "no break ctx"
-    | Single -> "single break ctx"
-    | Multiple (break_ctx, _) -> eval_ctx_to_string ~span:(Some span) break_ctx];
+    ^ String.concat ""
+        (List.map
+           (fun (exit, break_ctx) ->
+             "\n\n- exit " ^ PrintSymbolicAst.loop_exit_to_string exit ^ ":\n"
+             ^
+             match break_ctx with
+             | Single -> "single exit ctx"
+             | Multiple (break_ctx, _) ->
+                 eval_ctx_to_string ~span:(Some span) break_ctx)
+           exit_ctxs)];
 
   (* Compute the loop input parameters *)
   let fp_input_svalues =
@@ -407,33 +412,33 @@ let eval_loop_symbolic (config : config) (span : span)
     ^ String.concat ", "
         (List.map (symbolic_value_to_string ctx) fp_input_svalues)];
 
-  let break_info, break_abs_values =
-    match break_info with
-    | NoBreak ->
-        [%craise] span
-          "(Infinite) loops which do not contain breaks are not supported yet"
-    | Single ->
-        [%ltrace "Single break"];
-        (None, None)
-    | Multiple (break_ctx, break_abs) ->
-        let break_input_abs_ids =
-          List.map (fun (a : abs) -> a.abs_id) break_abs
-        in
-
-        let break_input_svalues =
-          compute_ctx_fresh_ordered_symbolic_values span
-            ~only_modified_svalues:false ctx break_ctx
-        in
-        let break_input_svalue_ids =
-          List.map (fun (sv : symbolic_value) -> sv.sv_id) break_input_svalues
-        in
-
-        [%ltrace
-          "- break_input_svalues: "
-          ^ String.concat ", "
-              (List.map (symbolic_value_to_string ctx) break_input_svalues)];
-        ( Some (break_ctx, break_input_abs_ids, break_input_svalue_ids),
-          Some (break_abs, break_input_svalues) )
+  (* The information about the exits whose contexts we joined *)
+  let joined_exits =
+    List.map
+      (fun (exit, break_ctx) ->
+        match break_ctx with
+        | Single -> (exit, None)
+        | Multiple (break_ctx, break_abs) ->
+            let break_input_svalues =
+              compute_ctx_fresh_ordered_symbolic_values span
+                ~only_modified_svalues:false ctx break_ctx
+            in
+            (exit, Some (break_ctx, break_abs, break_input_svalues)))
+      exit_ctxs
+  in
+  let exits_info =
+    List.map
+      (fun (exit, info) ->
+        ( exit,
+          Option.map
+            (fun (break_ctx, break_abs, break_input_svalues) ->
+              ( break_ctx,
+                List.map (fun (a : abs) -> a.abs_id) break_abs,
+                List.map
+                  (fun (sv : symbolic_value) -> sv.sv_id)
+                  break_input_svalues ))
+            info ))
+      joined_exits
   in
 
   (* "Call" the loop *)
@@ -446,23 +451,20 @@ let eval_loop_symbolic (config : config) (span : span)
   [%ltrace "matched the fixed-point context with the original context."];
 
   (* Synthesize the loop body *)
-  let break_info', loop_body =
-    let fixed_aids = InterpJoinCore.compute_fixed_abs_ids ctx fp_ctx in
-    let fixed_dids = ctx_get_dummy_var_ids ctx in
+  let single_exits, loop_body =
     eval_loop_symbolic_synthesize_loop_body config span eval_loop_body loop_id
       fp_ctx input_abs_ids_list fp_input_svalue_ids fixed_aids fixed_dids
-      break_info
+      exits_info
   in
 
-  let break_ctx, break_abs, break_input_svalues =
-    match break_info with
-    | Some (ctx, _, _) ->
-        let abs, values = Option.get break_abs_values in
-        (ctx, abs, values)
-    | None -> (
-        match break_info' with
-        | Some (ctx, abs, values) -> (ctx, abs, values)
-        | None -> [%internal_error] span)
+  (* The contexts at the exits, with the values and abstractions they output *)
+  let exits =
+    List.map
+      (fun (exit, info) ->
+        match info with
+        | Some info -> (exit, info)
+        | None -> (exit, List.assoc exit single_exits))
+      joined_exits
   in
 
   [%ltrace
@@ -477,15 +479,28 @@ let eval_loop_symbolic (config : config) (span : span)
     ^ "\n- fp_input_abs: "
     ^ Print.list_to_string AbsId.to_string input_abs_ids_list
     ^ "\n- fp_input_svalues: "
-    ^ Print.list_to_string (symbolic_value_to_string ctx) fp_input_svalues
-    ^ "\n\n- break ctx:\n"
-    ^ eval_ctx_to_string ~span:(Some span) ~filter:false break_ctx
-    ^ "\n\n- break_input_svalues: "
-    ^ Print.list_to_string (symbolic_value_to_string ctx) break_input_svalues
-    ^ "\n"];
+    ^ Print.list_to_string (symbolic_value_to_string ctx) fp_input_svalues];
+
+  (* The control flow after the loop, for each exit *)
+  let exit_res (exit : SA.loop_exit) : statement_eval_res =
+    match exit with
+    | LoopExitBreak 0 -> Unit
+    | LoopExitBreak i -> Break (i - 1)
+    | LoopExitContinue i -> Continue (i - 1)
+    | LoopExitReturn -> Return
+  in
+  let ctx_resl =
+    List.map (fun (exit, (exit_ctx, _, _)) -> (exit_ctx, exit_res exit)) exits
+  in
 
   (* Put everything together *)
-  let cc (next_expr : SA.expr) : SA.expr =
+  let cc (el : SA.expr list) : SA.expr =
+    let exits =
+      List.map2
+        (fun (exit, (_, exit_abs, exit_svalues)) exit_expr : SA.loop_exit_info ->
+          { exit; exit_svalues; exit_abs; exit_expr })
+        exits el
+    in
     let loop_expr =
       SymbolicAst.Loop
         {
@@ -494,17 +509,15 @@ let eval_loop_symbolic (config : config) (span : span)
           input_abs = input_abs_list;
           input_value_to_value = input_values;
           input_abs_to_abs = input_abs;
-          break_svalues = break_input_svalues;
-          break_abs;
+          exits;
           loop_expr = loop_body;
-          next_expr;
           span;
           ctx = entry_loop_ctx;
         }
     in
     cf_before_loop loop_expr
   in
-  ((break_ctx, Unit), cc)
+  (ctx_resl, cc)
 
 let eval_loop (config : config) (span : span) (eval_loop_body : stl_cm_fun) :
     stl_cm_fun =
@@ -541,12 +554,5 @@ let eval_loop (config : config) (span : span) (eval_loop_body : stl_cm_fun) :
           (reborrow_ashared_loans_symbolic_borrows span None
              ~with_abs_conts:true ctx)
       in
-      let (ctx, res), cc =
-        comp cc (eval_loop_symbolic config span eval_loop_body ctx)
-      in
-      let cf (el : SymbolicAst.expr list) : SymbolicAst.expr =
-        match el with
-        | [ e ] -> cc e
-        | _ -> [%internal_error] span
-      in
-      ([ (ctx, res) ], cf)
+      let ctx_resl, cf = eval_loop_symbolic config span eval_loop_body ctx in
+      (ctx_resl, cc_comp cc cf)
