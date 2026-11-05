@@ -117,6 +117,12 @@ val join_ctxs :
     join). *)
 val drop_locals_uninit_in_some_ctx : eval_ctx list -> eval_ctx list
 
+(** Restore the frozen abstractions of the contexts to join ([eval_ctx list]) as
+    they were before the branching ([eval_ctx]) when the contexts only refined
+    their shared values, in ways which are not observed anymore. *)
+val restore_frozen_abs :
+  Meta.span -> eval_ctx -> eval_ctx list -> eval_ctx list
+
 (** In the contexts reaching a join, expand the struct values shared by the
     abstractions which exist before the branching ([AbsId.Set.t]) where another
     context expanded them. Returns the contexts with the expansions to
@@ -363,7 +369,8 @@ val match_ctx_with_target :
   (eval_ctx * eval_ctx * tvalue SymbolicValueId.Map.t * abs AbsId.Map.t)
   * (SymbolicAst.expr -> SymbolicAst.expr)
 
-(** Join all the contexts found at a break to compute a loop exit context.
+(** Join all the contexts found at a break to compute a loop exit context,
+    from the evaluation of the loop body in a fixed point context ([eval_ctx]).
 
     We use this when computing a fixed-point: this function should not be used
     to synthesize code: **it does not output a continuation** to synthesize the
@@ -374,6 +381,7 @@ val loop_join_break_ctxs :
   loop_id ->
   AbsId.Set.t ->
   DummyVarId.Set.t ->
+  eval_ctx ->
   eval_ctx list ->
   eval_ctx
 

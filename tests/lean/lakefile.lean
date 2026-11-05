@@ -54,6 +54,7 @@ package «tests» {}
 @[default_target] lean_lib ForwardScopes
 @[default_target] lean_lib FromTo
 @[default_target] lean_lib FrozenMutBorrows
+@[default_target] lean_lib FrozenSharedRefinements
 @[default_target] lean_lib GenericUnitOutput
 @[default_target] lean_lib GlobalStaticBorrows
 @[default_target] lean_lib Hashmap
