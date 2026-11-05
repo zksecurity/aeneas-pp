@@ -1040,6 +1040,18 @@ and translate_end_abs (ectx : C.eval_ctx) (abs : V.abs)
   match abs.kind with
   | V.SynthInput rg_id ->
       translate_end_abstraction_synth_input ectx abs e ctx rg_id abs_level
+  | (V.FunCall _ | V.Loop _ | V.Join | V.WithCont)
+    when (not (V.SymbolicValueId.Set.is_empty ctx.other_groups_svs))
+         && not
+              (V.SymbolicValueId.Set.disjoint (fst (abs_meta_svs abs))
+                 ctx.other_groups_svs) ->
+      (* The backward computation of the abstraction consumes values of the
+         path of another region group: its results belong to that path *)
+      let other_groups_svs =
+        V.SymbolicValueId.Set.union (snd (abs_meta_svs abs))
+          ctx.other_groups_svs
+      in
+      translate_expr e { ctx with other_groups_svs }
   | V.FunCall (call_id, _) ->
       translate_end_abstraction_fun_call ectx abs abs_level e call_id ctx
   | V.SynthRet rg_id ->
@@ -1049,6 +1061,36 @@ and translate_end_abs (ectx : C.eval_ctx) (abs : V.abs)
   | V.WithCont -> translate_end_abstraction_with_cont ectx abs abs_level e ctx
   | V.Identity | V.CopySymbolicValue | V.Static ->
       translate_end_abs_identity ectx abs abs_level e ctx
+
+(** The symbolic values an ended abstraction consumed and the symbolic values
+    it gave back, as recorded in its meta-values *)
+and abs_meta_svs (abs : V.abs) :
+    V.SymbolicValueId.Set.t * V.SymbolicValueId.Set.t =
+  let consumed = ref V.SymbolicValueId.Set.empty in
+  let given_back = ref V.SymbolicValueId.Set.empty in
+  let add set id = set := V.SymbolicValueId.Set.add id !set in
+  let value_visitor =
+    object
+      inherit [_] V.iter_tvalue
+      method! visit_symbolic_value_id _ id = add consumed id
+    end
+  in
+  let visitor =
+    object
+      inherit [_] V.iter_abs
+      method! visit_mvalue _ v = value_visitor#visit_tvalue () v
+      method! visit_msymbolic_value_id _ id = add consumed id
+      method! visit_mconsumed_symb _ s = add consumed s.sv_id
+
+      method! visit_aended_mut_borrow_meta _ m =
+        add given_back m.given_back.sv_id
+
+      method! visit_ended_proj_borrow_meta _ m =
+        add given_back m.given_back.sv_id
+    end
+  in
+  visitor#visit_abs () abs;
+  (!consumed, !given_back)
 
 (** The number of projectors of borrows of an abstraction which handed off their
     value at [level] (see the field [handoff] of {!Values.ended_proj_borrow_meta}) *)
@@ -1465,8 +1507,12 @@ and translate_end_abstraction_synth_ret (ectx : C.eval_ctx) (abs : V.abs)
     mk_closed_checked_lets __FILE__ __LINE__ ctx monadic given_back_inputs
       next_e)
   else
-    (* We just ignore *)
-    translate_expr e ctx
+    (* The values given back to the return abstraction of another region group
+       are inputs of the backward function of this group *)
+    let other_groups_svs =
+      V.SymbolicValueId.Set.union (snd (abs_meta_svs abs)) ctx.other_groups_svs
+    in
+    translate_expr e { ctx with other_groups_svs }
 
 and translate_end_abstraction_join_or_loop (ectx : C.eval_ctx) (abs : V.abs)
     (abs_level : abs_level) (e : S.expr) (ctx : bs_ctx) : texpr =
