@@ -187,6 +187,31 @@ let compute_tavalue_proj_kind span type_infos (abs_regions : T.region_set)
   let has_mut_borrows = ref false in
   let has_loans = ref false in
   let has_mut_loans = ref false in
+  (* The values handed off by projectors of borrows to projectors of loans of
+     the same abstraction (see the field [handoff] of
+     {!V.ended_proj_borrow_meta}): the projectors of loans which only consumed
+     such values are internal to the abstraction *)
+  let handoffs =
+    let handoffs = ref V.SymbolicValueId.Set.empty in
+    let visitor =
+      object
+        inherit [_] V.iter_tavalue
+
+        method! visit_AEndedProjBorrows () { mvalues; _ } =
+          if Option.is_some mvalues.handoff then
+            handoffs := V.SymbolicValueId.Set.add mvalues.given_back.sv_id !handoffs
+      end
+    in
+    visitor#visit_tavalue () av;
+    !handoffs
+  in
+  let is_handoff_loan (consumed : (V.mconsumed_symb * V.aproj) list) =
+    consumed <> []
+    && List.for_all
+         (fun ((c : V.mconsumed_symb), _) ->
+           V.SymbolicValueId.Set.mem c.sv_id handoffs)
+         consumed
+  in
 
   let set_has_loans level = if level = abs_level then has_loans := true in
   let set_has_borrows level = if level = abs_level then has_borrows := true in
@@ -262,6 +287,8 @@ let compute_tavalue_proj_kind span type_infos (abs_regions : T.region_set)
         let info = TypesAnalysis.analyze_ty (Some span) type_infos ty in
         [%cassert] span (not info.contains_nested_mut) "Unimplemented";
         match aproj with
+        | V.AEndedProjLoans { consumed; _ } when is_handoff_loan consumed ->
+            super#visit_ASymbolic (level, ty) pm aproj
         | V.AEndedProjLoans _ ->
             set_has_loans level;
             (* We need to check wether the projected loans are mutable or not *)
@@ -274,7 +301,10 @@ let compute_tavalue_proj_kind span type_infos (abs_regions : T.region_set)
             if ty_has_mut_region ty then set_has_mut_loans level;
             (* Continue exploring (same reasons as above) *)
             super#visit_ASymbolic (level, ty) pm aproj
-        | AEndedProjBorrows _ ->
+        | AEndedProjBorrows { mvalues; _ } ->
+            (* A projector handed off to a loan projector of the same
+               abstraction contributes at the level of the hand-off *)
+            let level = Option.value mvalues.handoff ~default:level in
             set_has_borrows level;
             (* We need to check wether the projected borrows are mutable or not *)
             if ty_has_mut_region ty then set_has_mut_borrows level;
@@ -918,18 +948,24 @@ and aproj_to_given_back_aux (_abs_level : abs_level)
       (* Return the meta-value *)
       let ctx, var = fresh_var_for_symbolic_value mv.given_back ctx in
       let pat = mk_tpat_from_fvar mp var in
-      (* Register the default value *)
+      (* Register the default value: the value before the borrow ended. A
+         value handed off to the same abstraction (see the field [handoff] of
+         {!V.ended_proj_borrow_meta}) was borrowed from the value given back to
+         an inner borrow, which is an input of another backward function *)
       let ctx =
-        (* Using the projection type as the type of the symbolic value - it
-           doesn't really matter *)
-        let sv : V.symbolic_value = { sv_id = mv.consumed; sv_ty = ty } in
-        {
-          ctx with
-          var_id_to_default =
-            FVarId.Map.add var.id
-              (symbolic_value_to_texpr ctx sv)
-              ctx.var_id_to_default;
-        }
+        match mv.handoff with
+        | Some _ -> ctx
+        | None ->
+            (* Using the projection type as the type of the symbolic value - it
+               doesn't really matter *)
+            let sv : V.symbolic_value = { sv_id = mv.consumed; sv_ty = ty } in
+            {
+              ctx with
+              var_id_to_default =
+                FVarId.Map.add var.id
+                  (symbolic_value_to_texpr ctx sv)
+                  ctx.var_id_to_default;
+            }
       in
       (ctx, Some pat)
   | AEmpty | AProjLoans _ | AProjBorrows _ -> [%craise] ctx.span "Unreachable"

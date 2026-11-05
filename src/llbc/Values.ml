@@ -240,6 +240,14 @@ type proj_marker = PNone | PLeft | PRight [@@deriving show, eq, ord]
 type ended_proj_borrow_meta = {
   consumed : msymbolic_value_id;
   given_back : msymbolic_value;
+  handoff : int option;
+      (** With nested borrows, a borrow projector may serve a loan projector of
+          the same abstraction at another level (the value given back to an
+          inner borrow, which the abstraction lends again): when we end the loan
+          projector, we end the borrow projector and record the value given
+          back as consumed by the loan projector. The given back value is then
+          an input of the sub-abstraction at this level (the level of the loan
+          projector), not of the level of the borrow projector. *)
 }
 [@@deriving show, ord]
 

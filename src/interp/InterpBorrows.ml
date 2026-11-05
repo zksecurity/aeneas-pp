@@ -696,7 +696,7 @@ let end_aproj_borrows (span : Meta.span) (ended_regions : region_set)
 
     if owned then
       (* There is nothing to project *)
-      let mvalues = { consumed = proj.sv_id; given_back = nsv } in
+      let mvalues = { consumed = proj.sv_id; given_back = nsv; handoff = None } in
       AEndedProjBorrows { mvalues; loans = aproj.loans }
     else
       (* Compute the projection over the given back value (we project the loans) *)
@@ -719,7 +719,7 @@ let end_aproj_borrows (span : Meta.span) (ended_regions : region_set)
 
     if owned then
       (* There is nothing to project *)
-      let mvalues = { consumed = proj.sv_id; given_back = nsv } in
+      let mvalues = { consumed = proj.sv_id; given_back = nsv; handoff = None } in
       EEndedProjBorrows { mvalues; loans = aproj.loans }
     else
       (* Compute the projection over the given back value (we project the loans) *)
@@ -753,7 +753,7 @@ let end_shared_aproj_borrows (span : Meta.span) (ended_regions : region_set)
     (not (ty_has_mut_borrows ctx.type_ctx.type_infos proj.proj_ty));
   let sv : symbolic_value = { sv_id = proj.sv_id; sv_ty = proj.proj_ty } in
   let mvalues : ended_proj_borrow_meta =
-    { consumed = proj.sv_id; given_back = sv }
+    { consumed = proj.sv_id; given_back = sv; handoff = None }
   in
   let update_mut ~owned ~outlive (_abs : abs) (aproj : aproj_borrows) : aproj =
     [%sanity_check] span (owned && not outlive);
@@ -766,6 +766,53 @@ let end_shared_aproj_borrows (span : Meta.span) (ended_regions : region_set)
   update_intersecting_aproj_borrows span ~fail_if_unchanged:true
     ~include_owned:true ~include_outlive:false ~update_shared:None ~update_mut
     ~update_emut ended_regions proj ctx
+
+(** Whether the input abstraction [abs_id] holds the only projector of loans
+    over the symbolic value of [proj] (see {!end_aproj_borrows_handoff}) *)
+let handoff_is_local (ctx : eval_ctx) (abs_id : AbsId.id) (proj : symbolic_proj)
+    : bool =
+  match (ctx_lookup_abs ctx abs_id).kind with
+  | SynthInput _ ->
+      let count = ref 0 in
+      let visitor =
+        object
+          inherit [_] iter_eval_ctx as super
+
+          method! visit_abs _ abs = super#visit_abs (Some abs.abs_id) abs
+
+          method! visit_AProjLoans env loans =
+            if loans.proj.sv_id = proj.sv_id then
+              if env = Some abs_id then incr count else raise Utils.Found;
+            super#visit_AProjLoans env loans
+        end
+      in
+      (try
+         visitor#visit_eval_ctx None ctx;
+         !count = 1
+       with Utils.Found -> false)
+  | _ -> false
+
+(** End the borrow projector over a symbolic value which serves a loan projector
+    of the same abstraction, at level [level] (see the field [handoff] of
+    {!Values.ended_proj_borrow_meta}). The caller checks that it is the only
+    projector intersecting the loan projector. *)
+let end_aproj_borrows_handoff (span : Meta.span) (regions : region_set)
+    (level : abs_level) (proj : symbolic_proj) (nsv : symbolic_value)
+    (ctx : eval_ctx) : eval_ctx =
+  let mvalues : ended_proj_borrow_meta =
+    { consumed = proj.sv_id; given_back = nsv; handoff = Some level }
+  in
+  let update_mut ~owned ~outlive (_abs : abs) (aproj : aproj_borrows) : aproj =
+    [%sanity_check] span (owned && not outlive);
+    AEndedProjBorrows { mvalues; loans = aproj.loans }
+  in
+  let update_emut ~owned ~outlive (_abs : abs) (aproj : eproj_borrows) : eproj =
+    [%sanity_check] span (owned && not outlive);
+    EEndedProjBorrows { mvalues; loans = aproj.loans }
+  in
+  update_intersecting_aproj_borrows span ~fail_if_unchanged:true
+    ~include_owned:true ~include_outlive:false ~update_shared:None ~update_mut
+    ~update_emut regions proj ctx
 
 (** Give back a *modified* symbolic value. *)
 let give_back_symbolic_value (_config : config) (span : Meta.span)
@@ -1679,6 +1726,24 @@ and end_proj_loans_symbolic (config : config) (span : Meta.span)
           comp cc
             (end_proj_loans_symbolic config span ~snapshots chain abs_id level
                regions proj ctx))
+  | Some
+      {
+        shared_projs = [];
+        non_shared_projs = [ (borrow_abs_id, borrow_ty, borrow_level) ];
+      }
+    when borrow_abs_id = abs_id && borrow_level <> level
+         && borrow_ty = proj.proj_ty
+         && handoff_is_local ctx abs_id proj ->
+      (* The only projector of borrows serving this projector of loans is in
+         the same (input) abstraction, at another level: this is a hand-off
+         (see the field [handoff] of {!Values.ended_proj_borrow_meta}). We end
+         this projector only, rather than the sub-abstraction it belongs to:
+         the value it gives back is an input of the current level. *)
+      let nsv = mk_fresh_symbolic_value span ctx proj.proj_ty in
+      let ctx = end_aproj_borrows_handoff span regions level proj nsv ctx in
+      let ctx = give_back_symbolic_value config span regions proj nsv ctx in
+      end_proj_loans_symbolic config span ~snapshots chain abs_id level regions
+        proj ctx
   | Some projs ->
       (* We found projectors over shared values: end the abstractions containing
          them at the proper level.  *)

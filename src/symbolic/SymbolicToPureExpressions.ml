@@ -1188,11 +1188,11 @@ and translate_end_abstraction_synth_input (ectx : C.eval_ctx) (abs : V.abs)
     let monadic = false in
     mk_closed_checked_lets __FILE__ __LINE__ ctx monadic eqs next_e)
   else
-    (* Check that the region abstraction only consumes values but does not output any *)
-    let ctx, outputs = abs_to_given_back None abs abs_level ctx in
-    [%cassert] ctx.span (outputs = []) "Unimplemented";
-
-    (* No outputs: we can ignore it *)
+    (* An input abstraction of another region group: with nested borrows, the
+       values given back to it (when a sub-abstraction ends) are inputs of the
+       backward function of its region group, not of the one we synthesize.
+       They are not available here: if the backward function we synthesize
+       used them, translating it would fail to find them. *)
     translate_expr e ctx
 
 and translate_end_abstraction_fun_call (ectx : C.eval_ctx) (abs : V.abs)

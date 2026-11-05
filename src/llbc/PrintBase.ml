@@ -284,6 +284,9 @@ module Values = struct
             ^ symbolic_value_id_to_pretty_string mvalues.consumed
             ^ ", given_back = "
             ^ symbolic_value_to_string env mvalues.given_back
+            ^ Option.fold ~none:""
+                ~some:(fun l -> ", handoff@" ^ string_of_int l)
+                mvalues.handoff
           else "_"
         in
         let loans =
@@ -641,6 +644,9 @@ module Values = struct
             ^ symbolic_value_id_to_pretty_string mvalues.consumed
             ^ ", given_back = "
             ^ symbolic_value_to_string env mvalues.given_back
+            ^ Option.fold ~none:""
+                ~some:(fun l -> ", handoff@" ^ string_of_int l)
+                mvalues.handoff
           else "_"
         in
         let loans =
