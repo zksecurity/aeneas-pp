@@ -36,21 +36,29 @@ let reborrow_ashared_loans (span : Meta.span) (loop_id : LoopId.id option)
   (* Map from the fresh sids to the original symbolic values *)
   let sid_subst = ref [] in
 
-  (* Copy a shared value (see {!InterpBorrowsCore.copy_shared_value}), where
-     the symbolic values are replaced with fresh symbolic values, in which the
-     region ids belonging to the set [rids] are substituted with [nrid] *)
+  (* Copy a shared value (see {!InterpBorrowsCore.copy_shared_value}).
+
+     The symbolic values containing (shared) borrows are kept as they are: the
+     loan projectors of the owners of their borrows also cover the copy, so
+     that ending those owners ends the reborrow. The other symbolic values are
+     replaced with fresh symbolic values, in which the region ids belonging to
+     the set [rids] are substituted with [nrid]. *)
   let mk_value_with_fresh_sids_no_shared_loans (rids : region_set)
       (nrid : RegionId.id) (v : tvalue) : tvalue =
     let copy_symbolic (sv : symbolic_value) : symbolic_value =
-      let nid = ctx.fresh_symbolic_value_id () in
-      let sv0 = SymbolicValueId.Map.find sv.sv_id absl_id_maps.sids_to_values in
-      sid_subst := (nid, sv0) :: !sid_subst;
-      let sv_ty =
-        Substitute.ty_subst_rids span
-          (fun r -> if RegionSet.mem (RVar (Free r)) rids then nrid else r)
-          sv.sv_ty
-      in
-      { sv_id = nid; sv_ty }
+      if ty_has_borrows (Some span) ctx.type_ctx.type_infos sv.sv_ty then sv
+      else
+        let nid = ctx.fresh_symbolic_value_id () in
+        let sv0 =
+          SymbolicValueId.Map.find sv.sv_id absl_id_maps.sids_to_values
+        in
+        sid_subst := (nid, sv0) :: !sid_subst;
+        let sv_ty =
+          Substitute.ty_subst_rids span
+            (fun r -> if RegionSet.mem (RVar (Free r)) rids then nrid else r)
+            sv.sv_ty
+        in
+        { sv_id = nid; sv_ty }
     in
     InterpBorrowsCore.copy_shared_value span ctx copy_symbolic v
   in

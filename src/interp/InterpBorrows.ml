@@ -2040,6 +2040,35 @@ let rec promote_reserved_mut_borrow (config : config) (span : Meta.span)
         "Can't activate a reserved mutable borrow referencing a loan inside\n\
         \         a region abstraction"
 
+(** Check that the borrows of a symbolic value are projected by loan projectors:
+    every region of its type must be projected by a live loan projector over
+    the symbolic value, in [ctx] or in [absl]. *)
+let symbolic_value_borrows_are_projected (span : Meta.span) (ctx : eval_ctx)
+    (absl : abs list) (sv : symbolic_value) : bool =
+  let loan_projs = ref [] in
+  let visitor =
+    object
+      inherit [_] iter_eval_ctx as super
+      method! visit_abs _ abs = super#visit_abs (Some abs) abs
+
+      method! visit_AProjLoans abs proj =
+        let abs = Option.get abs in
+        if proj.proj.sv_id = sv.sv_id then
+          loan_projs := (abs.regions.owned, proj.proj.proj_ty) :: !loan_projs;
+        super#visit_AProjLoans (Some abs) proj
+    end
+  in
+  visitor#visit_eval_ctx None ctx;
+  List.iter (fun abs -> visitor#visit_abs None abs) absl;
+  RegionId.Set.for_all
+    (fun rid ->
+      let regions = RegionSet.singleton (RVar (Free rid)) in
+      List.exists
+        (fun (owned, proj_ty) ->
+          projections_intersect span ctx owned proj_ty regions sv.sv_ty)
+        !loan_projs)
+    (ty_regions sv.sv_ty)
+
 let destructure_abs (span : Meta.span) (abs_kind : abs_kind) ~(can_end : bool)
     ~(destructure_shared_values : bool) (ctx : eval_ctx) (abs0 : abs) : abs =
   [%ltrace "- abs:\n" ^ abs_to_string span ctx abs0];
@@ -2250,11 +2279,16 @@ let destructure_abs (span : Meta.span) (abs_kind : abs_kind) ~(can_end : bool)
                 [%sanity_check] span
                   (not (value_has_mut_borrows (Some span) ctx sv.value));
                 (* The loan gets a copy of the shared value, with fresh ids for
-                   the symbolic values *)
+                   the symbolic values which don't contain borrows (the others
+                   stay projected by the loan projectors of their owners) *)
                 let sv =
                   copy_shared_value span ctx
                     (fun sv ->
-                      { sv with sv_id = ctx.fresh_symbolic_value_id () })
+                      if
+                        ty_has_borrows (Some span) ctx.type_ctx.type_infos
+                          sv.sv_ty
+                      then sv
+                      else { sv with sv_id = ctx.fresh_symbolic_value_id () })
                     sv
                 in
                 (* The references inside the shared value don't belong to the
@@ -2280,11 +2314,17 @@ let destructure_abs (span : Meta.span) (abs_kind : abs_kind) ~(can_end : bool)
               (avl, sv))
             else (avl, { v with value = VLoan (VSharedLoan (bids, sv)) })
         | VMutLoan _ -> [%craise] span "Unreachable")
-    | VSymbolic _ ->
-        (* For now, we fore all symbolic values containing borrows to be eagerly
-           expanded *)
+    | VSymbolic sv ->
+        (* A symbolic value inside a shared value may contain shared borrows
+           (nested borrows): they are part of the shared value, like concrete
+           shared borrows, and remain projected by the loan projectors of their
+           owners. Symbolic values containing mutable borrows are eagerly
+           expanded. *)
         [%sanity_check] span
-          (not (ty_has_borrows (Some span) ctx.type_ctx.type_infos ty));
+          (not (ty_has_mut_borrows ctx.type_ctx.type_infos ty));
+        [%sanity_check] span
+          ((not (ty_has_borrows (Some span) ctx.type_ctx.type_infos ty))
+          || symbolic_value_borrows_are_projected span ctx [ abs0 ] sv);
         ([], v)
   in
 
