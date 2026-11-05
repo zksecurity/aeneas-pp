@@ -2364,6 +2364,7 @@ let ctx_compute_fun_global_name_no_suffix (item_meta : T.item_meta)
   *)
   match src with
   | TraitImplSource (trait_impl_ref, trait_decl_ref, item_id) ->
+      let own_name = item_meta.name in
       let item_meta =
         if Option.is_some item_meta.attr_info.rename then item_meta
         else
@@ -2392,10 +2393,16 @@ let ctx_compute_fun_global_name_no_suffix (item_meta : T.item_meta)
             ~default:item_meta
       in
       let rename = item_meta.attr_info.rename in
+      (* A method Charon instantiated (for instance with a closure capturing
+         mutable borrows) is named after its instantiation arguments, as the
+         implementation may contain several instantiations of the method *)
       let item_name =
-        match rename with
-        | Some name -> name
-        | None ->
+        match (rename, List.rev own_name) with
+        | Some name, _ -> name
+        | None, Types.PeInstantiated _ :: _ ->
+            Collections.List.last
+              (name_to_simple_name ctx.trans_ctx own_name)
+        | None, _ ->
             Charon.GAstUtils.get_assoc_item_name ctx.crate trait_decl_ref.id
               item_id
       in
