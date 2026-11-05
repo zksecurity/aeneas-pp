@@ -1476,7 +1476,8 @@ let fold_frozen_abs_expansions (config : config) (span : Meta.span)
           ABorrow (AIgnoredMutBorrow (b1, c1)) )
         when b0 = b1 ->
           walk c0 c1
-      | AIgnored (Some m0), AIgnored (Some m1) -> walk_value values m0 m1
+      | AIgnored (Some (_, m0)), AIgnored (Some (_, m1)) ->
+          walk_value values m0 m1
       | _ -> fail ())
   in
   let fold (ctx : eval_ctx) : eval_ctx =
