@@ -152,12 +152,12 @@ def Eng.telescope_loop.body
     ((core.result.Result Std.U32 Unit) × (alloc.vec.Vec Std.U32) × Std.U32 ×
     (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)))
   := do
-  let s : _root_.Sum ((core.result.Result Std.U32 Unit) × Eng × T1 × (Eng
-    → alloc.vec.Vec Std.U32)) (_root_.Sum ((alloc.vec.Vec Std.U32 →
-    alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) × Std.U32 × Std.U32 ×
-    T1 × Std.U32 × Std.U32) ((core.result.Result Std.U32 Unit) ×
-    (alloc.vec.Vec Std.U32) × Std.U32 × Std.U32 × T1 × (alloc.vec.Vec
-    Std.U32 → alloc.vec.Vec Std.U32))) ←
+  let s : _root_.Sum ((core.result.Result Std.U32 Unit) × Eng × T1 × (Eng →
+    alloc.vec.Vec Std.U32)) (_root_.Sum ((alloc.vec.Vec Std.U32 → alloc.vec.Vec
+    Std.U32) × (alloc.vec.Vec Std.U32) × Std.U32 × Std.U32 × T1 × Std.U32 ×
+    Std.U32) ((core.result.Result Std.U32 Unit) × (alloc.vec.Vec Std.U32) ×
+    Std.U32 × Std.U32 × T1 × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)))
+    ←
     if i1 < n
     then
       do
@@ -206,8 +206,8 @@ def Eng.telescope_loop
   Unit)) (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)
   (v : alloc.vec.Vec Std.U32) (i : Std.U32) (n : Std.U32) (next : T1)
   (i1 : Std.U32) (c : Std.U32) :
-  Result ((core.result.Result Std.U32 Unit) × (alloc.vec.Vec Std.U32) ×
-    Std.U32 × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32))
+  Result ((core.result.Result Std.U32 Unit) × (alloc.vec.Vec Std.U32) × Std.U32
+    × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32))
   := do
   loop
     (fun (back1, v1, i2, n1, next1, i3, c1) => Eng.telescope_loop.body
@@ -236,14 +236,14 @@ def Eng.telescope
 def
   Eng.count.closure.Insts.CoreOpsFunctionFnMutPairMut3EngU32ResultBoolTuple.call_mut
   (c : Eng.count.closure) (tupled_args : (Eng × Std.U32)) :
-  Result ((core.result.Result Bool Unit) × Eng.count.closure × Eng × (Eng
-    → Eng) × (Eng.count.closure → Eng.count.closure))
+  Result ((core.result.Result Bool Unit) × Eng.count.closure × Eng × (Eng →
+    Eng) × (Eng.count.closure → Eng.count.closure))
   := do
   let (e, i) := tupled_args
   let v ← alloc.vec.Vec.push e.t i
   let b ← if i = 2#u32
-            then ok true
-            else ok c
+          then ok true
+          else ok c
   let i1 ← i % 2#u32
   let back := fun (tupled_args1 : Eng) => { e with t := tupled_args1.t }
   let back1 := fun c1 => c1
@@ -253,14 +253,13 @@ def
     Source: 'tests/src/closures-mut-captures.rs', lines 21:8-28:5 -/
 @[rust_loop_body]
 def Eng.telescope01countclosure_loop.body
-  (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)
-  (back1 : Bool → Bool) (v : alloc.vec.Vec Std.U32) (i : Std.U32)
-  (n : Std.U32) (b : Bool) (i1 : Std.U32) (c : Std.U32) :
-  Result (ControlFlow ((alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) ×
-    (Bool → Bool) × (alloc.vec.Vec Std.U32) × Std.U32 × Std.U32 × Bool ×
-    Std.U32 × Std.U32) ((core.result.Result Std.U32 Unit) × (alloc.vec.Vec
-    Std.U32) × Std.U32 × Bool × (alloc.vec.Vec Std.U32 → alloc.vec.Vec
-    Std.U32)))
+  (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) (back1 : Bool → Bool)
+  (v : alloc.vec.Vec Std.U32) (i : Std.U32) (n : Std.U32) (b : Bool)
+  (i1 : Std.U32) (c : Std.U32) :
+  Result (ControlFlow ((alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) × (Bool
+    → Bool) × (alloc.vec.Vec Std.U32) × Std.U32 × Std.U32 × Bool × Std.U32 ×
+    Std.U32) ((core.result.Result Std.U32 Unit) × (alloc.vec.Vec Std.U32) ×
+    Std.U32 × Bool × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)))
   := do
   let s : _root_.Sum ((core.result.Result Std.U32 Unit) × Eng ×
     Eng.count.closure × (Eng.count.closure → Bool) × (Eng → alloc.vec.Vec
@@ -323,11 +322,11 @@ def Eng.telescope01countclosure_loop.body
     Source: 'tests/src/closures-mut-captures.rs', lines 21:8-28:5 -/
 @[rust_loop]
 def Eng.telescope01countclosure_loop
-  (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)
-  (back1 : Bool → Bool) (v : alloc.vec.Vec Std.U32) (i : Std.U32)
-  (n : Std.U32) (b : Bool) (i1 : Std.U32) (c : Std.U32) :
-  Result ((core.result.Result Std.U32 Unit) × (alloc.vec.Vec Std.U32) ×
-    Std.U32 × Bool × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32))
+  (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) (back1 : Bool → Bool)
+  (v : alloc.vec.Vec Std.U32) (i : Std.U32) (n : Std.U32) (b : Bool)
+  (i1 : Std.U32) (c : Std.U32) :
+  Result ((core.result.Result Std.U32 Unit) × (alloc.vec.Vec Std.U32) × Std.U32
+    × Bool × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32))
   := do
   loop
     (fun (back2, back3, v1, i2, n1, b1, i3, c1) =>
@@ -356,8 +355,7 @@ def Eng.count
   (self : Eng) (n : Std.U32) :
   Result ((core.result.Result (Std.U32 × Bool) Unit) × Eng × (Eng → Eng))
   := do
-  let (r, self1, telescope_back, c) ←
-    Eng.telescope01countclosure self n false
+  let (r, self1, telescope_back, c) ← Eng.telescope01countclosure self n false
   let cf ← core.result.Result.Insts.CoreOpsTry.branch r
   let (r1, back) ←
     match cf with
@@ -429,9 +427,7 @@ def both_pairs0consecutiveclosure_1
     Source: 'tests/src/closures-mut-captures.rs', lines 44:4-47:5
     Visibility: public -/
 def Eng.consecutive
-  (self : Eng) (v : Slice Std.U32) :
-  Result (Bool × Eng × (Eng → Eng))
-  := do
+  (self : Eng) (v : Slice Std.U32) : Result (Bool × Eng × (Eng → Eng)) := do
   let (b, _) ← both_pairs0consecutiveclosure_1 v ((), self)
   let back'a := fun (self1 : Eng) => { self with t := self1.t }
   ok (b, self, back'a)
@@ -545,8 +541,7 @@ def call_mut_twice
   Result (Std.U32 × (alloc.vec.Vec Std.U32))
   := do
   let (a, v1, f1) ← coreopsfunctionFnMutT0TupleMut0VecU32U32Inst.call_mut f v
-  let (b, v2, _) ←
-    coreopsfunctionFnMutT0TupleMut0VecU32U32Inst.call_mut f1 v1
+  let (b, v2, _) ← coreopsfunctionFnMutT0TupleMut0VecU32U32Inst.call_mut f1 v1
   let i ← a + b
   ok (i, v2)
 
@@ -602,8 +597,7 @@ def both_pairs
   if b
   then
     let i2 ← Slice.index_usize v 2#usize
-    let (b1, _) ←
-      coreopsfunctionFnMutT0PairU32U32BoolInst.call_mut f1 (i1, i2)
+    let (b1, _) ← coreopsfunctionFnMutT0PairU32U32BoolInst.call_mut f1 (i1, i2)
     ok b1
   else ok false
 
@@ -759,8 +753,7 @@ def sum_upto.closure.Insts.CoreOpsFunctionFnMutTupleU32Tuple.call_mut
     Source: 'tests/src/closures-mut-captures.rs', lines 108:11-108:17 -/
 def sum_upto.closure.Insts.CoreOpsFunctionFnOnceTupleU32Tuple.call_once
   (c : sum_upto.closure) (i : Std.U32) : Result Unit := do
-  let _ ←
-    sum_upto.closure.Insts.CoreOpsFunctionFnMutTupleU32Tuple.call_mut c i
+  let _ ← sum_upto.closure.Insts.CoreOpsFunctionFnMutTupleU32Tuple.call_mut c i
   ok ()
 
 /-- Trait implementation: [closures_mut_captures::sum_upto::{impl core::ops::function::FnOnce<(u32,), ()> for closures_mut_captures::sum_upto::{closure}}]

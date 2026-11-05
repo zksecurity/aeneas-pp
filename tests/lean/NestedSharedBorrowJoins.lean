@@ -64,11 +64,11 @@ def Str.Insts.CoreCmpPartialEqStr : core.cmp.PartialEq Str Str := {
 def str_eq_then_branch (a : Str) (c : Bool) : Result Std.U32 := do
   let b ← Str.Insts.CoreCmpPartialEqStr.eq a (toStr "lift")
   let e ← if b
-            then ok 10#u32
-            else ok 20#u32
+          then ok 10#u32
+          else ok 20#u32
   let r ← if c
-            then ok 1#u32
-            else ok 2#u32
+          then ok 1#u32
+          else ok 2#u32
   r + e
 
 /-- [nested_shared_borrow_joins::str_match_then_branches]:
@@ -98,14 +98,14 @@ def str_match_then_branches
   | Sum.inl base =>
     let b1 ← Str.Insts.CoreCmpPartialEqStr.eq kind (toStr "lift")
     let count ← if b1
-                  then ok 2#i32
-                  else ok 1#i32
+                then ok 2#i32
+                else ok 1#i32
     let extra ← if count = 2#i32
-                  then ok n
-                  else ok 0#u32
+                then ok n
+                else ok 0#u32
     let scaled ← if n > 10#u32
-                   then base * 2#u32
-                   else ok base
+                 then base * 2#u32
+                 else ok base
     let i ← scaled + extra
     ok (some i)
   | Sum.inr o => ok o
@@ -117,11 +117,11 @@ def ref_eq_then_branch
   (a : Std.U32) (b : Std.U32) (c : Bool) : Result Std.U32 := do
   let b1 ← lift (core.cmp.impls.PartialEqU32.eq a b)
   let e ← if b1
-            then ok 10#u32
-            else ok 20#u32
+          then ok 10#u32
+          else ok 20#u32
   let r ← if c
-            then ok 1#u32
-            else ok 2#u32
+          then ok 1#u32
+          else ok 2#u32
   r + e
 
 /-- [nested_shared_borrow_joins::get]:
@@ -158,8 +158,8 @@ def update_across_join
   (a : Std.U32) (b : Std.U32) (x : Std.U32) (c : Bool) : Result Std.U32 := do
   let b1 ← lift (core.cmp.impls.PartialEqU32.eq a b)
   let x1 ← if b1
-             then bump x
-             else ok x
+           then bump x
+           else ok x
   if c
   then bump x1
   else ok x1
@@ -191,11 +191,11 @@ structure Holder where
 def holder_branch
   (h : Holder) (other : Std.U32) (c : Bool) : Result Std.U32 := do
   let x ← if c
-            then ok h.r
-            else ok other
+          then ok h.r
+          else ok other
   let y ← if x > 3#u32
-            then ok 1#u32
-            else ok 0#u32
+          then ok 1#u32
+          else ok 0#u32
   x + y
 
 /-- [nested_shared_borrow_joins::Kind]
@@ -277,8 +277,8 @@ def join_different_referents
 def ended_outer_live_inner (a : Std.U32) (c : Bool) : Result Std.U32 := do
   let inner ← get a
   let r ← if c
-            then ok 1#u32
-            else ok 2#u32
+          then ok 1#u32
+          else ok 2#u32
   inner + r
 
 /-- [nested_shared_borrow_joins::one_branch_reborrow]:
@@ -286,8 +286,8 @@ def ended_outer_live_inner (a : Std.U32) (c : Bool) : Result Std.U32 := do
     Visibility: public -/
 def one_branch_reborrow (s : Std.U32) (b : Bool) : Result Std.U32 := do
   let n ← if b
-            then ok s
-            else ok 0#u32
+          then ok s
+          else ok 0#u32
   n + s
 
 /-- [nested_shared_borrow_joins::test_ref_eq_then_branch]:

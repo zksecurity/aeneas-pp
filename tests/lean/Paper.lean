@@ -40,9 +40,7 @@ def test_incr : Result Unit := do
     Source: 'tests/src/paper.rs', lines 19:0-25:1
     Visibility: public -/
 def choose
-  {T : Type _} (b : Bool) (x : T) (y : T) :
-  Result (T × (T → (T × T)))
-  := do
+  {T : Type _} (b : Bool) (x : T) (y : T) : Result (T × (T → (T × T))) := do
   if b
   then let back := fun x1 => (x1, y)
        ok (x, back)

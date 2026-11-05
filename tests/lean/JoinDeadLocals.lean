@@ -212,8 +212,7 @@ def unicode_escape
       core.cmp.PartialEqU8))) o (some s)
   if b
   then
-    let e ←
-      unicode_escape.closure.Insts.CoreOpsFunctionFnTupleError.call () ()
+    let e ← unicode_escape.closure.Insts.CoreOpsFunctionFnTupleError.call () ()
     ok (core.result.Result.Err e)
   else
     let i1 ← «at» + 6#usize

@@ -831,6 +831,45 @@ let export_types_group (fmt : Format.formatter) (config : gen_config)
         export_type_extra_info kind def)
       defs)
 
+(** The formatter caps the indentation of the lines at its maximum indentation
+    limit, which breaks the layout of deeply nested code (and Lean is sensitive
+    to the layout). [print_unclamped fmt print] prints [print] with the geometry
+    of [fmt] if the indentation stays below the limit, and with a geometry wide
+    enough for it otherwise. *)
+let print_unclamped (fmt : Format.formatter) (print : Format.formatter -> unit)
+    : unit =
+  (* The errors saved by a discarded printing are saved again *)
+  let error_list = !Errors.error_list in
+  let unique_errors = !Errors.unique_errors in
+  let rec print_with (geometry : Format.geometry) =
+    Errors.error_list := error_list;
+    Errors.unique_errors := unique_errors;
+    let buf = Buffer.create 4096 in
+    let bfmt = Format.formatter_of_buffer buf in
+    Format.pp_set_geometry bfmt ~max_indent:geometry.max_indent
+      ~margin:geometry.margin;
+    let clamped = ref false in
+    let out = Format.pp_get_formatter_out_functions bfmt () in
+    Format.pp_set_formatter_out_functions bfmt
+      {
+        out with
+        out_indent =
+          (fun n ->
+            if n >= geometry.max_indent then clamped := true;
+            out.out_indent n);
+      };
+    Format.pp_open_vbox bfmt 0;
+    print bfmt;
+    Format.pp_close_box bfmt ();
+    Format.pp_print_flush bfmt ();
+    if !clamped then
+      let max_indent = 2 * geometry.max_indent in
+      print_with
+        { max_indent; margin = max_indent + geometry.margin - geometry.max_indent }
+    else Format.pp_print_as fmt 0 (Buffer.contents buf)
+  in
+  print_with (Format.pp_get_geometry fmt ())
+
 (** Utility.
 
     Export a group of functions, used by {!export_functions_group}.
@@ -909,9 +948,9 @@ let export_functions_group_scc (fmt : Format.formatter) (config : gen_config)
           || (is_opaque && config.extract_opaque)
         then
           Some
-            (fun () ->
-              Extract.extract_fun_decl ctx fmt kind has_decr_clause def;
-              EmitJson.record_fun_if_enabled ctx def)
+            ( (fun fmt ->
+                Extract.extract_fun_decl ctx fmt kind has_decr_clause def),
+              def )
         else None)
       decls
   in
@@ -923,20 +962,23 @@ let export_functions_group_scc (fmt : Format.formatter) (config : gen_config)
     in
     ctx.extracted_opaque := contains_opaque || !(ctx.extracted_opaque);
 
-    Extract.start_fun_decl_group ctx fmt is_rec decls;
-    List.iter (fun f -> f ()) extract_defs;
-    Extract.end_fun_decl_group fmt is_rec decls;
-    (* Prove that the helpers of the groups of mutually recursive functions and
-       trait implementations are monotone in their closure dictionaries *)
-    if Config.backend () = Lean && not is_rec then
-      List.iter
-        (fun (def : Pure.fun_decl) ->
-          if
-            def.loop_id = None
-            && FunDeclId.TreeSet.mem def.def_id ctx.closure_mono_funs
-          then
-            Extract.extract_closure_mono ctx fmt def)
-        decls)
+    print_unclamped fmt (fun fmt ->
+        Extract.start_fun_decl_group ctx fmt is_rec decls;
+        List.iter (fun (extract, _) -> extract fmt) extract_defs;
+        Extract.end_fun_decl_group fmt is_rec decls;
+        (* Prove that the helpers of the groups of mutually recursive functions
+           and trait implementations are monotone in their closure dictionaries *)
+        if Config.backend () = Lean && not is_rec then
+          List.iter
+            (fun (def : Pure.fun_decl) ->
+              if
+                def.loop_id = None
+                && FunDeclId.TreeSet.mem def.def_id ctx.closure_mono_funs
+              then Extract.extract_closure_mono ctx fmt def)
+            decls);
+    List.iter
+      (fun (_, def) -> EmitJson.record_fun_if_enabled ctx def)
+      extract_defs)
 
 (** Extract the decreases-clause template bodies for a list of function
     declarations (typically a function together with the loops it contains).

@@ -181,8 +181,8 @@ def test_loop.body
   := do
   if b0
   then let buf1 ← if b1
-                    then write buf
-                    else ok buf
+                  then write buf
+                  else ok buf
        read buf1
        ok (cont buf1)
   else ok (done ())

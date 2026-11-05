@@ -106,8 +106,7 @@ def chain
     match s1 with
     | Sum.inl p1 =>
       let (_, r1) := p1
-      let s2 : _root_.Sum (V × Std.U32) (core.result.Result Std.U32 Std.U32)
-        ←
+      let s2 : _root_.Sum (V × Std.U32) (core.result.Result Std.U32 Std.U32) ←
         match v2 with
         | V.A x =>
           do
@@ -235,12 +234,11 @@ def chain
 def early_return_if (x : Std.U32) (b : Bool) (c : Bool) : Result Std.U32 := do
   let s : _root_.Sum Std.U32 Std.U32 ←
     if b
-    then
-      if c
-      then ok (Sum.inr 0#u32)
-      else do
-           let y ← x + 1#u32
-           ok (Sum.inl y)
+    then if c
+         then ok (Sum.inr 0#u32)
+         else do
+              let y ← x + 1#u32
+              ok (Sum.inl y)
     else do
          let y ← x + 2#u32
          ok (Sum.inl y)
@@ -252,13 +250,11 @@ def early_return_if (x : Std.U32) (b : Bool) (c : Bool) : Result Std.U32 := do
     Source: 'tests/src/switch-early-returns.rs', lines 45:0-56:1
     Visibility: public -/
 def nested (v : V) (w : V) : Result (core.result.Result Std.U32 Std.U32) := do
-  let s : _root_.Sum (V × V × Std.U32) (core.result.Result Std.U32 Std.U32)
-    ←
+  let s : _root_.Sum (V × V × Std.U32) (core.result.Result Std.U32 Std.U32) ←
     match v with
     | V.A x =>
       do
-      let s1 : _root_.Sum (V × Std.U32) (core.result.Result Std.U32 Std.U32)
-        ←
+      let s1 : _root_.Sum (V × Std.U32) (core.result.Result Std.U32 Std.U32) ←
         match w with
         | V.A y =>
           do
@@ -359,11 +355,10 @@ def panic_or_return (v : V) : Result Std.U32 := do
   let s : _root_.Sum (V × Std.U32) Std.U32 ←
     match v with
     | V.A x => ok (Sum.inl (v, x))
-    | V.B x =>
-      do
-      massert (x < 50#u32)
-      let x1 ← x + 1#u32
-      ok (Sum.inl (v, x1))
+    | V.B x => do
+               massert (x < 50#u32)
+               let x1 ← x + 1#u32
+               ok (Sum.inl (v, x1))
     | V.C _ => ok (Sum.inr 7#u32)
   match s with
   | Sum.inl p => let (_, x) := p
@@ -405,8 +400,8 @@ def struct_calls
   Result ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec Std.U32) ×
     (alloc.vec.Vec Std.U32))
   := do
-  let s1 : _root_.Sum (V × Ck × Std.U32 × (Ck → ((alloc.vec.Vec Std.U32)
-    × (alloc.vec.Vec Std.U32)))) ((core.result.Result Std.U32 Std.U32) ×
+  let s1 : _root_.Sum (V × Ck × Std.U32 × (Ck → ((alloc.vec.Vec Std.U32) ×
+    (alloc.vec.Vec Std.U32)))) ((core.result.Result Std.U32 Std.U32) ×
     (alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32)) ←
     match v with
     | V.A x =>
@@ -602,8 +597,8 @@ def test_update_then_error : Result Unit := do
     | core.result.Result.Err i1 =>
       do
       let b1 ← match i1 with
-                 | 200#uscalar => ok true
-                 | _ => ok false
+               | 200#uscalar => ok true
+               | _ => ok false
       ok (b1, i)
   massert b
   massert (acc = 1#u32)
@@ -613,8 +608,8 @@ def test_update_then_error : Result Unit := do
     | core.result.Result.Ok i1 =>
       do
       let b2 ← match i1 with
-                 | 3#uscalar => ok true
-                 | _ => ok false
+               | 3#uscalar => ok true
+               | _ => ok false
       ok (b2, acc1)
     | core.result.Result.Err _ => ok (false, acc1)
   massert b1
@@ -649,8 +644,8 @@ def test_struct_calls : Result Unit := do
     | core.result.Result.Ok i =>
       do
       let b1 ← match i with
-                 | 4#uscalar => ok true
-                 | _ => ok false
+               | 4#uscalar => ok true
+               | _ => ok false
       ok (b1, t, s)
     | core.result.Result.Err _ => ok (false, t, s)
   massert b
@@ -667,8 +662,8 @@ def test_struct_calls : Result Unit := do
     | core.result.Result.Err i2 =>
       do
       let b2 ← match i2 with
-                 | 200#uscalar => ok true
-                 | _ => ok false
+               | 200#uscalar => ok true
+               | _ => ok false
       ok (b2, t2, s2)
   massert b1
   let i2 := alloc.vec.Vec.len t3

@@ -146,18 +146,14 @@ structure MutWrapper1 (T : Type _) where
 /-- [adt_borrows::{adt_borrows::MutWrapper1<'a, T>}::create]:
     Source: 'tests/src/adt-borrows.rs', lines 104:4-106:5 -/
 def MutWrapper1.create
-  {T : Type _} (x : T) :
-  Result ((MutWrapper1 T) × (MutWrapper1 T → T))
-  := do
+  {T : Type _} (x : T) : Result ((MutWrapper1 T) × (MutWrapper1 T → T)) := do
   let back := fun (mw : MutWrapper1 T) => mw.x
   ok ({ x }, back)
 
 /-- [adt_borrows::{adt_borrows::MutWrapper1<'a, T>}::unwrap]:
     Source: 'tests/src/adt-borrows.rs', lines 108:4-110:5 -/
 def MutWrapper1.unwrap
-  {T : Type _} (self : MutWrapper1 T) :
-  Result (T × (T → MutWrapper1 T))
-  := do
+  {T : Type _} (self : MutWrapper1 T) : Result (T × (T → MutWrapper1 T)) := do
   let back := fun t => ({ x := t } : MutWrapper1 T)
   ok (self.x, back)
 
@@ -216,8 +212,8 @@ def MutWrapper2.unwrap
     Source: 'tests/src/adt-borrows.rs', lines 143:4-145:5 -/
 def MutWrapper2.id
   {T : Type _} (self : MutWrapper2 T) :
-  Result ((MutWrapper2 T) × (MutWrapper2 T → MutWrapper2 T) × (MutWrapper2
-    T → MutWrapper2 T))
+  Result ((MutWrapper2 T) × (MutWrapper2 T → MutWrapper2 T) × (MutWrapper2 T →
+    MutWrapper2 T))
   := do
   let back'a := fun (mw : MutWrapper2 T) => { self with x := mw.x }
   let back'b := fun (mw : MutWrapper2 T) => { self with y := mw.y }
@@ -239,8 +235,8 @@ def use_mut_wrapper2 : Result Unit := do
     Source: 'tests/src/adt-borrows.rs', lines 159:0-161:1 -/
 def use_mut_wrapper2_id
   {T : Type _} (x : MutWrapper2 T) :
-  Result ((MutWrapper2 T) × (MutWrapper2 T → MutWrapper2 T) × (MutWrapper2
-    T → MutWrapper2 T))
+  Result ((MutWrapper2 T) × (MutWrapper2 T → MutWrapper2 T) × (MutWrapper2 T →
+    MutWrapper2 T))
   := do
   let (mw, id_back, id_back1) ← MutWrapper2.id x
   let back'a :=

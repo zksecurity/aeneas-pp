@@ -64,10 +64,9 @@ def sum (max : Std.U32) : Result Std.U32 := do
 def sum_with_mut_borrows_loop
   (max : Std.U32) (i : Std.U32) (s : Std.U32) : Result Std.U32 := do
   if i < max
-  then
-    let ms ← s + i
-    let mi ← i + 1#u32
-    sum_with_mut_borrows_loop max mi ms
+  then let ms ← s + i
+       let mi ← i + 1#u32
+       sum_with_mut_borrows_loop max mi ms
   else ok s
 partial_fixpoint
 
@@ -771,9 +770,8 @@ def issue270.box_get_borrow {T : Type _} (x : T) : Result T := do
 def issue270_loop
   (t : List (List Std.U8)) (last : List Std.U8) : Result (List Std.U8) := do
   match t with
-  | List.Cons ht tt =>
-    let t1 ← issue270.box_get_borrow tt
-    issue270_loop t1 ht
+  | List.Cons ht tt => let t1 ← issue270.box_get_borrow tt
+                       issue270_loop t1 ht
   | List.Nil => ok last
 partial_fixpoint
 
@@ -845,8 +843,7 @@ def issue400_2
   (a : Std.I32) (b : Std.I32) (c : Std.I32) (conds : Slice Bool) :
   Result (Std.I32 × Std.I32 × Std.I32)
   := do
-  let (y, z, back) ←
-    issue400_2_loop (fun i i1 => (i, i1, c)) conds a b 0#usize
+  let (y, z, back) ← issue400_2_loop (fun i i1 => (i, i1, c)) conds a b 0#usize
   let y1 ← y + 3#i32
   let z1 ← z + 5#i32
   ok (back y1 z1)

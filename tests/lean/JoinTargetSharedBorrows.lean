@@ -30,8 +30,8 @@ namespace join_target_shared_borrows
 @[rust_fun "core::fmt::{core::fmt::Display<str>}::fmt"]
 axiom Str.Insts.CoreFmtDisplay.fmt
   :
-  Str → core.fmt.Formatter → Result ((core.result.Result Unit
-    core.fmt.Error) × core.fmt.Formatter)
+  Str → core.fmt.Formatter → Result ((core.result.Result Unit core.fmt.Error) ×
+    core.fmt.Formatter)
 
 /-- Trait implementation: [core::fmt::{impl core::fmt::Display for str}]
     Source: '/rustc/library/core/src/fmt/mod.rs', lines 2964:0-2964:20

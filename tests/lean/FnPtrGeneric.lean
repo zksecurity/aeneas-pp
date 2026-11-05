@@ -59,8 +59,8 @@ def P.Insts.CoreOpsFunctionFnOnceTupleU8U8.call_once
 /-- Trait implementation: [fn_ptr_generic::{impl core::ops::function::FnOnce<(u8,), u8> for fn_ptr_generic::incr}]
     Source: 'tests/src/fn_ptr_generic.rs', lines 7:0-9:1 -/
 @[reducible]
-def P.Insts.CoreOpsFunctionFnOnceTupleU8U8 : core.ops.function.FnOnce (Std.U8
-  → Result Std.U8) Std.U8 Std.U8 := {
+def P.Insts.CoreOpsFunctionFnOnceTupleU8U8 : core.ops.function.FnOnce (Std.U8 →
+  Result Std.U8) Std.U8 Std.U8 := {
   call_once := P.Insts.CoreOpsFunctionFnOnceTupleU8U8.call_once
 }
 
@@ -76,8 +76,8 @@ def P.Insts.CoreOpsFunctionFnMutTupleU8U8 : core.ops.function.FnMut (Std.U8 →
 /-- Trait implementation: [fn_ptr_generic::{impl core::ops::function::Fn<(u8,), u8> for fn_ptr_generic::incr}]
     Source: 'tests/src/fn_ptr_generic.rs', lines 7:0-9:1 -/
 @[reducible]
-def P.Insts.CoreOpsFunctionFnTupleU8U8 : core.ops.function.Fn (Std.U8 →
-  Result Std.U8) Std.U8 Std.U8 := {
+def P.Insts.CoreOpsFunctionFnTupleU8U8 : core.ops.function.Fn (Std.U8 → Result
+  Std.U8) Std.U8 Std.U8 := {
   FnMutInst := P.Insts.CoreOpsFunctionFnMutTupleU8U8
   call := P.Insts.CoreOpsFunctionFnTupleU8U8.call
 }
@@ -183,8 +183,8 @@ def use_vec (x : Std.U8) : Result Std.U8 := do
       Result Std.U8) 1#usize))
   let ret := alloc.slice.Slice.into_vec y
   let f ←
-    alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Std.U8 →
-      Result Std.U8)) ret 0#usize
+    alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Std.U8 → Result
+      Std.U8)) ret 0#usize
   apply P.Insts.CoreOpsFunctionFnTupleU8U8 f x
 
 end fn_ptr_generic

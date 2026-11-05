@@ -32,22 +32,21 @@ structure Eng where
 @[rust_loop_body]
 def Eng.telescope_loop.body
   {T1 : Type _} (coreopsfunctionFnMutT1PairMutEngU32ResultBoolU32Inst :
-  core.ops.function.FnMut T1 (Eng × Std.U32) ((core.result.Result Bool
-  Std.U32) × Eng × (Eng → Eng)))
-  (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)
+  core.ops.function.FnMut T1 (Eng × Std.U32) ((core.result.Result Bool Std.U32)
+  × Eng × (Eng → Eng))) (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)
   (v : alloc.vec.Vec Std.U32) (i : Std.U32) (n : Std.U32) (next : T1)
   (i1 : Std.U32) (c : Std.U32) :
   Result (ControlFlow ((alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) ×
     (alloc.vec.Vec Std.U32) × Std.U32 × Std.U32 × T1 × Std.U32 × Std.U32)
-    ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec Std.U32) × Std.U32
-    × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)))
+    ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec Std.U32) × Std.U32 ×
+    (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)))
   := do
-  let s : _root_.Sum ((core.result.Result Std.U32 Std.U32) × Eng × T1 × (Eng
-    → alloc.vec.Vec Std.U32)) (_root_.Sum ((alloc.vec.Vec Std.U32 →
-    alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) × Std.U32 × Std.U32 ×
-    T1 × Std.U32 × Std.U32) ((core.result.Result Std.U32 Std.U32) ×
-    (alloc.vec.Vec Std.U32) × Std.U32 × Std.U32 × T1 × (alloc.vec.Vec
-    Std.U32 → alloc.vec.Vec Std.U32))) ←
+  let s : _root_.Sum ((core.result.Result Std.U32 Std.U32) × Eng × T1 × (Eng →
+    alloc.vec.Vec Std.U32)) (_root_.Sum ((alloc.vec.Vec Std.U32 → alloc.vec.Vec
+    Std.U32) × (alloc.vec.Vec Std.U32) × Std.U32 × Std.U32 × T1 × Std.U32 ×
+    Std.U32) ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec Std.U32) ×
+    Std.U32 × Std.U32 × T1 × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)))
+    ←
     if i1 < n
     then
       do
@@ -92,9 +91,8 @@ def Eng.telescope_loop.body
 @[rust_loop]
 def Eng.telescope_loop
   {T1 : Type _} (coreopsfunctionFnMutT1PairMutEngU32ResultBoolU32Inst :
-  core.ops.function.FnMut T1 (Eng × Std.U32) ((core.result.Result Bool
-  Std.U32) × Eng × (Eng → Eng)))
-  (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)
+  core.ops.function.FnMut T1 (Eng × Std.U32) ((core.result.Result Bool Std.U32)
+  × Eng × (Eng → Eng))) (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)
   (v : alloc.vec.Vec Std.U32) (i : Std.U32) (n : Std.U32) (next : T1)
   (i1 : Std.U32) (c : Std.U32) :
   Result ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec Std.U32) ×
@@ -110,8 +108,8 @@ def Eng.telescope_loop
     Source: 'tests/src/closures-fnmut-args.rs', lines 14:4-28:5 -/
 def Eng.telescope
   {T1 : Type _} (coreopsfunctionFnMutT1PairMutAEngU32ResultBoolU32Inst :
-  core.ops.function.FnMut T1 (Eng × Std.U32) ((core.result.Result Bool
-  Std.U32) × Eng × (Eng → Eng))) (self : Eng) (n : Std.U32) (next : T1) :
+  core.ops.function.FnMut T1 (Eng × Std.U32) ((core.result.Result Bool Std.U32)
+  × Eng × (Eng → Eng))) (self : Eng) (n : Std.U32) (next : T1) :
   Result ((core.result.Result Std.U32 Std.U32) × Eng × (Eng → Eng))
   := do
   let (r, v, i, back) ←
@@ -212,8 +210,7 @@ def apply_twice
   (alloc.vec.Vec Std.U32))) (v : alloc.vec.Vec Std.U32) (f : T0) (g : T1) :
   Result (Std.Usize × (alloc.vec.Vec Std.U32))
   := do
-  let (_, v1) ←
-    coreopsfunctionFnT0PairMut0VecU32U32TupleInst.call f (v, 1#u32)
+  let (_, v1) ← coreopsfunctionFnT0PairMut0VecU32U32TupleInst.call f (v, 1#u32)
   let (_, v2) ←
     coreopsfunctionFnT0PairMut0VecU32U32TupleInst.call f (v1, 2#u32)
   coreopsfunctionFnOnceT1TupleMut0VecU32UsizeInst.call_once g v2
@@ -335,8 +332,7 @@ def call_mut_twice
   Std.U32))) (v : alloc.vec.Vec Std.U32) (f : T0) :
   Result (Std.U32 × (alloc.vec.Vec Std.U32))
   := do
-  let ((a, v1), f1) ←
-    coreopsfunctionFnMutT0TupleMut0VecU32U32Inst.call_mut f v
+  let ((a, v1), f1) ← coreopsfunctionFnMutT0TupleMut0VecU32U32Inst.call_mut f v
   let ((b, v2), _) ←
     coreopsfunctionFnMutT0TupleMut0VecU32U32Inst.call_mut f1 v1
   let i ← a + b

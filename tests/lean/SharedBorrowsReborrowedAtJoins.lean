@@ -58,8 +58,8 @@ def id_ref (r : Std.U32) : Result Std.U32 := do
     Visibility: public -/
 def pick (p : P) (b : Bool) : Result Std.U32 := do
   let n ← if b
-            then ok p.n
-            else ok 0#u32
+          then ok p.n
+          else ok 0#u32
   let r ← id_ref p.r
   if n = 0#u32
   then ok r
@@ -106,8 +106,8 @@ def loop_local (n : Std.U32) : Result Std.U32 := do
 def first_or
   (xs : Slice Std.U32) (d : Std.U32) (b : Bool) : Result Std.U32 := do
   let n ← if b
-            then ok (Slice.len xs)
-            else ok 0#usize
+          then ok (Slice.len xs)
+          else ok 0#usize
   if n > 0#usize
   then let i ← Slice.index_usize xs 0#usize
        id_ref i

@@ -160,8 +160,7 @@ def test_reach : Result Unit := do
     | core.result.Result.Ok _ => ok false
     | core.result.Result.Err _ => ok true
   massert b2
-  let (r3, w) ←
-    Input.reach { node := Node.Lit, seen := 0#u32, names := 2#u32 }
+  let (r3, w) ← Input.reach { node := Node.Lit, seen := 0#u32, names := 2#u32 }
   let b3 ←
     match r3 with
     | core.result.Result.Ok i =>

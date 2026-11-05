@@ -45,8 +45,7 @@ def Table.get_loop.body
     alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Std.U64 ×
       Std.U32)) v i1
   let s : _root_.Sum ((Option Std.U32) × Std.U64 × Std.U32) ((alloc.vec.Vec
-    (Std.U64 × Std.U32)) × Std.Usize × Std.U64 × Std.Usize × Std.Usize)
-    ←
+    (Std.U64 × Std.U32)) × Std.Usize × Std.U64 × Std.Usize × Std.Usize) ←
     if k = key
     then ok (Sum.inl (some v1, k, v1))
     else
@@ -116,8 +115,8 @@ def test_get : Result Unit := do
   massert b1
   let o2 ← Table.get { slots := slots3, len := 3#usize } 3#u64
   let b2 ← match o2 with
-             | none => ok true
-             | some _ => ok false
+           | none => ok true
+           | some _ => ok false
   massert b2
 
 /- Unit test for [loops_frozen_inputs::test_get] -/

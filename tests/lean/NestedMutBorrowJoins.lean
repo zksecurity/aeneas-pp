@@ -60,8 +60,7 @@ def Ck.swap (self : Ck) : Result (Ck × (Ck → Ck)) := do
 
 /-- [nested_mut_borrow_joins::helper]:
     Source: 'tests/src/nested-mut-borrow-joins.rs', lines 31:0-33:1 -/
-def helper
-  (ck : Ck) (x : Std.U32) : Result (Std.U32 × Ck × (Ck → Ck)) := do
+def helper (ck : Ck) (x : Std.U32) : Result (Std.U32 × Ck × (Ck → Ck)) := do
   let (i, ck1, push_both_back) ← Ck.push_both ck x
   let back := fun ck2 => let c := push_both_back ck2
                          { c with e := ck.e }

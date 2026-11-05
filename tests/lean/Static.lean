@@ -141,8 +141,7 @@ def incr_static_mut (x : Std.U32) : Result Std.U32 := do
 
 /-- [static::ret_static_mut]:
     Source: 'tests/src/static.rs', lines 103:0-105:1 -/
-def ret_static_mut
-  (x : Std.U32) : Result (Std.U32 × (Std.U32 → Std.U32)) := do
+def ret_static_mut (x : Std.U32) : Result (Std.U32 × (Std.U32 → Std.U32)) := do
   ok (x, fun x1 => x1)
 
 /-- [static::StaticRef]
@@ -350,8 +349,7 @@ def call_outlives2 (x : Std.U32) : Result (Std.U32 × Std.U32) := do
 
 /-- [static::outlives_mut]:
     Source: 'tests/src/static.rs', lines 208:0-210:1 -/
-def outlives_mut
-  (x : Std.U32) : Result (Std.U32 × (Std.U32 → Std.U32)) := do
+def outlives_mut (x : Std.U32) : Result (Std.U32 × (Std.U32 → Std.U32)) := do
   ok (x, fun x1 => x1)
 
 /-- [static::incr_outlives_mut]:
@@ -544,10 +542,9 @@ def loop_hidden_static_ref_loop.body
   Result (ControlFlow (Std.U32 × Std.U32 × Std.U32) Std.U32)
   := do
   if i1 < n
-  then
-    let acc1 ← acc + GLOBAL
-    let i2 ← i1 + 1#u32
-    ok (cont (GLOBAL, i2, acc1))
+  then let acc1 ← acc + GLOBAL
+       let i2 ← i1 + 1#u32
+       ok (cont (GLOBAL, i2, acc1))
   else ok (done acc)
 
 /-- [static::loop_hidden_static_ref]: loop 0:
@@ -688,8 +685,8 @@ def loop_opt_static_loop.body
   if i < n
   then
     let acc1 ← match o with
-                 | none => ok acc
-                 | some x => acc + x
+               | none => ok acc
+               | some x => acc + x
     let i1 ← i + 1#u32
     ok (cont (i1, acc1))
   else ok (done acc)
@@ -716,8 +713,8 @@ def loop_opt_static (o : Option Std.U32) (n : Std.U32) : Result Std.U32 := do
 def branch_opt_static
   (o : Option Std.U32) (p : Option Std.U32) (b : Bool) : Result Std.U32 := do
   let q ← if b
-            then ok o
-            else ok p
+          then ok o
+          else ok p
   match q with
   | none => ok 0#u32
   | some x => ok x
@@ -804,8 +801,8 @@ def loop_copy_static_ref
     Source: 'tests/src/static.rs', lines 467:0-477:1 -/
 def join_concrete_static_ref (b : Bool) : Result Std.U32 := do
   let o ← if b
-            then ok (some ({ x := GLOBAL } : StaticRef))
-            else ok none
+          then ok (some ({ x := GLOBAL } : StaticRef))
+          else ok none
   match o with
   | none => ok 0#u32
   | some sr => ok sr.x
@@ -814,8 +811,8 @@ def join_concrete_static_ref (b : Bool) : Result Std.U32 := do
     Source: 'tests/src/static.rs', lines 479:0-485:1 -/
 def join_concrete_static (b : Bool) : Result Std.U32 := do
   let o ← if b
-            then ok (some GLOBAL)
-            else ok none
+          then ok (some GLOBAL)
+          else ok none
   match o with
   | none => ok 0#u32
   | some x => ok x
@@ -884,8 +881,8 @@ def copy_in_branch_static
          | some x => ok x
     else ok 0#u32
   let x ← match o with
-            | none => ok 0#u32
-            | some x1 => ok x1
+          | none => ok 0#u32
+          | some x1 => ok x1
   acc + x
 
 /-- [static::WithStaticRef]

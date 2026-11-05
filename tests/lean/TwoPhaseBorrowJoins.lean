@@ -38,11 +38,11 @@ def push_flag
   Result (alloc.vec.Vec Std.U32)
   := do
   let b1 ← match b with
-             | none => ok false
-             | some _ => ok true
+           | none => ok false
+           | some _ => ok true
   let i ← if b1
-            then ok 1#u32
-            else ok 0#u32
+          then ok 1#u32
+          else ok 0#u32
   alloc.vec.Vec.push v i
 
 /-- [two_phase_borrow_joins::Node]
@@ -110,8 +110,8 @@ def Binder.bind_loop.body
     let ty ←
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v i
     let n ← if lambda
-              then ok (Node.Lam ty body)
-              else ok (Node.Pi ty body)
+            then ok (Node.Lam ty body)
+            else ok (Node.Pi ty body)
     let (body1, t1) ← Terms.node t n
     let i2 ← i + 1#usize
     ok (cont (t1, body1, i2))

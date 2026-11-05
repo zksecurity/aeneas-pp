@@ -52,8 +52,8 @@ def value (n : Number) : Result Std.U32 := do
 def sum
   (x : Std.U32) (y : Std.U32) (owned : Bool) : Result (Option Std.U32) := do
   let o ← decode x owned
-  let s : _root_.Sum (Std.U32 × Std.U32) ((Option Std.U32) × Std.U32 ×
-    Std.U32) ←
+  let s : _root_.Sum (Std.U32 × Std.U32) ((Option Std.U32) × Std.U32 × Std.U32)
+    ←
     match o with
     | none => ok (Sum.inl (x, y))
     | some a =>

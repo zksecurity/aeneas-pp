@@ -70,8 +70,7 @@ def test_usize_forward_overflow_max_count : Result Unit := do
     Source: 'tests/src/step_overflowing.rs', lines 48:0-52:1
     Visibility: public -/
 def test_usize_backward_no_overflow : Result Unit := do
-  let (v, o) ←
-    core.iter.range.StepUsize.backward_overflowing 10#usize 5#usize
+  let (v, o) ← core.iter.range.StepUsize.backward_overflowing 10#usize 5#usize
   massert (v = 5#usize)
   massert (o = false)
 

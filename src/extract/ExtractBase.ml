@@ -4,7 +4,21 @@ open Contexts
 open Pure
 open StringUtils
 open Config
-module F = Format
+(** [Format], measuring the strings by their number of (UTF-8) characters
+    rather than bytes: the extracted code contains non-ASCII characters (e.g.,
+    the «» of the escaped Lean names), and the formatter needs their width to
+    lay out the code (Lean is sensitive to the layout). *)
+module F = struct
+  include Format
+
+  let pp_print_string (fmt : formatter) (s : string) : unit =
+    let width = ref 0 in
+    String.iter
+      (fun c -> if Char.code c land 0xc0 <> 0x80 then incr width)
+      s;
+    pp_print_as fmt !width s
+end
+
 open ExtractBuiltin
 open TranslateCore
 

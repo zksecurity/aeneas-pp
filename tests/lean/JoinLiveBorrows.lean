@@ -30,8 +30,7 @@ namespace join_live_borrows
 @[rust_fun
   "alloc::vec::{core::iter::traits::collect::IntoIterator<&'a alloc::vec::Vec<@T>, &'a @T, core::slice::iter::Iter<'a, @T>>}::into_iter"]
 axiom SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter
-  {T : Type _} (A : Type _) :
-  alloc.vec.Vec T → Result (core.slice.iter.Iter T)
+  {T : Type _} (A : Type _) : alloc.vec.Vec T → Result (core.slice.iter.Iter T)
 
 /-- [join_live_borrows::Value]
     Source: 'tests/src/join-live-borrows.rs', lines 8:0-11:1
@@ -50,8 +49,7 @@ def field_loop.body
   (iter : core.slice.iter.Iter (Std.U32 × Value)) :
   Result (ControlFlow (core.slice.iter.Iter (Std.U32 × Value)) (_root_.Sum
     ((alloc.vec.Vec (Std.U32 × Value)) × Std.U32 × (core.slice.iter.Iter
-    (Std.U32 × Value))) (Value × (alloc.vec.Vec (Std.U32 × Value)) ×
-    Std.U32)))
+    (Std.U32 × Value))) (Value × (alloc.vec.Vec (Std.U32 × Value)) × Std.U32)))
   := do
   let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
   match o with
@@ -70,8 +68,8 @@ def field_loop
   (iter : core.slice.iter.Iter (Std.U32 × Value))
   (fields : alloc.vec.Vec (Std.U32 × Value)) (k : Std.U32) :
   Result (_root_.Sum ((alloc.vec.Vec (Std.U32 × Value)) × Std.U32 ×
-    (core.slice.iter.Iter (Std.U32 × Value))) (Value × (alloc.vec.Vec
-    (Std.U32 × Value)) × Std.U32))
+    (core.slice.iter.Iter (Std.U32 × Value))) (Value × (alloc.vec.Vec (Std.U32
+    × Value)) × Std.U32))
   := do
   loop
     (fun iter1 => field_loop.body fields k iter1)
@@ -103,8 +101,8 @@ def field
 @[rust_loop_body]
 def field_at_loop.body
   (fields : alloc.vec.Vec (Std.U32 × Value)) (k : Std.U32) (i : Std.Usize) :
-  Result (ControlFlow Std.Usize (_root_.Sum (Value × (alloc.vec.Vec (Std.U32
-    × Value)) × Std.U32) ((alloc.vec.Vec (Std.U32 × Value)) × Std.U32 ×
+  Result (ControlFlow Std.Usize (_root_.Sum (Value × (alloc.vec.Vec (Std.U32 ×
+    Value)) × Std.U32) ((alloc.vec.Vec (Std.U32 × Value)) × Std.U32 ×
     Std.Usize)))
   := do
   let i1 := alloc.vec.Vec.len fields
