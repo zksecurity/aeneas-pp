@@ -1196,6 +1196,106 @@ let drop_locals_uninit_in_some_ctx (ctxl : eval_ctx list) : eval_ctx list =
   in
   if Expressions.LocalId.Set.is_empty uninit then ctxl else List.map drop ctxl
 
+(** Values under shared loans are immutable: after a branching (or an
+    iteration of a loop) started in [ctx0], the frozen abstractions of [ctx0]
+    can only have been refined, by expanding the symbolic values without
+    borrows of their shared values (for instance through frozen borrows, see
+    {!Values.VFrozenMutBorrow}) and by sharing parts of those values. When no
+    borrow observes the shared parts anymore in any of the contexts [ctxl] to
+    join, we restore the abstractions of [ctx0], so that joining the contexts
+    doesn't have to join their shared values. If one of the contexts still
+    observes them, we leave the abstraction unchanged in all the contexts: the
+    other contexts were aligned with it (see {!align_fixed_abs_expansions}). *)
+let restore_frozen_abs (span : Meta.span) (ctx0 : eval_ctx)
+    (ctxl : eval_ctx list) : eval_ctx list =
+  (* Check that the abstraction [abs] of [ctx] refines [abs0] *)
+  let refines_abs (abs0 : abs) (ctx : eval_ctx) (abs : abs) : bool =
+    let dead (lid : loan_id) : bool =
+      InterpBorrowsCore.lookup_shared_reserved_borrows lid ctx = []
+    in
+    let value_has_live_loans (v : tvalue) : bool =
+      let visitor =
+        object
+          inherit [_] iter_tvalue as super
+
+          method! visit_VSharedLoan env lid sv =
+            if not (dead lid) then raise Utils.Found;
+            super#visit_VSharedLoan env lid sv
+
+          method! visit_VMutLoan _ _ = raise Utils.Found
+        end
+      in
+      try
+        visitor#visit_tvalue () v;
+        false
+      with Utils.Found -> true
+    in
+    (* Check that [v] refines [v0] *)
+    let rec refines (v0 : tvalue) (v : tvalue) : bool =
+      match (v0.value, v.value) with
+      | VLoan (VSharedLoan (lid0, v0')), VLoan (VSharedLoan (lid, v'))
+        when lid0 = lid ->
+          refines v0' v'
+      | _, VLoan (VSharedLoan (lid, v')) -> dead lid && refines v0 v'
+      | VSymbolic sv, _ when v0 <> v ->
+          (not (ty_has_borrows (Some span) ctx.type_ctx.type_infos sv.sv_ty))
+          && not (value_has_live_loans v)
+      | VAdt adt0, VAdt adt
+        when adt0.variant_id = adt.variant_id
+             && List.length adt0.fields = List.length adt.fields ->
+          List.for_all2 refines adt0.fields adt.fields
+      | VBorrow (VMutBorrow (bid0, v0')), VBorrow (VMutBorrow (bid, v')) ->
+          bid0 = bid && refines v0' v'
+      | _ -> v0 = v
+    in
+    (* The shared values of an abstraction, and the abstraction without them *)
+    let split_shared_values (abs : abs) : tvalue list * abs =
+      let values = ref [] in
+      let visitor =
+        object
+          inherit [_] map_abs as super
+
+          method! visit_ASharedLoan env pm lid sv child =
+            values := sv :: !values;
+            ASharedLoan
+              ( pm,
+                lid,
+                { sv with value = VBottom },
+                super#visit_tavalue env child )
+        end
+      in
+      let abs = visitor#visit_abs () abs in
+      (List.rev !values, { abs with cont = None; parents = AbsId.Set.empty })
+    in
+    abs0.avalues = abs.avalues
+    ||
+    let values0, skeleton0 = split_shared_values abs0 in
+    let values, skeleton = split_shared_values abs in
+    skeleton0 = skeleton
+    && List.length values0 = List.length values
+    && List.for_all2 refines values0 values
+  in
+  let restored =
+    List.filter
+      (fun (abs0 : abs) ->
+        (not abs0.can_end)
+        && List.for_all
+             (fun ctx ->
+               match ctx_lookup_abs_opt ctx abs0.abs_id with
+               | Some abs -> (not abs.can_end) && refines_abs abs0 ctx abs
+               | None -> false)
+             ctxl)
+      (AbsId.Map.values (ctx_get_abs ctx0))
+  in
+  let restore (abs : abs) : abs =
+    match
+      List.find_opt (fun (abs0 : abs) -> abs0.abs_id = abs.abs_id) restored
+    with
+    | Some abs0 -> { abs with avalues = abs0.avalues }
+    | None -> abs
+  in
+  List.map (ctx_map_abs restore) ctxl
+
 (** In the contexts reaching a join, align the abstractions which exist before
     the branching ([fixed_aids]): a branch may have expanded a struct (or tuple)
     value shared by one of them, which another branch left symbolic. We expand
@@ -1393,8 +1493,8 @@ let align_fixed_abs_expansions (span : Meta.span) (fixed_aids : AbsId.Set.t)
 
 let join_ctxs_list (config : config) (span : Meta.span)
     (fresh_abs_kind : abs_kind) ?(preprocess_first_ctx : bool = true)
-    ~(recoverable : bool) ~(with_abs_conts : bool) (ctxl : eval_ctx list) :
-    eval_ctx list * eval_ctx =
+    ~(recoverable : bool) ~(with_abs_conts : bool) ~(ancestor : eval_ctx)
+    (ctxl : eval_ctx list) : eval_ctx list * eval_ctx =
   (* The list of contexts should be non empty *)
   let ctx0, ctxl =
     match ctxl with
@@ -1415,6 +1515,13 @@ let join_ctxs_list (config : config) (span : Meta.span)
   in
 
   let ctx0 = if preprocess_first_ctx then preprocess_ctx ctx0 else ctx0 in
+  let ctx0, ctxl =
+    match
+      restore_frozen_abs span ancestor (ctx0 :: List.map preprocess_ctx ctxl)
+    with
+    | ctx0 :: ctxl -> (ctx0, ctxl)
+    | [] -> [%internal_error] span
+  in
 
   (* # Join with the new contexts, one by one
 
@@ -1526,17 +1633,19 @@ let loop_join_origin_with_continue_ctxs (config : config) (span : Meta.span)
     (loop_id : LoopId.id) (ctx0 : eval_ctx) (ctxl : eval_ctx list) :
     (eval_ctx * eval_ctx list) * eval_ctx =
   (* Simplify the contexts we want to join *)
-  let simplify (ctx : eval_ctx) : eval_ctx =
-    let fixed_aids = compute_fixed_abs_ids ctx0 ctx in
-    let fixed_dids = ctx_get_dummy_var_ids ctx0 in
-    [%ldebug "- fixed_aids: " ^ AbsId.Set.to_string None fixed_aids];
-
-    (* Simplify the dummy values, by removing as many as we can -
-       we ignore the synthesis continuation, as we are only computing a fixed point *)
+  (* Simplify the dummy values, by removing as many as we can -
+     we ignore the synthesis continuation, as we are only computing a fixed point *)
+  let simplify_dummy_values (ctx : eval_ctx) : eval_ctx =
     let ctx, _ = simplify_dummy_values_useless_abs config span ctx in
     [%ltrace
       "simplify: after simplify_dummy_values_useless_abs:\n"
       ^ eval_ctx_to_string ~span:(Some span) ctx];
+    ctx
+  in
+  let simplify (ctx : eval_ctx) : eval_ctx =
+    let fixed_dids = ctx_get_dummy_var_ids ctx0 in
+    let fixed_aids = compute_fixed_abs_ids ctx0 ctx in
+    [%ldebug "- fixed_aids: " ^ AbsId.Set.to_string None fixed_aids];
 
     (* Destructure the abstractions introduced in the new context *)
     let ctx = destructure_new_abs span fixed_aids ctx in
@@ -1557,31 +1666,37 @@ let loop_join_origin_with_continue_ctxs (config : config) (span : Meta.span)
     ctx
   in
 
-  let ctxl = List.map simplify ctxl in
+  let ctxl =
+    List.map simplify
+      (restore_frozen_abs span ctx0 (List.map simplify_dummy_values ctxl))
+  in
 
   let ctxl', joined_ctx =
     join_ctxs_list config span (Loop loop_id) ~preprocess_first_ctx:false
-      ~recoverable:false ~with_abs_conts:false (ctx0 :: ctxl)
+      ~recoverable:false ~with_abs_conts:false ~ancestor:ctx0 (ctx0 :: ctxl)
   in
   [%sanity_check] span (List.length ctxl' = List.length ctxl + 1);
   ((List.hd ctxl', List.tl ctxl'), joined_ctx)
 
 let loop_join_break_ctxs (config : config) (span : Meta.span)
     (loop_id : LoopId.id) (fixed_aids : AbsId.Set.t)
-    (fixed_dids : DummyVarId.Set.t) (ctxl : eval_ctx list) : eval_ctx =
+    (fixed_dids : DummyVarId.Set.t) (fp_ctx : eval_ctx) (ctxl : eval_ctx list) :
+    eval_ctx =
   (* Simplify the contexts *)
   let with_abs_conts = false in
   let fresh_abs_kind : abs_kind = Loop loop_id in
-  let prepare_ctx (ctx : eval_ctx) : eval_ctx =
+  (* Simplify the dummy values, by removing as many as we can -
+     we ignore the synthesis continuation *)
+  let simplify_dummy_values (ctx : eval_ctx) : eval_ctx =
     [%ltrace
       "prepate_ctx: initial ctx:\n" ^ eval_ctx_to_string ~span:(Some span) ctx];
-
-    (* Simplify the dummy values, by removing as many as we can -
-       we ignore the synthesis continuation *)
     let ctx, _ = simplify_dummy_values_useless_abs config span ctx in
     [%ltrace
       "prepare_ctx: after simplify_dummy_values_useless_abs:\n"
       ^ eval_ctx_to_string ~span:(Some span) ctx];
+    ctx
+  in
+  let prepare_ctx (ctx : eval_ctx) : eval_ctx =
 
     (* Destructure the abstractions introduced in the new context *)
     let ctx = destructure_new_abs span fixed_aids ctx in
@@ -1601,7 +1716,10 @@ let loop_join_break_ctxs (config : config) (span : Meta.span)
 
     ctx
   in
-  let ctxl = List.map prepare_ctx ctxl in
+  let ctxl =
+    List.map prepare_ctx
+      (restore_frozen_abs span fp_ctx (List.map simplify_dummy_values ctxl))
+  in
 
   match ctxl with
   | [] -> [%internal_error] span
@@ -1935,6 +2053,12 @@ and match_ctx_with_target_aux (config : config) (span : Meta.span)
   [%ltrace
     "- tgt_ctx after simplify_dummy_values_useless_abs (ii):\n"
     ^ eval_ctx_to_string tgt_ctx];
+  (* The frozen abstractions of [src_ctx] are the ones before the branching *)
+  let tgt_ctx =
+    match restore_frozen_abs span src_ctx [ tgt_ctx ] with
+    | [ tgt_ctx ] -> tgt_ctx
+    | _ -> [%internal_error] span
+  in
 
   (* The abstractions of the joined context which are fresh with respect to
      the context before the branching are destructured (see

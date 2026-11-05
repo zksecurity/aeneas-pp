@@ -1190,7 +1190,7 @@ and eval_switch_with_join (config : config) (span : Meta.span)
        from it, in which case we simply duplicate the code after the switch *)
     let _, joined_ctx =
       InterpJoin.join_ctxs_list config span ~recoverable:!Config.recover_joins
-        ~with_abs_conts:true Join ctx_to_join
+        ~with_abs_conts:true ~ancestor:ctx0 Join ctx_to_join
     in
     (* When there is a single context to join, [join_ctxs_list] performs no
        join: the context contains the fresh dummy values and abstractions of
