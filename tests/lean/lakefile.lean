@@ -27,6 +27,7 @@ package «tests» {}
 @[default_target] lean_lib ChunksExact
 @[default_target] lean_lib ClosureRecursion
 @[default_target] lean_lib Closures
+@[default_target] lean_lib ClosuresMutArgs
 @[default_target] lean_lib Constants
 @[default_target] lean_lib ConstantsLean
 @[default_target] lean_lib ConstShadow
@@ -121,6 +122,7 @@ package «tests» {}
 @[default_target] lean_lib SwitchTest
 @[default_target] lean_lib TargetFeatures
 @[default_target] lean_lib Traits
+@[default_target] lean_lib TraitUnitOutput
 @[default_target] lean_lib Tutorial
 @[default_target] lean_lib Vec
 @[default_target] lean_lib VecIter

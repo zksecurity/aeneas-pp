@@ -124,7 +124,7 @@ let translate_function_to_pure_aux (trans_ctx : trans_ctx)
      we check here too to cleanly skip the function rather than failing later when
      looking up its (untranslated) signature. *)
   TypesAnalysis.check_fun_decl_no_bound_free_implied_bounds
-    trans_ctx.type_ctx.type_decls fdef;
+    trans_ctx.type_ctx.type_decls trans_ctx.crate.trait_decls fdef;
 
   (* Compute the symbolic ASTs, if the function is transparent *)
   let symbolic_trans =

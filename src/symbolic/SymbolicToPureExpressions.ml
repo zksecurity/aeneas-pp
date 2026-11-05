@@ -452,6 +452,60 @@ and translate_function_call (call : S.call) (e : S.expr) (ctx : bs_ctx) : texpr
       translate_cast_unsize call e ty0 ty1 ctx
   | _ -> translate_function_call_aux call e ctx
 
+(** Check that the closure implementations passed as dictionaries to a function
+    have the types the function expects. The result of a call to a closure
+    depends on the regions of its signature (see
+    {!SymbolicToPureTypes.lower_fn_trait_output}): the function may relate
+    regions which the closure keeps apart, in which case the calls don't give
+    back the borrowed values in the same way. We compare the types of the
+    dictionaries as translated with the definitions of the function and of the
+    implementations. *)
+and check_fn_trait_dictionaries (ctx : bs_ctx) (span : Meta.span)
+    (fid : A.FunDeclId.id) (generics : generic_args) : unit =
+  let decls_ctx = ctx.decls_ctx in
+  let is_fn_trait (id : trait_decl_id) =
+    match
+      (T.TraitDeclId.Map.find id decls_ctx.crate.trait_decls).item_meta.lang_item
+    with
+    | Some (RustcLangItemFnOnce | RustcLangItemFnMut | RustcLangItemFn) -> true
+    | _ -> false
+  in
+  let sg =
+    (A.FunOrMethodId.Map.find (A.FunOrMethodId.Fun fid) ctx.fun_sigs).sg
+  in
+  [%sanity_check] span
+    (List.length sg.generics.trait_clauses = List.length generics.trait_refs);
+  let subst = make_subst_from_generics sg.generics generics in
+  List.iter2
+    (fun (clause : trait_param) (tr : trait_ref) ->
+      match tr.trait_id with
+      | TraitImpl (impl_id, impl_generics) when is_fn_trait clause.trait_id ->
+          let expected = generic_args_substitute subst clause.generics in
+          let impl = T.TraitImplId.Map.find impl_id decls_ctx.crate.trait_impls in
+          let impl_params, _ =
+            translate_generic_params (Some span) decls_ctx impl.generics
+          in
+          let impl_trait =
+            translate_trait_decl_ref (Some span) decls_ctx
+              (translate_fwd_ty (Some span) decls_ctx)
+              impl.impl_trait
+          in
+          let actual =
+            generic_args_substitute
+              (make_subst_from_generics impl_params impl_generics)
+              impl_trait.decl_generics
+          in
+          [%cassert] span
+            (expected.types = actual.types)
+            ("Unimplemented: a closure is given back its arguments differently \
+              from what the function expects (the function relates regions of \
+              the arguments which the closure keeps apart).\nExpected: "
+            ^ String.concat ", " (List.map (pure_ty_to_string ctx) expected.types)
+            ^ "\nClosure: "
+            ^ String.concat ", " (List.map (pure_ty_to_string ctx) actual.types))
+      | _ -> ())
+    sg.generics.trait_clauses generics.trait_refs
+
 (** Handle the function call cases which are not unsized casts *)
 and translate_function_call_aux (call : S.call) (e : S.expr) (ctx : bs_ctx) :
     texpr =
@@ -481,6 +535,9 @@ and translate_function_call_aux (call : S.call) (e : S.expr) (ctx : bs_ctx) :
     match call.call_id with
     | S.Fun (fid, call_id) ->
         (* Regular function call *)
+        (match fid with
+        | Fun fid -> check_fn_trait_dictionaries ctx call.span fid generics
+        | TraitMethod _ -> ());
         let fid_t = translate_fn_ptr_kind ctx fid in
         let func = Fun (FromLlbc (fid_t, None)) in
         (* Retrieve the effect information about this function (can fail,
@@ -493,9 +550,16 @@ and translate_function_call_aux (call : S.call) (e : S.expr) (ctx : bs_ctx) :
           let sg = Option.get call.sg in
           let inst_sg = Option.get call.inst_sg in
           let decls_ctx = ctx.decls_ctx in
+          let uninst_output =
+            match fid with
+            | Fun fid ->
+                fun_decl_uninst_output decls_ctx
+                  (A.FunDeclId.Map.find fid decls_ctx.fun_ctx.fun_decls)
+            | TraitMethod _ -> sg.output
+          in
           let dsg =
             translate_inst_fun_sig_to_decomposed_fun_type (Some ctx.span)
-              decls_ctx fid_t inst_sg sg.output
+              decls_ctx fid_t inst_sg uninst_output
               (List.map (fun _ -> None) sg.inputs)
           in
           let back_tys = compute_back_tys_with_info dsg in

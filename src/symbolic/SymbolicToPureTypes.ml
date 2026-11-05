@@ -52,10 +52,19 @@ let translate_const_generic_param (span : span option)
       { index = c.index; name = c.name; ty = translate_literal_type ty }
   | _ -> [%craise_opt_span] span "Unsupported constant expression type"
 
+(** The lowering of the [Output] of the references to the closure traits (see
+    {!lower_fn_trait_output}). The translation of the trait references needs it,
+    but it relies on the translation of signatures, which comes later. *)
+let lower_fn_trait_output_fwd :
+    (Meta.span option -> C.decls_ctx -> T.trait_decl_ref -> generic_args -> ty option)
+    ref =
+  ref (fun span _ _ _ -> [%internal_error_opt_span] span)
+
 (* Some generic translation functions (we need to translate different "flavours"
    of types: forward types, backward types, etc.) *)
 let rec translate_generic_args (span : Meta.span option)
-    (translate_ty : T.ty -> ty) (generics : T.generic_args) : generic_args =
+    (decls_ctx : C.decls_ctx) (translate_ty : T.ty -> ty)
+    (generics : T.generic_args) : generic_args =
   (* We ignore the regions: if they didn't cause trouble for the symbolic execution,
      then everything's fine *)
   let types = List.map translate_ty generics.types in
@@ -66,41 +75,61 @@ let rec translate_generic_args (span : Meta.span option)
   in
   let trait_refs =
     List.map
-      (translate_region_binder (translate_trait_ref span translate_ty))
+      (translate_region_binder (translate_trait_ref span decls_ctx translate_ty))
       generics.trait_refs
   in
   { types; const_generics; trait_refs }
 
-and translate_trait_ref (span : Meta.span option) (translate_ty : T.ty -> ty)
-    (tr : T.trait_ref) : trait_ref =
-  let trait_id = translate_trait_ref_kind span translate_ty tr in
+and translate_trait_ref (span : Meta.span option) (decls_ctx : C.decls_ctx)
+    (translate_ty : T.ty -> ty) (tr : T.trait_ref) : trait_ref =
+  let trait_id = translate_trait_ref_kind span decls_ctx translate_ty tr in
   let trait_decl_ref =
-    translate_trait_decl_ref span translate_ty tr.trait_decl_ref
+    translate_trait_decl_ref span decls_ctx translate_ty tr.trait_decl_ref
   in
   { trait_id; trait_decl_ref }
 
-and translate_trait_decl_ref (span : Meta.span option)
+and translate_trait_decl_ref (span : Meta.span option) (decls_ctx : C.decls_ctx)
     (translate_ty : T.ty -> ty) (tr : T.trait_decl_ref) : trait_decl_ref =
-  let decl_generics = translate_generic_args span translate_ty tr.generics in
+  let decl_generics =
+    translate_generic_args span decls_ctx translate_ty tr.generics
+  in
+  (* The [Output] of the closure traits is the result of the call (see
+     {!lower_fn_trait_output}) *)
+  let decl_generics =
+    match !lower_fn_trait_output_fwd span decls_ctx tr decl_generics with
+    | None -> decl_generics
+    | Some output ->
+        let types =
+          match List.rev decl_generics.types with
+          | _ :: rtypes -> List.rev (output :: rtypes)
+          | [] -> [%internal_error_opt_span] span
+        in
+        { decl_generics with types }
+  in
   { trait_decl_id = tr.id; decl_generics }
 
-and translate_fun_decl_ref (span : Meta.span option) (translate_ty : T.ty -> ty)
-    (fr : T.fun_decl_ref) : fun_decl_ref =
-  let fun_generics = translate_generic_args span translate_ty fr.generics in
+and translate_fun_decl_ref (span : Meta.span option) (decls_ctx : C.decls_ctx)
+    (translate_ty : T.ty -> ty) (fr : T.fun_decl_ref) : fun_decl_ref =
+  let fun_generics =
+    translate_generic_args span decls_ctx translate_ty fr.generics
+  in
   { fun_id = fr.id; fun_generics }
 
 and translate_global_decl_ref (span : Meta.span option)
-    (translate_ty : T.ty -> ty) (gr : T.global_decl_ref) : global_decl_ref =
-  let global_generics = translate_generic_args span translate_ty gr.generics in
+    (decls_ctx : C.decls_ctx) (translate_ty : T.ty -> ty)
+    (gr : T.global_decl_ref) : global_decl_ref =
+  let global_generics =
+    translate_generic_args span decls_ctx translate_ty gr.generics
+  in
   { global_id = gr.id; global_generics }
 
-and translate_trait_ref_kind (span : Meta.span option)
+and translate_trait_ref_kind (span : Meta.span option) (decls_ctx : C.decls_ctx)
     (translate_ty : T.ty -> ty) (tref : T.trait_ref) : trait_instance_id =
   match tref.kind with
   | T.Self -> Self
   | TraitImpl impl_ref ->
       let generics =
-        translate_generic_args span translate_ty impl_ref.generics
+        translate_generic_args span decls_ctx translate_ty impl_ref.generics
       in
       TraitImpl (impl_ref.id, generics)
   | BuiltinOrAuto (data, _, _, _) ->
@@ -124,7 +153,7 @@ and translate_trait_ref_kind (span : Meta.span option)
       Clause var
       (* Note: the `de_bruijn_id`s are incorrect, see comment on `translate_region_binder` *)
   | ParentClause (tref, clause_id, _) ->
-      let inst_id = translate_trait_ref_kind span translate_ty tref in
+      let inst_id = translate_trait_ref_kind span decls_ctx translate_ty tref in
       ParentClause (inst_id, tref.trait_decl_ref.id, clause_id)
   | ItemClause _ ->
       (* `ItemClause`s are removed by Charon's `--remove-associated-types`, except for GATs *)
@@ -134,11 +163,12 @@ and translate_trait_ref_kind (span : Meta.span option)
 
 (** Translate a signature type - TODO: factor out the different translation
     functions *)
-let rec translate_sty (span : Meta.span option) (ty : T.ty) : ty =
-  let translate = translate_sty in
+let rec translate_sty (span : Meta.span option) (decls_ctx : C.decls_ctx)
+    (ty : T.ty) : ty =
+  let translate span = translate_sty span decls_ctx in
   match ty with
   | T.TAdt { id; generics; builtin } -> (
-      let generics = translate_sgeneric_args span generics in
+      let generics = translate_sgeneric_args span decls_ctx generics in
       match builtin with
       | None -> TAdt (TAdtId id, generics)
       | Some aty -> (
@@ -181,7 +211,7 @@ let rec translate_sty (span : Meta.span option) (ty : T.ty) : ty =
       let generics = { types = [ ty ]; const_generics = []; trait_refs = [] } in
       TAdt (TBuiltin (TRawPtr mut), generics)
   | TTraitType (trait_ref, type_name, generics) ->
-      let trait_ref = translate_strait_ref span trait_ref in
+      let trait_ref = translate_strait_ref span decls_ctx trait_ref in
       [%cassert_opt_span] span
         (generics = TypesUtils.empty_generic_args)
         "Unimplemented";
@@ -195,35 +225,38 @@ let rec translate_sty (span : Meta.span option) (ty : T.ty) : ty =
   | _ -> [%craise_opt_span] span ("unsupported type: " ^ T.show_ty ty)
 
 and translate_sgeneric_args (span : Meta.span option)
-    (generics : T.generic_args) : generic_args =
-  translate_generic_args span (translate_sty span) generics
+    (decls_ctx : C.decls_ctx) (generics : T.generic_args) : generic_args =
+  translate_generic_args span decls_ctx (translate_sty span decls_ctx) generics
 
-and translate_strait_ref (span : Meta.span option) (tr : T.trait_ref) :
-    trait_ref =
-  translate_trait_ref span (translate_sty span) tr
+and translate_strait_ref (span : Meta.span option) (decls_ctx : C.decls_ctx)
+    (tr : T.trait_ref) : trait_ref =
+  translate_trait_ref span decls_ctx (translate_sty span decls_ctx) tr
 
-let translate_strait_decl_ref (span : Meta.span option) (tr : T.trait_decl_ref)
-    : trait_decl_ref =
-  translate_trait_decl_ref span (translate_sty span) tr
+let translate_strait_decl_ref (span : Meta.span option)
+    (decls_ctx : C.decls_ctx) (tr : T.trait_decl_ref) : trait_decl_ref =
+  translate_trait_decl_ref span decls_ctx (translate_sty span decls_ctx) tr
 
-let translate_trait_clause (span : Meta.span option) (clause : T.trait_param) :
-    trait_param =
+let translate_trait_clause (span : Meta.span option) (decls_ctx : C.decls_ctx)
+    (clause : T.trait_param) : trait_param =
   let { T.clause_id; span = _; origin = _; trait } = clause in
-  let trait = translate_region_binder (translate_strait_decl_ref span) trait in
+  let trait =
+    translate_region_binder (translate_strait_decl_ref span decls_ctx) trait
+  in
   { clause_id; trait_id = trait.trait_decl_id; generics = trait.decl_generics }
 
 let translate_strait_type_constraint (span : Meta.span option)
-    (ttc : T.trait_type_constraint) : trait_type_constraint =
+    (decls_ctx : C.decls_ctx) (ttc : T.trait_type_constraint) :
+    trait_type_constraint =
   let { T.trait_ref; type_id; ty } = ttc in
-  let trait_ref = translate_strait_ref span trait_ref in
-  let ty = translate_sty span ty in
+  let trait_ref = translate_strait_ref span decls_ctx trait_ref in
+  let ty = translate_sty span decls_ctx ty in
   { trait_ref; type_id; ty }
 
 let translate_type_param (p : T.type_param) : type_param =
   let { index; name; variance = _ } : T.type_param = p in
   { index; name }
 
-let translate_generic_params (span : Meta.span option)
+let translate_generic_params (span : Meta.span option) (decls_ctx : C.decls_ctx)
     (generics : T.generic_params) : generic_params * predicates =
   let {
     T.regions = _;
@@ -239,26 +272,32 @@ let translate_generic_params (span : Meta.span option)
   let const_generics =
     List.map (translate_const_generic_param span) const_generics
   in
-  let trait_clauses = List.map (translate_trait_clause span) trait_clauses in
+  let trait_clauses =
+    List.map (translate_trait_clause span decls_ctx) trait_clauses
+  in
   let trait_type_constraints =
     List.map
-      (translate_region_binder (translate_strait_type_constraint span))
+      (translate_region_binder
+         (translate_strait_type_constraint span decls_ctx))
       trait_type_constraints
   in
   ({ types; const_generics; trait_clauses }, { trait_type_constraints })
 
-let translate_field (span : Meta.span) (f : T.field) : field =
+let translate_field (span : Meta.span) (decls_ctx : C.decls_ctx) (f : T.field) :
+    field =
   let field_name = if f.is_positional then None else Some f.field_name in
-  let field_ty = translate_sty (Some span) f.field_ty in
+  let field_ty = translate_sty (Some span) decls_ctx f.field_ty in
   let field_attr_info = f.attr_info in
   { field_name; field_ty; field_attr_info }
 
-let translate_fields (span : Meta.span) (fl : T.field list) : field list =
-  List.map (translate_field span) fl
+let translate_fields (span : Meta.span) (decls_ctx : C.decls_ctx)
+    (fl : T.field list) : field list =
+  List.map (translate_field span decls_ctx) fl
 
-let translate_variant (span : Meta.span) (v : T.variant) : variant =
+let translate_variant (span : Meta.span) (decls_ctx : C.decls_ctx)
+    (v : T.variant) : variant =
   let variant_name = v.variant_name in
-  let fields = translate_fields span v.fields in
+  let fields = translate_fields span decls_ctx v.fields in
   let variant_attr_info = v.attr_info in
   let discriminant, ty =
     match v.discriminant with
@@ -267,15 +306,16 @@ let translate_variant (span : Meta.span) (v : T.variant) : variant =
   in
   { variant_name; fields; variant_attr_info; discriminant; ty }
 
-let translate_variants (span : Meta.span) (vl : T.variant list) : variant list =
-  List.map (translate_variant span) vl
+let translate_variants (span : Meta.span) (decls_ctx : C.decls_ctx)
+    (vl : T.variant list) : variant list =
+  List.map (translate_variant span decls_ctx) vl
 
 (** Translate a type def kind from LLBC *)
-let translate_type_decl_kind (span : Meta.span) (kind : T.type_decl_kind) :
-    type_decl_kind =
+let translate_type_decl_kind (span : Meta.span) (decls_ctx : C.decls_ctx)
+    (kind : T.type_decl_kind) : type_decl_kind =
   match kind with
-  | T.Struct fields -> Struct (translate_fields span fields)
-  | T.Enum variants -> Enum (translate_variants span variants)
+  | T.Struct fields -> Struct (translate_fields span decls_ctx fields)
+  | T.Enum variants -> Enum (translate_variants span decls_ctx variants)
   | Alias _ -> [%craise] span "type aliases should have been removed earlier"
   | T.Union _ | T.Opaque | T.TDeclError _ -> Opaque
 
@@ -298,14 +338,16 @@ let translate_type_decl (ctx : Contexts.decls_ctx) (def : T.type_decl) :
        (TypesUtils.type_decl_has_nested_mut_borrows (Some span)
           ctx.type_ctx.type_infos def))
     "ADTs containing nested mutable borrows are not supported yet";
-  let generics, preds = translate_generic_params (Some span) def.generics in
+  let generics, preds =
+    translate_generic_params (Some span) ctx def.generics
+  in
   [%ldebug
     let ctx = PrintPure.decls_ctx_to_fmt_env ctx in
     "translated generic_params:\n"
     ^ PrintPure.generic_params_to_string ctx generics];
   let explicit_info = compute_explicit_info generics [] in
   [%ldebug "explicit info:\n" ^ show_explicit_info explicit_info];
-  let kind = translate_type_decl_kind span def.T.kind in
+  let kind = translate_type_decl_kind span ctx def.T.kind in
   let item_meta = def.item_meta in
   (* Lookup the builtin information, if there is *)
   let builtin_info =
@@ -422,7 +464,7 @@ let rec translate_fwd_ty (span : Meta.span option) (decls_ctx : C.decls_ctx)
   | TFnPtr _ -> [%craise_opt_span] span "Arrow types are not supported yet"
   | TDynTrait { binder } ->
       let params, _predicates =
-        translate_generic_params span binder.binder_params
+        translate_generic_params span decls_ctx binder.binder_params
       in
       TDynTrait { params }
   | TError _ ->
@@ -431,11 +473,11 @@ let rec translate_fwd_ty (span : Meta.span option) (decls_ctx : C.decls_ctx)
 
 and translate_fwd_generic_args (span : Meta.span option)
     (decls_ctx : C.decls_ctx) (generics : T.generic_args) : generic_args =
-  translate_generic_args span (translate_fwd_ty span decls_ctx) generics
+  translate_generic_args span decls_ctx (translate_fwd_ty span decls_ctx) generics
 
 and translate_fwd_trait_ref (span : Meta.span option) (decls_ctx : C.decls_ctx)
     (tr : T.trait_ref) : trait_ref =
-  translate_trait_ref span (translate_fwd_ty span decls_ctx) tr
+  translate_trait_ref span decls_ctx (translate_fwd_ty span decls_ctx) tr
 
 (** Compute the *number* of levels of sub-abstractions existing for a given
     region type. *)
@@ -991,56 +1033,234 @@ and translate_inst_fun_sig_to_decomposed_fun_type (span : Meta.span option)
   (* Return *)
   { fwd_inputs; fwd_output; back_sg; fwd_info }
 
-and translate_fun_sigs (span : span option) (decls_ctx : C.decls_ctx)
-    (fun_id : fn_ptr_kind) (sg : A.bound_fun_sig)
-    (input_names : string option list) : fun_sigs =
-  (* Retrieve the list of parent backward functions *)
+(** See the signature of a declaration as an instantiated signature, by computing
+    its region hierarchy *)
+and inst_fun_sig_of_bound_sig (span : span option) (decls_ctx : C.decls_ctx)
+    (sg : A.bound_fun_sig) : LlbcAst.inst_fun_sig =
   let regions_hierarchy =
     RegionsHierarchy.compute_regions_hierarchy_for_sig span decls_ctx.crate
       decls_ctx.type_ctx.type_infos sg
   in
+  let ({ T.inputs; output; _ } : T.fun_sig) = sg.item_binder_value in
+  [%sanity_check_opt_span] span
+    (sg.item_binder_params.trait_type_constraints = []);
 
-  let inst_sg : LlbcAst.inst_fun_sig =
-    let ({ T.inputs; output; _ } : T.fun_sig) = sg.item_binder_value in
-    [%sanity_check_opt_span] span
-      (sg.item_binder_params.trait_type_constraints = []);
-
-    let _, fresh_abs_id = V.AbsId.fresh_stateful_generator () in
-    let region_gr_id_abs_id_list =
-      List.map
-        (fun (rg : T.region_group) -> (rg.id, fresh_abs_id ()))
-        regions_hierarchy
-    in
-    let region_gr_id_to_abs =
-      RegionGroupId.Map.of_list region_gr_id_abs_id_list
-    in
-    let region_id_to_abs id = RegionGroupId.Map.find id region_gr_id_to_abs in
-    let abs_regions_hierarchy =
-      List.map
-        (fun (rg : T.region_group) ->
-          let id = region_id_to_abs rg.id in
-          let parents = List.map region_id_to_abs rg.parents in
-          { T.id; parents; regions = rg.regions })
-        regions_hierarchy
-    in
-    (* We need to introduce region abstraction ids *)
-    {
-      regions_hierarchy;
-      abs_regions_hierarchy;
-      trait_type_constraints = [];
-      inputs;
-      output;
-    }
+  let _, fresh_abs_id = V.AbsId.fresh_stateful_generator () in
+  let region_gr_id_abs_id_list =
+    List.map
+      (fun (rg : T.region_group) -> (rg.id, fresh_abs_id ()))
+      regions_hierarchy
   in
+  let region_gr_id_to_abs = RegionGroupId.Map.of_list region_gr_id_abs_id_list in
+  let region_id_to_abs id = RegionGroupId.Map.find id region_gr_id_to_abs in
+  let abs_regions_hierarchy =
+    List.map
+      (fun (rg : T.region_group) ->
+        let id = region_id_to_abs rg.id in
+        let parents = List.map region_id_to_abs rg.parents in
+        { T.id; parents; regions = rg.regions })
+      regions_hierarchy
+  in
+  (* We need to introduce region abstraction ids *)
+  {
+    regions_hierarchy;
+    abs_regions_hierarchy;
+    trait_type_constraints = [];
+    inputs;
+    output;
+  }
+
+(** The [Output] of a reference to a closure trait ([FnOnce], [Fn]), as we
+    translate it: the result of a call to the closure, which includes the values
+    given back to the arguments when they contain mutable borrows. The calls and
+    the closure implementations use it.
+
+    We compute it as at a call site (see {!InterpUtils.instantiate_fun_sig}): we
+    instantiate the signature of the method with the generics of the reference,
+    introducing fresh regions for all its regions, including the ones bound by an
+    enclosing binder (for instance, ['b] in [for<'b> FnOnce(&'b mut T)]). *)
+and lower_fn_trait_output (span : span option) (decls_ctx : C.decls_ctx)
+    (tr : T.trait_decl_ref) (decl_generics : generic_args) : ty option =
+  let trait_decl =
+    [%unwrap_opt_span] span
+      (T.TraitDeclId.Map.find_opt tr.id decls_ctx.crate.trait_decls)
+      "Could not find a trait declaration"
+  in
+  let has_mut_borrows ty =
+    TypesUtils.ty_has_mut_borrows decls_ctx.type_ctx.type_infos ty
+  in
+  let method_name =
+    match trait_decl.item_meta.lang_item with
+    | Some RustcLangItemFnOnce -> Some "call_once"
+    | Some RustcLangItemFn -> Some "call"
+    | Some RustcLangItemFnMut ->
+        (* The calls to [call_mut] give back the closure state before the
+           values given back to the arguments: we don't support the latter yet *)
+        [%cassert_opt_span] span
+          (not (List.exists has_mut_borrows tr.generics.types))
+          "Closures implementing [FnMut] with mutable borrows in their arguments \
+           are not supported yet";
+        None
+    | _ -> None
+  in
+  Option.map
+    (fun method_name ->
+      (* A closure capturing mutable borrows gives them back when called
+         (through backward functions of its implementation), while generic code
+         sees its state as opaque *)
+      [%cassert_opt_span] span
+        (match tr.generics.types with
+        | self_ty :: _ -> not (has_mut_borrows self_ty)
+        | [] -> false)
+        "Closures capturing mutable borrows are not supported yet";
+      let method_id, method_params =
+        match
+          List.find_opt
+            (fun (_, (m : A.trait_method T.binder)) ->
+              m.binder_value.name = method_name)
+            (T.TraitMethodId.Map.bindings trait_decl.methods)
+        with
+        | Some (id, m) -> (id, m.binder_params)
+        | None -> [%internal_error_opt_span] span
+      in
+      let sg =
+        [%unwrap_opt_span] span
+          (Substitute.lookup_flat_method_sig decls_ctx.crate tr.id method_id)
+          "Could not find a method signature"
+      in
+      (* Introduce fresh regions: one per region variable (including the ones
+         bound by the binder of the reference), and one per occurrence of an
+         erased region *)
+      let fresh_regions = ref [] in
+      let fresh_region () =
+        let rid = T.RegionId.of_int (List.length !fresh_regions) in
+        fresh_regions := rid :: !fresh_regions;
+        rid
+      in
+      let region_map = ref TypesUtils.RegionMap.empty in
+      let get_region (r : T.region) : T.region =
+        match TypesUtils.RegionMap.find_opt r !region_map with
+        | Some r -> r
+        | None ->
+            let nr = T.RVar (Free (fresh_region ())) in
+            region_map := TypesUtils.RegionMap.add r nr !region_map;
+            nr
+      in
+      let visitor =
+        object
+          inherit [_] T.map_ty as super
+          method! visit_region_param _ rp = rp
+
+          method! visit_region_binder visit_value env rb =
+            [%cassert_opt_span] span
+              (rb.T.binder_regions = [])
+              "Higher-ranked types in the arguments of closures are not \
+               supported yet";
+            super#visit_region_binder visit_value env rb
+
+          method! visit_RVar _ var = get_region (RVar var)
+          method! visit_RBody _ rid = get_region (RBody rid)
+          method! visit_RErased _ = T.RVar (Free (fresh_region ()))
+        end
+      in
+      let generics = visitor#visit_generic_args () tr.generics in
+      (* The method binds its own regions (the one of the borrow of the
+         receiver, for [call]) *)
+      [%sanity_check_opt_span] span
+        (method_params.types = [] && method_params.const_generics = []
+        && method_params.trait_clauses = []);
+      let generics =
+        TypesUtils.concat_generic_args generics
+          {
+            TypesUtils.empty_generic_args with
+            regions =
+              List.map
+                (fun _ -> T.RVar (Free (fresh_region ())))
+                method_params.regions;
+          }
+      in
+      [%sanity_check_opt_span] span
+        (sg.item_binder_params.outlives = []
+        && sg.item_binder_params.trait_type_constraints = []);
+      let subst =
+        [%add_loc] Substitute.make_subst_from_generics span
+          sg.item_binder_params generics (UnknownTrait __FUNCTION__)
+      in
+      let inputs =
+        List.map
+          (Substitute.st_substitute_visitor#visit_ty subst)
+          sg.item_binder_value.inputs
+      in
+      let output =
+        Substitute.st_substitute_visitor#visit_ty subst
+          sg.item_binder_value.output
+      in
+      let regions =
+        List.map
+          (fun index : T.region_param ->
+            {
+              index;
+              name = None;
+              variance = VaUnknown;
+              mutability = LtUnknown;
+              late_bound = false;
+            })
+          (List.rev !fresh_regions)
+      in
+      let inst_sg =
+        inst_fun_sig_of_bound_sig span decls_ctx
+          {
+            item_binder_params = { TypesUtils.empty_generic_params with regions };
+            item_binder_value = { sg.item_binder_value with inputs; output };
+          }
+      in
+      let fun_id =
+        TraitMethod
+          ( {
+              trait_id = UnknownTrait __FUNCTION__;
+              trait_decl_ref = { trait_decl_id = tr.id; decl_generics };
+            },
+            method_id )
+      in
+      let dsg =
+        translate_inst_fun_sig_to_decomposed_fun_type span decls_ctx fun_id
+          inst_sg sg.item_binder_value.output
+          (List.map (fun _ -> None) inputs)
+      in
+      compute_raw_output_ty_from_decomposed dsg)
+    method_name
+
+(** The output of a function which decides whether we eliminate its (unit)
+    output (see [uninst_output] in
+    {!translate_inst_fun_sig_to_decomposed_fun_type}). The methods of trait
+    implementations follow the method of the trait, whose output may be generic:
+    the calls through the trait and the calls to the implementation must agree.
+*)
+and fun_decl_uninst_output (decls_ctx : C.decls_ctx) (fdef : A.fun_decl) :
+    T.ty =
+  match fdef.src with
+  | TraitImplFun (_, trait_decl_ref, method_id, _) ->
+      let sg =
+        [%silent_unwrap_opt_span] (Some fdef.item_meta.span)
+          (Substitute.lookup_flat_method_sig decls_ctx.crate trait_decl_ref.id
+             method_id)
+      in
+      sg.item_binder_value.output
+  | _ -> fdef.signature.output
+
+and translate_fun_sigs (span : span option) (decls_ctx : C.decls_ctx)
+    (fun_id : fn_ptr_kind) (sg : A.bound_fun_sig) (uninst_output : T.ty)
+    (input_names : string option list) : fun_sigs =
+  let inst_sg = inst_fun_sig_of_bound_sig span decls_ctx sg in
 
   (* Generic parameters *)
-  let generics, preds = translate_generic_params span sg.item_binder_params in
+  let generics, preds =
+    translate_generic_params span decls_ctx sg.item_binder_params
+  in
 
   let fun_ty =
-    (* Here the signature is not instantiated, so the uninstantiated output is
-       simply the signature's output. *)
     translate_inst_fun_sig_to_decomposed_fun_type span decls_ctx fun_id inst_sg
-      inst_sg.output input_names
+      uninst_output input_names
   in
   let dsg =
     { generics; llbc_generics = sg.item_binder_params; preds; fun_ty }
@@ -1072,7 +1292,8 @@ and translate_flat_trait_method_sigs (decls_ctx : C.decls_ctx)
          method_id)
   in
   let input_names = List.map (fun _ -> None) sg.item_binder_value.inputs in
-  translate_fun_sigs (Some span) decls_ctx fun_id sg input_names
+  translate_fun_sigs (Some span) decls_ctx fun_id sg sg.item_binder_value.output
+    input_names
 
 and translate_trait_method_sig (decls_ctx : C.decls_ctx)
     (trait_decl : A.trait_decl) (method_id : TraitMethodId.id)
@@ -1087,11 +1308,11 @@ and translate_trait_method_sig (decls_ctx : C.decls_ctx)
       .sg
   in
   let trait_generics, _ =
-    translate_generic_params (Some span) trait_decl.generics
+    translate_generic_params (Some span) decls_ctx trait_decl.generics
   in
   let method_llbc_generics = bound_method.binder_params in
   let method_generics, preds =
-    translate_generic_params (Some span) method_llbc_generics
+    translate_generic_params (Some span) decls_ctx method_llbc_generics
   in
   let generics =
     append_generic_args
@@ -1124,7 +1345,7 @@ and translate_fun_sigs_from_decl (decls_ctx : C.decls_ctx)
      (locally-bound) lifetime to a free one (e.g. `for<'a> Trait<Adt<'a, 'b>>`
      where the definition of `Adt` relates its lifetime parameters). *)
   TypesAnalysis.check_fun_decl_no_bound_free_implied_bounds
-    decls_ctx.type_ctx.type_decls fdef;
+    decls_ctx.type_ctx.type_decls decls_ctx.crate.trait_decls fdef;
   let input_names =
     match fdef.body with
     | StructuredBody body ->
@@ -1135,6 +1356,7 @@ and translate_fun_sigs_from_decl (decls_ctx : C.decls_ctx)
   in
   translate_fun_sigs (Some span) decls_ctx (FunId fdef.def_id)
     (bound_fun_sig_of_decl fdef)
+    (fun_decl_uninst_output decls_ctx fdef)
     input_names
 
 and mk_output_ty_from_effect_info (effect_info : fun_effect_info) (ty : ty) : ty
@@ -1237,7 +1459,10 @@ and translate_fun_sig_from_decomposed (dsg : Pure.decomposed_fun_sig) : fun_sig
 
 and translate_fun_sig (decls_ctx : C.decls_ctx) (fun_id : fn_ptr_kind)
     (sg : A.bound_fun_sig) (input_names : string option list) : Pure.fun_sig =
-  let sigs = translate_fun_sigs None decls_ctx fun_id sg input_names in
+  let sigs =
+    translate_fun_sigs None decls_ctx fun_id sg sg.item_binder_value.output
+      input_names
+  in
   sigs.sg
 
 (** TODO: not very clean. *)
@@ -1258,6 +1483,9 @@ and get_fun_effect_info (ctx : bs_ctx) (fun_id : fn_ptr_kind)
       { info with is_rec = info.is_rec && gid = None }
 
 (** Simply calls [translate_fwd_ty] *)
+;;
+lower_fn_trait_output_fwd := lower_fn_trait_output
+
 let ctx_translate_fwd_ty (ctx : bs_ctx) (ty : T.ty) : ty =
   translate_fwd_ty (Some ctx.span) ctx.decls_ctx ty
 

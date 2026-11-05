@@ -165,11 +165,11 @@ let translate_type_decls (ctx : Contexts.decls_ctx) : type_decl list =
         None)
     (TypeDeclId.Map.values ctx.type_ctx.to_extract)
 
-let translate_binder (span : span option) (translate_inside : 'a -> 'b)
-    (x : 'a T.binder) : 'b binder =
+let translate_binder (span : span option) (decls_ctx : C.decls_ctx)
+    (translate_inside : 'a -> 'b) (x : 'a T.binder) : 'b binder =
   let binder_llbc_generics = x.T.binder_params in
   let binder_generics, binder_preds =
-    translate_generic_params span binder_llbc_generics
+    translate_generic_params span decls_ctx binder_llbc_generics
   in
   let binder_explicit_info = compute_explicit_info binder_generics [] in
   {
@@ -194,9 +194,9 @@ let translate_trait_method (ctx : Contexts.decls_ctx) (span : span option)
     item_meta = method_.item_meta;
     signature;
     default =
-      translate_binder span
+      translate_binder span ctx
         (fun (m : A.trait_method) ->
-          Option.map (translate_fun_decl_ref span translate_ty) m.default)
+          Option.map (translate_fun_decl_ref span ctx translate_ty) m.default)
         bound_method;
   }
 
@@ -224,10 +224,10 @@ let translate_trait_decl (ctx : Contexts.decls_ctx) (trait_decl : A.trait_decl)
       (Print.Contexts.decls_ctx_to_fmt_env ctx)
       item_meta.name
   in
-  let generics, preds = translate_generic_params opt_span llbc_generics in
+  let generics, preds = translate_generic_params opt_span ctx llbc_generics in
   let explicit_info = compute_explicit_info generics [] in
   let parent_clauses =
-    List.map (translate_trait_clause opt_span) llbc_parent_clauses
+    List.map (translate_trait_clause opt_span ctx) llbc_parent_clauses
   in
   (* Lookup the builtin information, if there is *)
   let builtin_info =
@@ -313,14 +313,14 @@ let translate_trait_impl (ctx : Contexts.decls_ctx) (trait_impl : A.trait_impl)
   let span = Some item_meta.span in
   let translate_ty = translate_fwd_ty span ctx in
   let impl_trait =
-    (translate_trait_decl_ref span translate_ty) llbc_impl_trait
+    (translate_trait_decl_ref span ctx translate_ty) llbc_impl_trait
   in
   let name =
     Print.name_to_string
       (Print.Contexts.decls_ctx_to_fmt_env ctx)
       item_meta.name
   in
-  let generics, preds = translate_generic_params span llbc_generics in
+  let generics, preds = translate_generic_params span ctx llbc_generics in
   let explicit_info = compute_explicit_info generics [] in
   let parent_trait_refs =
     List.map
@@ -334,7 +334,7 @@ let translate_trait_impl (ctx : Contexts.decls_ctx) (trait_impl : A.trait_impl)
           Charon.GAstUtils.get_assoc_const_name ctx.crate
             trait_impl.impl_trait.id const_id
         in
-        (const_id, name, translate_global_decl_ref span translate_ty gref))
+        (const_id, name, translate_global_decl_ref span ctx translate_ty gref))
       (T.AssocConstId.Map.to_list consts)
   in
   (* We checked that there were no types in the trait declaration already. *)
@@ -357,7 +357,8 @@ let translate_trait_impl (ctx : Contexts.decls_ctx) (trait_impl : A.trait_impl)
         in
         ( method_id,
           name,
-          translate_binder span (translate_fun_decl_ref span translate_ty) m ))
+          translate_binder span ctx (translate_fun_decl_ref span ctx translate_ty)
+            m ))
       (TraitMethodId.Map.to_list methods)
   in
   (* Lookup the builtin information, if there is *)
@@ -398,7 +399,7 @@ let translate_global (ctx : Contexts.decls_ctx) (decl : A.global_decl) :
       item_meta.name
   in
   let generics, preds =
-    translate_generic_params (Some decl.item_meta.span) llbc_generics
+    translate_generic_params (Some decl.item_meta.span) ctx llbc_generics
   in
   let explicit_info = compute_explicit_info generics [] in
   let output_ty = translate_fwd_ty (Some decl.item_meta.span) ctx ty in

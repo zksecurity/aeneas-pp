@@ -1062,15 +1062,62 @@ let check_no_bound_free_implied_bounds (span : Meta.span option)
     a locally-bound (higher-ranked) region to a free region (see
     {!check_no_bound_free_implied_bounds}). We look at the input/output types as
     well as the types appearing in the (possibly higher-ranked) trait clauses.
-*)
+
+    The clauses over the closure traits ([FnOnce], [FnMut], [Fn]) are an
+    exception: their locally-bound regions are instantiated with fresh regions
+    whenever we use them (at the calls and to compute the result of the calls,
+    see {!SymbolicToPureTypes.lower_fn_trait_output}), along with the implied
+    bounds. We only reject the closures whose output mentions a locally-bound
+    region (the output borrows from the arguments). *)
 let check_fun_decl_no_bound_free_implied_bounds
-    (type_decls : type_decl TypeDeclId.Map.t) (f : fun_decl) : unit =
+    (type_decls : type_decl TypeDeclId.Map.t)
+    (trait_decls : trait_decl TraitDeclId.Map.t) (f : fun_decl) : unit =
   let span = Some f.item_meta.span in
   let ({ inputs; output; _ } : fun_sig) = f.signature in
+  let is_fn_trait (id : trait_decl_id) =
+    match TraitDeclId.Map.find_opt id trait_decls with
+    | Some d -> (
+        match d.item_meta.lang_item with
+        | Some (RustcLangItemFnOnce | RustcLangItemFnMut | RustcLangItemFn) ->
+            true
+        | _ -> false)
+    | None -> false
+  in
+  let mentions_bound_region (ty : ty) =
+    let visitor =
+      object
+        inherit [_] iter_ty
+        method! visit_region_param _ _ = ()
+
+        method! visit_RVar _ var =
+          match var with
+          | Bound _ -> raise Utils.Found
+          | Free _ -> ()
+      end
+    in
+    try
+      visitor#visit_ty () ty;
+      false
+    with Utils.Found -> true
+  in
   (* The types mentioned in the (possibly higher-ranked) trait clauses. *)
   let clause_tys =
     List.concat_map
-      (fun (c : trait_param) -> c.trait.binder_value.generics.types)
+      (fun (c : trait_param) ->
+        let tr = c.trait.binder_value in
+        if is_fn_trait tr.id then (
+          (* The last type argument is the output *)
+          List.iter
+            (fun ty ->
+              if mentions_bound_region ty then
+                [%craise_opt_span] span
+                  "Unimplemented: closures whose output borrows from their \
+                   arguments")
+            (match List.rev tr.generics.types with
+            | output :: _ -> [ output ]
+            | [] -> []);
+          [])
+        else tr.generics.types)
       f.generics.trait_clauses
   in
   check_no_bound_free_implied_bounds span type_decls
