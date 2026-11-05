@@ -1443,12 +1443,12 @@ and end_abs_borrows (config : config) (span : Meta.span) ~(snapshots : bool)
             (* Nothing to do for ignored borrows *)
             ()
 
-      method! visit_aproj env sproj =
+      method! visit_aproj level' sproj =
         (match sproj with
         | AProjBorrows aproj ->
-            if check_level level then raise (FoundAProjBorrows aproj)
+            if check_level level' then raise (FoundAProjBorrows aproj)
         | AProjLoans _ | AEndedProjLoans _ | AEndedProjBorrows _ | AEmpty -> ());
-        super#visit_aproj env sproj
+        super#visit_aproj level' sproj
 
       (** We may need to end borrows in "regular" values, because of shared
           values *)
