@@ -1169,6 +1169,10 @@ and eval_switch_with_join (config : config) (span : Meta.span)
   (* The contexts which continue after the switch, with the expansions which
      align them to synthesize at the end of their branches *)
   let ctxl_wraps = InterpJoin.align_fixed_abs_expansions span common_aids ctxl in
+  let ctxl_wraps =
+    InterpJoin.fold_frozen_abs_expansions config span
+      ~recoverable:!Config.recover_joins ctx0 ctxl_wraps
+  in
   let ctxl = List.map fst ctxl_wraps in
   (* Put the updated contexts back, in the order of the branches *)
   let ctx_resl =
