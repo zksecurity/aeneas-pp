@@ -2029,8 +2029,8 @@ and match_ctx_with_target_aux (config : config) (span : Meta.span)
      borrows to the right *)
   let add_borrows_seq =
     List.filter_map
-      (fun (abs_id, i, pm, bid, ty) ->
-        if pm = PRight then Some (abs_id, i, PNone, bid, ty) else None)
+      (fun (abs_id, pm, bid, ty) ->
+        if pm = PRight then Some (abs_id, PNone, bid, ty) else None)
       (List.rev !add_borrows_seq)
   in
   [%ltrace
@@ -2048,7 +2048,7 @@ and match_ctx_with_target_aux (config : config) (span : Meta.span)
      target. The abstractions which receive shared borrows on the right may
      contain only left values. *)
   let receiving_aids =
-    AbsId.Set.of_list (List.map (fun (aid, _, _, _, _) -> aid) add_borrows_seq)
+    AbsId.Set.of_list (List.map (fun (aid, _, _, _) -> aid) add_borrows_seq)
   in
   let joined_ctx =
     project_context span preserved_aids ~receiving_aids PRight joined_ctx

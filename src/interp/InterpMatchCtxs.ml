@@ -484,16 +484,19 @@ module MakeMatcher (M : PrimMatcher) : Matcher = struct
                   sid1
               in
               VFrozenMutBorrow (bid, sid)
+          | VReservedMutBorrow (bid0, sid0), VReservedMutBorrow (bid1, sid1) ->
+              let bid, sid =
+                M.match_reserved_mut_borrows match_rec ctx0 ctx1 ty bid0 sid0
+                  bid1 sid1
+              in
+              VReservedMutBorrow (bid, sid)
           | VReservedMutBorrow _, _
           | _, VReservedMutBorrow _
           | VFrozenMutBorrow _, _
           | _, VFrozenMutBorrow _
           | VSharedBorrow _, VMutBorrow _
           | VMutBorrow _, VSharedBorrow _ ->
-              (* If we get here, either there is a typing inconsistency, or we are
-                 trying to match a reserved borrow, which shouldn't happen because
-                 reserved borrow should be eliminated very quickly - they are introduced
-                 just before function calls which activate them. *)
+              (* If we get here there is a typing inconsistency *)
               [%craise_recover] M.recover M.span "Unexpected"
         in
         { value = VBorrow bc; ty }
@@ -1088,7 +1091,18 @@ module MakeJoinMatcher (S : MatchJoinState) : PrimMatcher = struct
           let value = VLoan (VSharedLoan (lid, sv)) in
           { value; ty })
         else [%craise_recover] S.recover span "Not implemented yet"))
-    else no_loans_no_bottoms_to_symbolic_value_with_borrows ctx0 ctx1 v0 v1
+    else (
+      (* The loans below borrows can't be moved to the abstractions of the
+         fresh symbolic value: they have to end first *)
+      (match InterpBorrowsCore.get_first_loan_in_value v0 with
+      | Some (VSharedLoan (id, _) | VMutLoan id) ->
+          raise (ValueMatchFailure (LoanInLeft id))
+      | None -> ());
+      (match InterpBorrowsCore.get_first_loan_in_value v1 with
+      | Some (VSharedLoan (id, _) | VMutLoan id) ->
+          raise (ValueMatchFailure (LoanInRight id))
+      | None -> ());
+      no_loans_no_bottoms_to_symbolic_value_with_borrows ctx0 ctx1 v0 v1)
 
   let match_distinct_adts (_ : tvalue_matcher) (ctx0 : eval_ctx)
       (ctx1 : eval_ctx) (ty : ety) (ty0 : ty) (adt0 : adt_value) (ty1 : ty)
@@ -1189,6 +1203,18 @@ module MakeJoinMatcher (S : MatchJoinState) : PrimMatcher = struct
        mutable borrows they observe *)
     [%cassert_recover] S.recover span (bid0 = bid1)
       "Joins of frozen borrows of different loans are not supported yet";
+    match_shared_borrows match_rec ctx0 ctx1 ty bid0 sid0 bid1 sid1
+
+  let match_reserved_mut_borrows match_rec (ctx0 : eval_ctx) (ctx1 : eval_ctx)
+      (ty : ety) (bid0 : borrow_id) (sid0 : shared_borrow_id)
+      (bid1 : borrow_id) (sid1 : shared_borrow_id) : borrow_id * shared_borrow_id
+      =
+    (* Reserved borrows of the same loan are shared instances of this loan
+       (two-phase borrows evaluated before the arguments of a call, which may
+       branch): joining reserved borrows of different loans would require a
+       reborrow, which can't be activated *)
+    [%cassert_recover] S.recover span (bid0 = bid1)
+      "Joins of reserved borrows of different loans are not supported";
     match_shared_borrows match_rec ctx0 ctx1 ty bid0 sid0 bid1 sid1
   let match_mut_borrows (_ : tvalue_matcher) (ctx0 : eval_ctx) (_ : eval_ctx)
       (ty : ety) (bid0 : borrow_id) (bv0 : tvalue) (bid1 : borrow_id)
@@ -2022,6 +2048,7 @@ struct
 
 
   let match_frozen_mut_borrows = match_shared_borrows
+  let match_reserved_mut_borrows = match_shared_borrows
   let match_mut_borrows (_ : tvalue_matcher) (_ : eval_ctx) (_ : eval_ctx)
       (_ty : ety) (bid0 : borrow_id) (_bv0 : tvalue) (bid1 : borrow_id)
       (_bv1 : tvalue) (bv : tvalue) : borrow_id * tvalue =

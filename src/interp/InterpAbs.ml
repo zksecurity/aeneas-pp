@@ -242,16 +242,23 @@ let convert_value_to_abstractions (span : Meta.span) (abs_kind : abs_kind)
             let proj : symbolic_proj = { sv_id = sv.sv_id; proj_ty = ty } in
             let nv = ASymbolic (PNone, AProjBorrows { proj; loans = [] }) in
             let nv : tavalue = { value = nv; ty } in
-            (* Abstraction expression *)
-            let output =
-              ESymbolic
-                ( PNone,
+            (* Abstraction expression: like the other continuations, it only
+               tracks the mutable borrows (shared borrows give nothing back) *)
+            let output, input =
+              if
+                ty_has_mut_borrow_for_region_in_set ctx.type_ctx.type_infos
+                  (RegionSet.singleton r) ty
+              then
+                let output =
                   EProjBorrows
-                    { proj = { sv_id = sv.sv_id; proj_ty = ty }; loans = [] } )
+                    { proj = { sv_id = sv.sv_id; proj_ty = ty }; loans = [] }
+                in
+                ( { value = ESymbolic (PNone, output); ty },
+                  { value = EValue (ctx.env, v); ty } )
+              else
+                ( mk_etuple ~borrow_proj:true [],
+                  mk_etuple ~borrow_proj:false [] )
             in
-            let output = { value = output; ty } in
-            let input = { value = EValue (ctx.env, v); ty } in
-            (* *)
             push_abs r [ nv ] (Some output) (Some input))
           regions
   in

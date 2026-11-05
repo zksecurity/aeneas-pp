@@ -87,8 +87,11 @@ package «tests» {}
 @[default_target] lean_lib IteratorsScalar
 @[default_target] lean_lib JoinDeadLocals
 @[default_target] lean_lib JoinDuplicate
+@[default_target] lean_lib JoinInnerLoans
 @[default_target] lean_lib JoinLiveBorrows
 @[default_target] lean_lib Joins
+@[default_target] lean_lib JoinSharedProjections
+@[default_target] lean_lib JoinTargetSharedBorrows
 @[default_target] lean_lib LeanKeywords
 @[default_target] lean_lib LeanKeywordsClash
 @[default_target] lean_lib ListBorrows
@@ -139,5 +142,6 @@ package «tests» {}
 @[default_target] lean_lib Traits
 @[default_target] lean_lib TraitUnitOutput
 @[default_target] lean_lib Tutorial
+@[default_target] lean_lib TwoPhaseBorrowJoins
 @[default_target] lean_lib Vec
 @[default_target] lean_lib VecIter
