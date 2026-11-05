@@ -482,9 +482,61 @@ and translate_fwd_trait_ref (span : Meta.span option) (decls_ctx : C.decls_ctx)
 
 (** Compute the *number* of levels of sub-abstractions existing for a given
     region type. *)
+(** Whether we count the nesting levels of an ADT for the regions satisfying
+    [keep_region] by exploring its fields: the structures and enumerations
+    which are not recursive and whose fields nest mutable borrows of those
+    regions under mutable borrows (the ADT itself only counts as one level) *)
+and adt_explore_fields (decls_ctx : C.decls_ctx)
+    (keep_region : T.region -> bool) (ty : T.ty) : bool =
+  match ty with
+  | T.TAdt { id; builtin = None; _ } ->
+      (not (T.TypeDeclId.TreeMap.find id decls_ctx.type_ctx.type_infos).is_rec)
+      && (match (T.TypeDeclId.Map.find id decls_ctx.crate.type_decls).kind with
+         | Struct _ | Enum _ -> true
+         | _ -> false)
+      && List.exists
+           (ty_nests_mut_borrow decls_ctx keep_region)
+           (adt_field_types decls_ctx ty)
+  | _ -> false
+
+(** Whether a type contains a mutable borrow of a type containing mutable
+    borrows of the regions satisfying [keep_region] *)
+and ty_nests_mut_borrow (decls_ctx : C.decls_ctx)
+    (keep_region : T.region -> bool) (ty : T.ty) : bool =
+  match ty with
+  | T.TRef (_, rty, RMut) ->
+      TypesUtils.ty_has_mut_borrow_for_region_in_pred
+        decls_ctx.type_ctx.type_infos keep_region rty
+  | T.TAdt { builtin = None; _ } -> adt_explore_fields decls_ctx keep_region ty
+  | T.TAdt { builtin = Some (TBox | TTuple); generics; _ } ->
+      List.exists (ty_nests_mut_borrow decls_ctx keep_region) generics.types
+  | T.TArray (ty, _, _) | T.TSlice (ty, _) ->
+      ty_nests_mut_borrow decls_ctx keep_region ty
+  | _ -> false
+
+(** The types of the fields of an ADT (which is not builtin), in all its
+    variants *)
+and adt_field_types (decls_ctx : C.decls_ctx) (ty : T.ty) : T.ty list =
+  match ty with
+  | T.TAdt ({ id; builtin = None; _ } as tref) ->
+      let def = T.TypeDeclId.Map.find id decls_ctx.crate.type_decls in
+      List.concat_map snd
+        (Charon.Substitute.type_decl_get_instantiated_variants_fields_types def
+           tref.generics)
+  | _ -> []
+
 and compute_back_ty_num_levels (span : Meta.span option)
     (decls_ctx : C.decls_ctx) (get_region_group : T.region -> T.region_group_id)
     (gid : T.region_group_id) (ty : T.ty) : int =
+  compute_back_ty_num_levels_below span decls_ctx get_region_group gid
+    T.RegionGroupId.Set.empty ty
+
+(** The number of nesting levels of a type below the mutable borrows of the
+    region groups [outer_regions] (see {!compute_back_ty_num_levels}) *)
+and compute_back_ty_num_levels_below (span : Meta.span option)
+    (decls_ctx : C.decls_ctx) (get_region_group : T.region -> T.region_group_id)
+    (gid : T.region_group_id) (outer_regions : T.RegionGroupId.Set.t)
+    (ty : T.ty) : int =
   let type_infos = decls_ctx.type_ctx.type_infos in
   let keep_region r = gid = get_region_group r in
   let max_level = ref 0 in
@@ -505,23 +557,27 @@ and compute_back_ty_num_levels (span : Meta.span option)
     | T.TAdt { generics; builtin; _ } -> (
         match builtin with
         | None ->
-            (* Analyze the type *)
-            let info = TypesAnalysis.analyze_ty span type_infos ty in
-            (* TODO: we need to extend the type analysis to count the level
-               of nesting inside of ADTs with regions. For now we forbid using
-               nested mutable borrows inside of ADTs. *)
-            [%cassert_opt_span] span
-              (not info.contains_nested_mut)
-              "Unimplemented";
-            (* Check if the region appears somewhere *)
-            let outer_regions =
-              if
-                TypesUtils.ty_has_mut_borrow_for_region_in_pred type_infos
-                  keep_region ty
-              then T.RegionGroupId.Set.add gid outer_regions
-              else outer_regions
-            in
-            save_count outer_regions
+            if adt_explore_fields decls_ctx keep_region ty then
+              (* The nesting continues in the fields *)
+              List.iter (explore outer_regions)
+                (adt_field_types decls_ctx ty)
+            else
+              (* We can't count the nesting levels inside of recursive or
+                 opaque types *)
+              let info = TypesAnalysis.analyze_ty span type_infos ty in
+              [%cassert_opt_span] span
+                (not info.contains_nested_mut)
+                "Unimplemented: recursive or opaque types containing nested \
+                 mutable borrows";
+              (* Check if the region appears somewhere *)
+              let outer_regions =
+                if
+                  TypesUtils.ty_has_mut_borrow_for_region_in_pred type_infos
+                    keep_region ty
+                then T.RegionGroupId.Set.add gid outer_regions
+                else outer_regions
+              in
+              save_count outer_regions
         | Some TStr -> save_count outer_regions
         | Some TBox -> (
             (* Eliminate the box *)
@@ -589,7 +645,7 @@ and compute_back_ty_num_levels (span : Meta.span option)
         [%craise_opt_span] span "Found type error in the output of charon"
     | _ -> [%craise_opt_span] span ("unsupported type: " ^ T.show_ty ty)
   in
-  explore T.RegionGroupId.Set.empty ty;
+  explore outer_regions ty;
   !max_level
 
 (** Auxiliary function to compute the type consumed or given back by a backward
@@ -611,22 +667,29 @@ and translate_back_ty_aux (span : Meta.span option) (decls_ctx : C.decls_ctx)
     else None
   in
   let keep_adt (outer_regions : T.RegionGroupId.Set.t) (ty : T.ty) : bool =
-    (* Analyze the type *)
-    let info = TypesAnalysis.analyze_ty span type_infos ty in
-    (* TODO: we need to extend the type analysis to count the level
-         of nesting inside of ADTs with regions. For now we forbid using
-         nested mutable borrows inside of ADTs. *)
-    [%cassert_opt_span] span (not info.contains_nested_mut) "Unimplemented";
-    (* Check if the region appears somewhere *)
-    let outer_regions =
-      if
-        TypesUtils.ty_has_mut_borrow_for_region_in_pred type_infos keep_region
-          ty
-      then T.RegionGroupId.Set.add gid outer_regions
-      else outer_regions
-    in
-    (* *)
-    keep outer_regions
+    match ty with
+    | T.TAdt { builtin = None; _ }
+      when adt_explore_fields decls_ctx keep_region ty ->
+      (* The nesting continues in the fields *)
+      compute_back_ty_num_levels_below span decls_ctx get_region_group gid
+        outer_regions ty
+      > level
+    | _ ->
+      (* We can't count the nesting levels inside of recursive or opaque
+         types *)
+      let info = TypesAnalysis.analyze_ty span type_infos ty in
+      [%cassert_opt_span] span (not info.contains_nested_mut)
+        "Unimplemented: recursive or opaque types containing nested mutable \
+         borrows";
+      (* Check if the region appears somewhere *)
+      let outer_regions =
+        if
+          TypesUtils.ty_has_mut_borrow_for_region_in_pred type_infos
+            keep_region ty
+        then T.RegionGroupId.Set.add gid outer_regions
+        else outer_regions
+      in
+      keep outer_regions
   in
   (* inside_mut_level: keeps track of the nesting level. We only count the
      ancestor regions and the current regions (not the inner regions) *)
