@@ -1060,7 +1060,18 @@ module MakeJoinMatcher (S : MatchJoinState) : PrimMatcher = struct
           let value = VLoan (VSharedLoan (lid, sv)) in
           { value; ty })
         else [%craise_recover] S.recover span "Not implemented yet"))
-    else no_loans_no_bottoms_to_symbolic_value_with_borrows ctx0 ctx1 v0 v1
+    else (
+      (* The loans below borrows can't be moved to the abstractions of the
+         fresh symbolic value: they have to end first *)
+      (match InterpBorrowsCore.get_first_loan_in_value v0 with
+      | Some (VSharedLoan (id, _) | VMutLoan id) ->
+          raise (ValueMatchFailure (LoanInLeft id))
+      | None -> ());
+      (match InterpBorrowsCore.get_first_loan_in_value v1 with
+      | Some (VSharedLoan (id, _) | VMutLoan id) ->
+          raise (ValueMatchFailure (LoanInRight id))
+      | None -> ());
+      no_loans_no_bottoms_to_symbolic_value_with_borrows ctx0 ctx1 v0 v1)
 
   let match_distinct_adts (_ : tvalue_matcher) (ctx0 : eval_ctx)
       (ctx1 : eval_ctx) (ty : ety) (ty0 : ty) (adt0 : adt_value) (ty1 : ty)
