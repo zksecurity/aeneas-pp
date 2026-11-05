@@ -1,3 +1,4 @@
+//@ [!lean] skip
 //! Globals whose types contain static borrows.
 #![feature(register_tool)]
 #![register_tool(verify)]
