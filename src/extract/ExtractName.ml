@@ -164,13 +164,20 @@ let pattern_to_trait_impl_extract_name = pattern_to_extract_name None
 (* TODO: this is provisional. We just want to make sure that the extraction
    names we derive from the patterns (for the builtin definitions) are
    consistent with the extraction names we derive from the Rust names *)
-let name_to_simple_name (ctx : ctx) (n : Types.name) : string list =
-  let c = default_to_pat_config in
-  pattern_to_extract_name None (name_to_pattern ctx c n)
+let rec name_to_simple_name (ctx : ctx) (n : Types.name) : string list =
+  match List.rev n with
+  | Types.PeInstantiated binder :: rest_rev ->
+      (* An item obtained by (partially) instantiating its parent: the name
+         includes the arguments of the instantiation *)
+      name_with_generics_to_simple_name ctx (List.rev rest_rev)
+        binder.binder_params binder.binder_value
+  | _ ->
+      let c = default_to_pat_config in
+      pattern_to_extract_name None (name_to_pattern ctx c n)
 
 (** If the [prefix] is Some, we attempt to remove the common prefix between
     [prefix] and [name] from [name] *)
-let name_with_generics_to_simple_name (ctx : ctx)
+and name_with_generics_to_simple_name (ctx : ctx)
     ?(prefix : Types.name option = None) (name : Types.name)
     (p : Types.generic_params) (g : Types.generic_args) : string list =
   let c = default_to_pat_config in
