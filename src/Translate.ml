@@ -935,7 +935,7 @@ let export_functions_group_scc (fmt : Format.formatter) (config : gen_config)
             def.loop_id = None
             && FunDeclId.TreeSet.mem def.def_id ctx.closure_mono_funs
           then
-            Extract.extract_derive_closure_mono ctx fmt def)
+            Extract.extract_closure_mono ctx fmt def)
         decls)
 
 (** Extract the decreases-clause template bodies for a list of function
