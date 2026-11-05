@@ -1936,6 +1936,21 @@ and match_ctx_with_target_aux (config : config) (span : Meta.span)
     "- tgt_ctx after simplify_dummy_values_useless_abs (ii):\n"
     ^ eval_ctx_to_string tgt_ctx];
 
+  (* The join turns the function call abstractions it outputs into join
+     abstractions (see {!InterpStatements.eval_switch_with_join}): we do the
+     same with their counterparts in the target context, so that we identify
+     them as common abstractions. *)
+  let tgt_ctx =
+    if preserve_common_abs then
+      let src_abs = ctx_get_abs src_ctx in
+      ctx_map_abs
+        (fun abs ->
+          match (abs.kind, AbsId.Map.find_opt abs.abs_id src_abs) with
+          | FunCall _, Some { kind = Join; _ } -> { abs with kind = Join }
+          | _ -> abs)
+        tgt_ctx
+    else tgt_ctx
+  in
   (* The abstractions of the joined context which are fresh with respect to
      the context before the branching are destructured (see
      {!InterpAbs.add_abs_cont_to_abs}): when the destructured values of an
