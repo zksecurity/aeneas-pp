@@ -627,9 +627,107 @@ let refresh_non_fixed_abs_ids (_span : Meta.span) (fixed_aids : AbsId.Set.t)
   let ctx = visitor#visit_eval_ctx () ctx in
   (ctx, !fresh_map)
 
+(** A region may be ended in [other] while it is live in [ctx], owned by an
+    abstraction (for instance, the region of a function call whose output holds
+    borrows in one branch only: the abstraction ends early in the other
+    branch). The joined context keeps the abstraction, but the region must
+    remain ended for the values coming from [other]: we rename it in [ctx].
+
+    We only rename regions which no symbolic value (nor projection) mentions:
+    renaming those would change the types of symbolic values without changing
+    their ids. This includes the meta-values, which the synthesis uses (for
+    instance, the values given back by ended borrows), except the ones of the
+    ignored values ([AIgnored], and [EIgnored] in the continuations), whose
+    synthesis doesn't depend on the regions: they are translated as values,
+    whose types the translation erases, and whose symbolic values and borrows
+    are looked up by id. *)
+let freshen_regions_ended_in_other (span : Meta.span) ~(recoverable : bool)
+    (ctx : eval_ctx) (other : eval_ctx) : eval_ctx =
+  let owned =
+    List.fold_left
+      (fun owned (e : env_elem) ->
+        match e with
+        | EAbs abs ->
+            RegionSet.fold
+              (fun r owned ->
+                match r with
+                | RVar (Free rid) -> RegionId.Set.add rid owned
+                | _ -> owned)
+              abs.regions.owned owned
+        | EBinding _ | EFrame -> owned)
+      RegionId.Set.empty ctx.env
+  in
+  let rids =
+    RegionId.Set.filter
+      (fun rid ->
+        RegionId.Set.mem rid other.ended_regions
+        && not (RegionId.Set.mem rid ctx.ended_regions))
+      owned
+  in
+  if RegionId.Set.is_empty rids then ctx
+  else
+    let regions =
+      RegionSet.of_list
+        (List.map (fun rid -> RVar (Free rid)) (RegionId.Set.elements rids))
+    in
+    let mentions_rids (ty : ty) : bool =
+      ty_has_regions_in_set ctx.type_ctx.type_infos regions ty
+    in
+    let symbolic_mentions_rids =
+      let visitor =
+        object (self)
+          inherit [_] iter_eval_ctx
+
+          method! visit_symbolic_value _ sv =
+            if mentions_rids sv.sv_ty then raise Utils.Found
+
+          method! visit_symbolic_proj _ proj =
+            if mentions_rids proj.proj_ty then raise Utils.Found
+
+          method! visit_esymbolic_proj _ proj =
+            if mentions_rids proj.proj_ty then raise Utils.Found
+
+          method! visit_mvalue env v = self#visit_tvalue env v
+          method! visit_msymbolic_value env sv = self#visit_symbolic_value env sv
+
+          method! visit_ended_proj_borrow_meta env m =
+            self#visit_msymbolic_value env m.given_back
+
+          method! visit_aended_mut_borrow_meta env m =
+            self#visit_msymbolic_value env m.given_back
+
+          method! visit_eended_mut_borrow_meta env m =
+            self#visit_msymbolic_value env m.given_back
+
+          method! visit_AIgnored _ _ = ()
+          method! visit_EIgnored _ _ = ()
+        end
+      in
+      try
+        visitor#visit_eval_ctx () ctx;
+        false
+      with Utils.Found -> true
+    in
+    [%cassert_recover] recoverable span (not symbolic_mentions_rids)
+      "Unimplemented";
+    let rsubst =
+      RegionId.Set.fold
+        (fun rid m -> RegionId.Map.add rid (ctx.fresh_region_id ()) m)
+        rids RegionId.Map.empty
+    in
+    let env =
+      Substitute.env_subst_rids
+        (fun rid ->
+          Option.value (RegionId.Map.find_opt rid rsubst) ~default:rid)
+        ctx.env
+    in
+    { ctx with env }
+
 let join_ctxs (span : Meta.span) (fresh_abs_kind : abs_kind)
     ~(recoverable : bool) ~(with_abs_conts : bool) (ctx0 : eval_ctx)
     (ctx1 : eval_ctx) : join_info_or_update =
+  let ctx0 = freshen_regions_ended_in_other span ~recoverable ctx0 ctx1 in
+  let ctx1 = freshen_regions_ended_in_other span ~recoverable ctx1 ctx0 in
   (* Debug *)
   [%ltrace
     "- ctx0:\n"

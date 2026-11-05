@@ -22,6 +22,7 @@ package «tests» {}
 @[default_target] lean_lib Bst
 @[default_target] lean_lib Builtin
 @[default_target] lean_lib BuiltinAuto
+@[default_target] lean_lib CallBorrowJoins
 @[default_target] lean_lib CastSigned
 @[default_target] lean_lib ChunksExact
 @[default_target] lean_lib ClosureRecursion
