@@ -648,7 +648,6 @@ let simplify_loop_output_conts (ctx : ctx) (def : fun_decl) =
             let fresh_output_values, fresh_output_conts, next =
               simplify_in vars loop_varset loop_conts next
             in
-            let fresh_outputs = fresh_output_values @ fresh_output_conts in
             [%ldebug
               "After calling simplify_in:" ^ "\n- fresh_output_values:\n"
               ^ Print.list_to_string ~sep:"\n" (texpr_to_string ctx)
@@ -723,11 +722,16 @@ let simplify_loop_output_conts (ctx : ctx) (def : fun_decl) =
                 loop.loop_body
             in
 
-            (* Update the signature *)
-            let num_output_values =
+            (* Update the signature: the loop outputs the values it kept, then
+               the fresh values, then the continuations it kept, then the
+               fresh continuations *)
+            let num_kept_values =
               List.length
                 (List.filter fst
                    (Collections.List.prefix loop.num_output_values keep_varsl))
+            in
+            let num_output_values =
+              num_kept_values + List.length fresh_output_values
             in
             let loop = { loop with num_output_values; output_tys; loop_body } in
             let loop : texpr =
@@ -740,14 +744,22 @@ let simplify_loop_output_conts (ctx : ctx) (def : fun_decl) =
                 (fun ((keep, _), pat) -> if keep then Some pat else None)
                 (List.combine keep_varsl pats)
             in
-            let new_pats =
+            let value_pats, cont_pats =
+              Collections.List.split_at filtered_pats num_kept_values
+            in
+            let mk_pats (fresh : (FVarId.id * texpr) list) =
               List.map
                 (fun ((id, e) : _ * texpr) ->
-                  ({ id; basename = Some "back"; ty = e.ty } : fvar))
-                fresh_outputs
+                  mk_tpat_from_fvar None
+                    ({ id; basename = Some "back"; ty = e.ty } : fvar))
+                fresh
             in
-            let new_pats = List.map (mk_tpat_from_fvar None) new_pats in
-            let pats = filtered_pats @ new_pats in
+            let pats =
+              value_pats
+              @ mk_pats fresh_output_values
+              @ cont_pats
+              @ mk_pats fresh_output_conts
+            in
             let pat = mk_simpl_tuple_pat pats in
             mk_closed_let span monadic pat loop next
         | _ ->
