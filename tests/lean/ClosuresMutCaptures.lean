@@ -206,7 +206,7 @@ def
 /-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::telescope::<_, _, closures_mut_captures::{closures_mut_captures::Eng<'a>}::count::{closure}<_, _, _, _>>]: loop body 0:
     Source: 'tests/src/closures-mut-captures.rs', lines 21:8-28:5 -/
 @[rust_loop_body]
-def Eng.telescope01closure_loop.body
+def Eng.telescope01countclosure_loop.body
   (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)
   (back1 : Bool → Bool) (v : alloc.vec.Vec Std.U32) (i : Std.U32)
   (n : Std.U32) (b : Bool) (i1 : Std.U32) (c : Std.U32) :
@@ -276,7 +276,7 @@ def Eng.telescope01closure_loop.body
 /-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::telescope::<_, _, closures_mut_captures::{closures_mut_captures::Eng<'a>}::count::{closure}<_, _, _, _>>]: loop 0:
     Source: 'tests/src/closures-mut-captures.rs', lines 21:8-28:5 -/
 @[rust_loop]
-def Eng.telescope01closure_loop
+def Eng.telescope01countclosure_loop
   (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)
   (back1 : Bool → Bool) (v : alloc.vec.Vec Std.U32) (i : Std.U32)
   (n : Std.U32) (b : Bool) (i1 : Std.U32) (c : Std.U32) :
@@ -285,19 +285,19 @@ def Eng.telescope01closure_loop
   := do
   loop
     (fun (back2, back3, v1, i2, n1, b1, i3, c1) =>
-      Eng.telescope01closure_loop.body back2 back3 v1 i2 n1 b1 i3 c1)
+      Eng.telescope01countclosure_loop.body back2 back3 v1 i2 n1 b1 i3 c1)
     (back, back1, v, i, n, b, i1, c)
 
 /-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::telescope::<_, _, closures_mut_captures::{closures_mut_captures::Eng<'a>}::count::{closure}<_, _, _, _>>]:
     Source: 'tests/src/closures-mut-captures.rs', lines 14:4-28:5 -/
-def Eng.telescope01closure
+def Eng.telescope01countclosure
   (self : Eng) (n : Std.U32) (next : Eng.count.closure) :
   Result ((core.result.Result Std.U32 Unit) × Eng × (Eng → Eng) ×
     Eng.count.closure)
   := do
   let (r, v, i, back, back1) ←
-    Eng.telescope01closure_loop (fun v1 => v1) (fun b => b) self.t self.d n
-      next 0#u32 0#u32
+    Eng.telescope01countclosure_loop (fun v1 => v1) (fun b => b) self.t 
+      self.d n next 0#u32 0#u32
   let back2 :=
     fun (self1 : Eng) => let v1 := back1 self1.t
                          { self with t := v1 }
@@ -310,7 +310,8 @@ def Eng.count
   (self : Eng) (n : Std.U32) :
   Result ((core.result.Result (Std.U32 × Bool) Unit) × Eng × (Eng → Eng))
   := do
-  let (r, self1, telescope_back, c) ← Eng.telescope01closure self n false
+  let (r, self1, telescope_back, c) ←
+    Eng.telescope01countclosure self n false
   let cf ← core.result.Result.Insts.CoreOpsTry.branch r
   let (r1, back) ←
     match cf with
@@ -358,7 +359,7 @@ def Eng.consecutive.closure_1.Insts.CoreOpsFunctionFnMutPairU32U32Bool.call_mut
 
 /-- [closures_mut_captures::both_pairs::<_, closures_mut_captures::{closures_mut_captures::Eng<'a>}::consecutive::{closure#1}<_, _, _, _, _, _, _>>]:
     Source: 'tests/src/closures-mut-captures.rs', lines 65:0-67:1 -/
-def both_pairs0closure_1
+def both_pairs0consecutiveclosure_1
   (v : Slice Std.U32) (f : Eng.consecutive.closure_1) :
   Result (Bool × Eng.consecutive.closure_1)
   := do
@@ -385,7 +386,7 @@ def Eng.consecutive
   (self : Eng) (v : Slice Std.U32) :
   Result (Bool × Eng × (Eng → Eng))
   := do
-  let (b, _) ← both_pairs0closure_1 v ((), self)
+  let (b, _) ← both_pairs0consecutiveclosure_1 v ((), self)
   let back'a := fun (self1 : Eng) => { self with t := self1.t }
   ok (b, self, back'a)
 
@@ -417,7 +418,7 @@ def push_counter.closure.Insts.CoreOpsFunctionFnMutTupleMut1VecU32U32.call_mut
 
 /-- [closures_mut_captures::call_mut_twice::<_, closures_mut_captures::push_counter::{closure}<_>>]:
     Source: 'tests/src/closures-mut-captures.rs', lines 50:0-54:1 -/
-def call_mut_twice0closure
+def call_mut_twice0push_counterclosure
   (v : alloc.vec.Vec Std.U32) (f : push_counter.closure) :
   Result (Std.U32 × (alloc.vec.Vec Std.U32) × push_counter.closure)
   := do
@@ -438,7 +439,7 @@ def push_counter
   (v : alloc.vec.Vec Std.U32) (k : Std.U32) :
   Result (Std.U32 × (alloc.vec.Vec Std.U32) × Std.U32)
   := do
-  let (i, v1, c) ← call_mut_twice0closure v k
+  let (i, v1, c) ← call_mut_twice0push_counterclosure v k
   ok (i, v1, c)
 
 /-- [closures_mut_captures::both_pairs]:
@@ -529,7 +530,7 @@ def sum_upto.closure_1.Insts.CoreOpsFunctionFnMutTupleU32Tuple.call_mut
     Source: 'tests/src/closures-mut-captures.rs', lines 75:8-78:9
     Visibility: public -/
 @[rust_loop_body, trait_default]
-def Visit.each0T0closure_1.default_loop.body
+def Visit.each0T0sum_uptoclosure_1.default_loop.body
   {T0 : Type _} (VisitInst : Visit T0) (self : T0) (back : Std.U32 → Std.U32)
   (i : Std.U32) (i1 : Std.U32) :
   Result (ControlFlow ((Std.U32 → Std.U32) × Std.U32 × Std.U32) Std.U32)
@@ -548,26 +549,27 @@ def Visit.each0T0closure_1.default_loop.body
     Source: 'tests/src/closures-mut-captures.rs', lines 75:8-78:9
     Visibility: public -/
 @[rust_loop, trait_default]
-def Visit.each0T0closure_1.default_loop
+def Visit.each0T0sum_uptoclosure_1.default_loop
   {T0 : Type _} (VisitInst : Visit T0) (back : Std.U32 → Std.U32) (self : T0)
   (i : Std.U32) (i1 : Std.U32) :
   Result Std.U32
   := do
   loop
-    (fun (back1, i2, i3) => Visit.each0T0closure_1.default_loop.body VisitInst
-      self back1 i2 i3)
+    (fun (back1, i2, i3) => Visit.each0T0sum_uptoclosure_1.default_loop.body
+      VisitInst self back1 i2 i3)
     (back, i, i1)
 
 /-- [closures_mut_captures::Visit::each::<_, _, closures_mut_captures::sum_upto::{closure#1}<_>>]:
     Source: 'tests/src/closures-mut-captures.rs', lines 73:4-79:5
     Visibility: public -/
 @[trait_default]
-def Visit.each0T0closure_1.default
+def Visit.each0T0sum_uptoclosure_1.default
   {T0 : Type _} (VisitInst : Visit T0) (self : T0) (f : sum_upto.closure_1) :
   Result sum_upto.closure_1
   := do
   let back ←
-    Visit.each0T0closure_1.default_loop VisitInst (fun i => i) self f 0#u32
+    Visit.each0T0sum_uptoclosure_1.default_loop VisitInst (fun i => i) self f
+      0#u32
   ok back
 
 /-- [closures_mut_captures::Upto]
@@ -639,7 +641,8 @@ def sum_upto.closure.Insts.CoreOpsFunctionFnMutTupleU32Tuple :
 def sum_upto (n : Std.U32) (acc : Std.U32) : Result Std.U32 := do
   Visit.each.default Upto.Insts.Closures_mut_capturesVisit
     sum_upto.closure.Insts.CoreOpsFunctionFnMutTupleU32Tuple n ()
-  Visit.each0T0closure_1.default Upto.Insts.Closures_mut_capturesVisit n acc
+  Visit.each0T0sum_uptoclosure_1.default Upto.Insts.Closures_mut_capturesVisit
+    n acc
 
 /-- [closures_mut_captures::test_count]:
     Source: 'tests/src/closures-mut-captures.rs', lines 97:0-103:1

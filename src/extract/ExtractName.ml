@@ -90,13 +90,30 @@ let pattern_to_extract_name_visitor =
           else simplify_name [ id1 ]
       | _ :: id -> simplify_name id
     in
+    (* A closure is only identified by the function which defines it: we
+       preserve the name of this function (see
+       {!Charon.TypesUtils.builtin_path_elem_ident} for the name of closures) *)
+    let is_closure (e : pattern_elem) =
+      match e with
+      | PIdent ("closure", _, _) -> true
+      | _ -> false
+    in
+    let rec closure_name (rev_id : pattern) (name : pattern) =
+      match rev_id with
+      | e :: rev_id when is_closure e -> closure_name rev_id (e :: name)
+      | e :: _ -> e :: name
+      | [] -> name
+    in
     (* We have a special case for the literals *)
     match id with
     | [ PIdent (id, _, []) ]
       when Collections.StringSet.mem id literal_type_nameset ->
         (* Literals: we want to capitalize the first letter *)
         [ PIdent (StringUtils.capitalize_first_letter id, 0, []) ]
-    | _ -> shorten id
+    | _ -> (
+        match List.rev id with
+        | last :: _ when is_closure last -> closure_name (List.rev id) []
+        | _ -> shorten id)
   in
 
   object

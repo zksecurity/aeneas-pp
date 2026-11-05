@@ -1134,8 +1134,11 @@ let trait_impl_is_builtin (ctx : gen_ctx) (id : Pure.trait_impl_id) : bool =
       (TraitImplId.Map.find_opt id ctx.trans_trait_impls)
   in
   let trait_decl =
-    Pure.TraitDeclId.Map.find trait_impl.impl_trait.trait_decl_id
-      ctx.trans_trait_decls
+    [%unwrap_with_span] trait_impl.item_meta.span
+      (Pure.TraitDeclId.Map.find_opt trait_impl.impl_trait.trait_decl_id
+         ctx.trans_trait_decls)
+      "Missing trait declaration, probably because of an error which happened \
+       before"
   in
   let builtin_info =
     let open ExtractBuiltin in
