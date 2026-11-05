@@ -298,6 +298,45 @@ let compute_tavalue_proj_kind span type_infos (abs_regions : T.region_set)
   else if !has_loans then LoanProj (to_borrow_kind !has_mut_loans)
   else UnknownProj
 
+(** The part of an ended borrow or loan of a nested borrow
+    ([AEndedIgnoredMutBorrow], [AEndedIgnoredMutLoan], [AEndedMutLoan]) we
+    translate for an abstraction. *)
+type nested_ended_part =
+  | NestedChild  (** The child, at the current level *)
+  | NestedGivenBack  (** The value given back, at the next level *)
+  | NestedNothing
+      (** Neither contains loans (or borrows) at the level of the abstraction *)
+
+(** Select the part of an ended borrow or loan of a nested borrow which
+    contributes to an abstraction at [abs_level]: the part containing loans (or
+    borrows, if [project_borrows]) at this level. We select it before
+    translating anything, because the translations of the parts which don't
+    contribute may not make sense at their level. When both parts contribute,
+    the abstraction would combine the value lent and the value given back, which
+    we don't support. *)
+let select_nested_ended_part span type_infos ~(project_borrows : bool)
+    (abs_regions : T.region_set) (abs_level : abs_level)
+    (current_level : abs_level) (child : V.tavalue) (given_back : V.tavalue) :
+    nested_ended_part =
+  let contributes level v =
+    match
+      compute_tavalue_proj_kind span type_infos abs_regions abs_level level v
+    with
+    | BorrowProj _ -> project_borrows
+    | LoanProj _ -> not project_borrows
+    | UnknownProj -> false
+  in
+  match
+    (contributes current_level child, contributes (current_level + 1) given_back)
+  with
+  | true, false -> NestedChild
+  | false, true -> NestedGivenBack
+  | false, false -> NestedNothing
+  | true, true ->
+      [%craise] span
+        "Unimplemented: both the value lent and the value given back by a \
+         nested borrow contribute to the same region abstraction"
+
 (** A smaller helper which allows us to isolate the logic by which we handle
     ADTs. *)
 let gtranslate_adt_fields ~(project_borrows : bool)
@@ -510,27 +549,20 @@ and aloan_content_to_consumed_aux ~(filter : bool) (ctx : bs_ctx)
   | AIgnoredMutLoan (_, _) ->
       (* There can be *inner* non ended mutable loans, but not outer ones *)
       [%craise] ctx.span "Unreachable"
-  | AEndedIgnoredMutLoan { child; given_back; given_back_meta = _ } -> (
+  | AEndedIgnoredMutLoan { child; given_back; given_back_meta = _ } ->
       (* This happens with nested borrows: we need to dive in *)
-      let child =
-        tavalue_to_consumed_aux ~filter ctx ectx abs_regions abs_level
-          current_level child
-      in
-      let given_back =
-        tavalue_to_consumed_aux ~filter ctx ectx abs_regions abs_level
-          (current_level + 1) given_back
-      in
-      match (child, given_back) with
-      | Some v, None | None, Some v -> Some v
-      | None, None -> None
-      | _ ->
-          (* Is this unreachable? *)
-          [%craise] ctx.span "Unimplemented")
-  | AIgnoredSharedLoan _ ->
+      nested_ended_to_consumed_aux ~filter ctx ectx abs_regions abs_level
+        current_level child given_back
+  | AIgnoredSharedLoan child ->
       (* An ignored shared loan: this doesn't consume anything. Note that
          there might be mutable borrows inside the shared value, but those
-         are frozen (immutable) under the shared context. *)
-      None
+         are frozen (immutable) under the shared context. If we need the value
+         (because it is a field of an ADT we translate entirely), the child
+         describes it. *)
+      if filter then None
+      else
+        tavalue_to_consumed_aux ~filter ctx ectx abs_regions abs_level
+          current_level child
 
 and aborrow_content_to_consumed_aux ~(filter : bool) (ctx : bs_ctx)
     (ectx : C.eval_ctx) (abs_regions : T.region_set) (abs_level : abs_level)
@@ -544,23 +576,35 @@ and aborrow_content_to_consumed_aux ~(filter : bool) (ctx : bs_ctx)
   | V.AEndedMutBorrow (_, _) ->
       (* TODO? *)
       None
-  | V.AEndedIgnoredMutBorrow { child; given_back; given_back_meta = _ } -> (
-      let child =
-        tavalue_to_consumed_aux ~filter ctx ectx abs_regions abs_level
-          current_level child
-      in
-      let given_back =
-        tavalue_to_consumed_aux ~filter ctx ectx abs_regions abs_level
-          (current_level + 1) given_back
-      in
-      match (child, given_back) with
-      | Some v, None | None, Some v -> Some v
-      | None, None -> None
-      | _ ->
-          (* TODO: unreachable? *)
-          [%craise] ctx.span "Unimplemented")
+  | V.AEndedIgnoredMutBorrow { child; given_back; given_back_meta = _ } ->
+      nested_ended_to_consumed_aux ~filter ctx ectx abs_regions abs_level
+        current_level child given_back
   | V.AEndedSharedBorrow | V.AProjSharedBorrow _ ->
       [%craise] ctx.span "Unimplemented"
+
+(** See {!select_nested_ended_part}. If no part contributes but we need the
+    value (because it is a field of an ADT we translate entirely), the value
+    given back represents it: it is the value after the outer borrow ended. *)
+and nested_ended_to_consumed_aux ~(filter : bool) (ctx : bs_ctx)
+    (ectx : C.eval_ctx) (abs_regions : T.region_set) (abs_level : abs_level)
+    (current_level : abs_level) (child : V.tavalue) (given_back : V.tavalue) :
+    texpr option =
+  match
+    select_nested_ended_part ctx.span ctx.type_ctx.type_infos
+      ~project_borrows:false abs_regions abs_level current_level child
+      given_back
+  with
+  | NestedChild ->
+      tavalue_to_consumed_aux ~filter ctx ectx abs_regions abs_level
+        current_level child
+  | NestedGivenBack ->
+      tavalue_to_consumed_aux ~filter ctx ectx abs_regions abs_level
+        (current_level + 1) given_back
+  | NestedNothing ->
+      if filter then None
+      else
+        tavalue_to_consumed_aux ~filter ctx ectx abs_regions abs_level
+          (current_level + 1) given_back
 
 and aproj_to_consumed_aux (ctx : bs_ctx) (_abs_regions : T.region_set)
     (abs_level : abs_level) (current_level : abs_level) (aproj : V.aproj)
@@ -787,19 +831,9 @@ and aloan_content_to_given_back_aux ~(filter : bool)
         child ctx
   | V.ASharedLoan _ -> (ctx, None)
   | V.AEndedMutLoan { child; given_back; given_back_meta = _ }
-  | V.AEndedIgnoredMutLoan { child; given_back; given_back_meta = _ } -> (
-      let ctx, child =
-        tavalue_to_given_back_aux ~filter abs_regions abs_level current_level mp
-          child ctx
-      in
-      let ctx, given_back =
-        tavalue_to_given_back_aux ~filter abs_regions abs_level
-          (current_level + 1) mp given_back ctx
-      in
-      match (child, given_back) with
-      | Some v, None | None, Some v -> (ctx, Some v)
-      | None, None -> (ctx, None)
-      | _ -> [%craise] ctx.span "Unimplemented")
+  | V.AEndedIgnoredMutLoan { child; given_back; given_back_meta = _ } ->
+      nested_ended_to_given_back_aux ~filter abs_regions abs_level current_level
+        mp child given_back ctx
   | V.AEndedSharedLoan _ -> (ctx, None)
   | V.AIgnoredSharedLoan _ -> (ctx, None)
 
@@ -837,24 +871,37 @@ and aborrow_content_to_given_back_aux ~(filter : bool)
       else
         tavalue_to_given_back_aux ~filter abs_regions abs_level current_level mp
           child ctx
-  | AEndedIgnoredMutBorrow { child; given_back; given_back_meta = _ } -> (
-      let ctx, child =
-        tavalue_to_given_back_aux ~filter abs_regions abs_level current_level mp
-          child ctx
-      in
-      let ctx, given_back =
-        tavalue_to_given_back_aux ~filter abs_regions abs_level
-          (current_level + 1) mp given_back ctx
-      in
-      match (child, given_back) with
-      | Some v, None | None, Some v -> (ctx, Some v)
-      | None, None -> (ctx, None)
-      | _ -> [%craise] ctx.span "Unimplemented")
+  | AEndedIgnoredMutBorrow { child; given_back; given_back_meta = _ } ->
+      nested_ended_to_given_back_aux ~filter abs_regions abs_level current_level
+        mp child given_back ctx
   | AEndedSharedBorrow | AProjSharedBorrow _ ->
       if filter then (ctx, None)
       else
         let ty = translate_fwd_ty (Some ctx.span) ctx.decls_ctx ty in
         (ctx, Some (mk_ignored_pat ty))
+
+(** See {!select_nested_ended_part} and {!nested_ended_to_consumed_aux}. We
+    select the part before translating it, as the translation introduces the
+    variables the pattern binds. *)
+and nested_ended_to_given_back_aux ~(filter : bool) (abs_regions : T.region_set)
+    (abs_level : abs_level) (current_level : abs_level) (mp : mplace option)
+    (child : V.tavalue) (given_back : V.tavalue) (ctx : bs_ctx) :
+    bs_ctx * tpat option =
+  match
+    select_nested_ended_part ctx.span ctx.type_ctx.type_infos
+      ~project_borrows:true abs_regions abs_level current_level child given_back
+  with
+  | NestedChild ->
+      tavalue_to_given_back_aux ~filter abs_regions abs_level current_level mp
+        child ctx
+  | NestedGivenBack ->
+      tavalue_to_given_back_aux ~filter abs_regions abs_level
+        (current_level + 1) mp given_back ctx
+  | NestedNothing ->
+      if filter then (ctx, None)
+      else
+        tavalue_to_given_back_aux ~filter abs_regions abs_level
+          (current_level + 1) mp given_back ctx
 
 and aproj_to_given_back_aux (_abs_level : abs_level)
     (_current_level : abs_level) (mp : mplace option) (aproj : V.aproj)
