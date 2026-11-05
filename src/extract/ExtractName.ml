@@ -165,15 +165,26 @@ let pattern_to_trait_impl_extract_name = pattern_to_extract_name None
    names we derive from the patterns (for the builtin definitions) are
    consistent with the extraction names we derive from the Rust names *)
 let rec name_to_simple_name (ctx : ctx) (n : Types.name) : string list =
-  match List.rev n with
-  | Types.PeInstantiated binder :: rest_rev ->
-      (* An item obtained by (partially) instantiating its parent: the name
-         includes the arguments of the instantiation *)
-      name_with_generics_to_simple_name ctx (List.rev rest_rev)
-        binder.binder_params binder.binder_value
-  | _ ->
-      let c = default_to_pat_config in
-      pattern_to_extract_name None (name_to_pattern ctx c n)
+  let c = default_to_pat_config in
+  (* The name of an item obtained by (partially) instantiating its parent, or
+     of an item below such an item (for instance the [default] suffix of a
+     default method), includes the arguments of the instantiation *)
+  let rec split_last_instantiation (rev_suffix : Types.name)
+      (rev_name : Types.name) =
+    match rev_name with
+    | [] -> None
+    | Types.PeInstantiated binder :: rest_rev ->
+        Some (List.rev rest_rev, binder, rev_suffix)
+    | e :: rest_rev -> split_last_instantiation (e :: rev_suffix) rest_rev
+  in
+  match split_last_instantiation [] (List.rev n) with
+  | Some (prefix, binder, suffix) ->
+      name_with_generics_to_simple_name ctx prefix binder.binder_params
+        binder.binder_value
+      @
+      if suffix = [] then []
+      else pattern_to_extract_name None (name_to_pattern ctx c suffix)
+  | None -> pattern_to_extract_name None (name_to_pattern ctx c n)
 
 (** If the [prefix] is Some, we attempt to remove the common prefix between
     [prefix] and [name] from [name] *)

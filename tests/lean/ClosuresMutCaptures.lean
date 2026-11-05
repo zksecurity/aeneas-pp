@@ -21,14 +21,35 @@ set_option maxRecDepth 2048
 namespace closures_mut_captures
 
 /-- [closures_mut_captures::push_counter::{closure}]
-    Source: 'tests/src/closures-mut-captures.rs', lines 52:22-56:5 -/
+    Source: 'tests/src/closures-mut-captures.rs', lines 58:22-62:5 -/
 @[reducible]
 def push_counter.closure := Std.U32
+
+/-- [closures_mut_captures::sum_upto::{closure#1}]
+    Source: 'tests/src/closures-mut-captures.rs', lines 93:11-93:24 -/
+@[reducible]
+def sum_upto.closure_1 := Std.U32
 
 /-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::count::{closure}]
     Source: 'tests/src/closures-mut-captures.rs', lines 33:34-39:9 -/
 @[reducible]
 def Eng.count.closure := Bool
+
+/-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::consecutive::{closure}]
+    Source: 'tests/src/closures-mut-captures.rs', lines 45:20-45:46 -/
+@[reducible]
+def Eng.consecutive.closure := Unit
+
+/-- [closures_mut_captures::Eng]
+    Source: 'tests/src/closures-mut-captures.rs', lines 7:0-10:1
+    Visibility: public -/
+structure Eng where
+  t : alloc.vec.Vec Std.U32
+  d : Std.U32
+
+/-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::consecutive::{closure#1}]
+    Source: 'tests/src/closures-mut-captures.rs', lines 46:22-46:65 -/
+def Eng.consecutive.closure_1 := Eng.consecutive.closure × Eng
 
 /-- Trait declaration: [core::ops::function::FnOnce::<_, (&_ mut _,), _>]
     Source: '/rustc/library/core/src/ops/function.rs', lines 242:0-242:35
@@ -49,13 +70,6 @@ structure core.ops.function.FnMutT0TupleMut0T1T2 (T0 : Type _) (T1 : Type _)
   (T2 : Type _) where
   FnOnceT0TupleMut0T1T2Inst : core.ops.function.FnOnceT0TupleMut0T1T2 T0 T1 T2
   call_mut : T0 → T1 → Result (T2 × T1 × T0)
-
-/-- [closures_mut_captures::Eng]
-    Source: 'tests/src/closures-mut-captures.rs', lines 7:0-10:1
-    Visibility: public -/
-structure Eng where
-  t : alloc.vec.Vec Std.U32
-  d : Std.U32
 
 /-- Trait declaration: [core::ops::function::FnOnce::<_, (&_ mut closures_mut_captures::Eng<_>, _), _>]
     Source: '/rustc/library/core/src/ops/function.rs', lines 242:0-242:35
@@ -314,8 +328,69 @@ def Eng.count
       { self with t := v }
   ok (r1, self1, back'a)
 
+/-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::consecutive::{impl core::ops::function::Fn<(&'_3 closures_mut_captures::Eng<'_2>, u32), u32> for closures_mut_captures::{closures_mut_captures::Eng<'a>}::consecutive::{closure}<'a, '_1, '_2>}::call]:
+    Source: 'tests/src/closures-mut-captures.rs', lines 45:20-45:46 -/
+def Eng.consecutive.closure.Insts.CoreOpsFunctionFnPairShared2EngU32U32.call
+  (c : Eng.consecutive.closure) (tupled_args : (Eng × Std.U32)) :
+  Result Std.U32
+  := do
+  let (e, x) := tupled_args
+  e.d + x
+
+/-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::consecutive::{impl core::ops::function::FnMut<(u32, u32), bool> for closures_mut_captures::{closures_mut_captures::Eng<'a>}::consecutive::{closure#1}<'a, '_1, '_2, '_3, '_4, '_5, '_6>}::call_mut]:
+    Source: 'tests/src/closures-mut-captures.rs', lines 46:22-46:65 -/
+def Eng.consecutive.closure_1.Insts.CoreOpsFunctionFnMutPairU32U32Bool.call_mut
+  (c : Eng.consecutive.closure_1) (tupled_args : (Std.U32 × Std.U32)) :
+  Result (Bool × Eng.consecutive.closure_1 × (Eng.consecutive.closure_1 →
+    Eng.consecutive.closure_1))
+  := do
+  let (_, e) := c
+  let (a, b) := tupled_args
+  let i ←
+    Eng.consecutive.closure.Insts.CoreOpsFunctionFnPairShared2EngU32U32.call ()
+      (e, b)
+  let i1 ←
+    Eng.consecutive.closure.Insts.CoreOpsFunctionFnPairShared2EngU32U32.call ()
+      (e, a)
+  let i2 ← i1 + 1#u32
+  let back := fun c1 => c
+  ok (i = i2, ((), e), back)
+
+/-- [closures_mut_captures::both_pairs::<_, closures_mut_captures::{closures_mut_captures::Eng<'a>}::consecutive::{closure#1}<_, _, _, _, _, _, _>>]:
+    Source: 'tests/src/closures-mut-captures.rs', lines 65:0-67:1 -/
+def both_pairs0closure_1
+  (v : Slice Std.U32) (f : Eng.consecutive.closure_1) :
+  Result (Bool × Eng.consecutive.closure_1)
+  := do
+  let (_, e) := f
+  let i ← Slice.index_usize v 0#usize
+  let i1 ← Slice.index_usize v 1#usize
+  let (b, f1, _) ←
+    Eng.consecutive.closure_1.Insts.CoreOpsFunctionFnMutPairU32U32Bool.call_mut
+      ((), e) (i, i1)
+  if b
+  then
+    let (_, e1) := f1
+    let i2 ← Slice.index_usize v 2#usize
+    let (b1, _, _) ←
+      Eng.consecutive.closure_1.Insts.CoreOpsFunctionFnMutPairU32U32Bool.call_mut
+        ((), e1) (i1, i2)
+    ok (b1, f)
+  else ok (false, f)
+
+/-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::consecutive]:
+    Source: 'tests/src/closures-mut-captures.rs', lines 44:4-47:5
+    Visibility: public -/
+def Eng.consecutive
+  (self : Eng) (v : Slice Std.U32) :
+  Result (Bool × Eng × (Eng → Eng))
+  := do
+  let (b, _) ← both_pairs0closure_1 v ((), self)
+  let back'a := fun (self1 : Eng) => { self with t := self1.t }
+  ok (b, self, back'a)
+
 /-- [closures_mut_captures::call_mut_twice]:
-    Source: 'tests/src/closures-mut-captures.rs', lines 44:0-48:1 -/
+    Source: 'tests/src/closures-mut-captures.rs', lines 50:0-54:1 -/
 def call_mut_twice
   {T0 : Type _} (coreopsfunctionFnMutT0TupleMut0VecU32U32Inst :
   core.ops.function.FnMutT0TupleMut0T1T2 T0 (alloc.vec.Vec Std.U32) Std.U32)
@@ -329,7 +404,7 @@ def call_mut_twice
   ok (i, v2)
 
 /-- [closures_mut_captures::push_counter::{impl core::ops::function::FnMut<(&'_1 mut alloc::vec::Vec<u32>,), u32> for closures_mut_captures::push_counter::{closure}<'_0>}::call_mut]:
-    Source: 'tests/src/closures-mut-captures.rs', lines 52:22-56:5 -/
+    Source: 'tests/src/closures-mut-captures.rs', lines 58:22-62:5 -/
 def push_counter.closure.Insts.CoreOpsFunctionFnMutTupleMut1VecU32U32.call_mut
   (c : push_counter.closure) (tupled_args : alloc.vec.Vec Std.U32) :
   Result (Std.U32 × push_counter.closure × (push_counter.closure →
@@ -341,7 +416,7 @@ def push_counter.closure.Insts.CoreOpsFunctionFnMutTupleMut1VecU32U32.call_mut
   ok (i, i, back, tupled_args1)
 
 /-- [closures_mut_captures::call_mut_twice::<_, closures_mut_captures::push_counter::{closure}<_>>]:
-    Source: 'tests/src/closures-mut-captures.rs', lines 44:0-48:1 -/
+    Source: 'tests/src/closures-mut-captures.rs', lines 50:0-54:1 -/
 def call_mut_twice0closure
   (v : alloc.vec.Vec Std.U32) (f : push_counter.closure) :
   Result (Std.U32 × (alloc.vec.Vec Std.U32) × push_counter.closure)
@@ -357,7 +432,7 @@ def call_mut_twice0closure
   ok (i, v2, call_mut_back i1)
 
 /-- [closures_mut_captures::push_counter]:
-    Source: 'tests/src/closures-mut-captures.rs', lines 51:0-57:1
+    Source: 'tests/src/closures-mut-captures.rs', lines 57:0-63:1
     Visibility: public -/
 def push_counter
   (v : alloc.vec.Vec Std.U32) (k : Std.U32) :
@@ -366,8 +441,208 @@ def push_counter
   let (i, v1, c) ← call_mut_twice0closure v k
   ok (i, v1, c)
 
+/-- [closures_mut_captures::both_pairs]:
+    Source: 'tests/src/closures-mut-captures.rs', lines 65:0-67:1 -/
+def both_pairs
+  {T0 : Type _} (coreopsfunctionFnMutT0PairU32U32BoolInst :
+  core.ops.function.FnMut T0 (Std.U32 × Std.U32) Bool) (v : Slice Std.U32)
+  (f : T0) :
+  Result Bool
+  := do
+  let i ← Slice.index_usize v 0#usize
+  let i1 ← Slice.index_usize v 1#usize
+  let (b, f1) ← coreopsfunctionFnMutT0PairU32U32BoolInst.call_mut f (i, i1)
+  if b
+  then
+    let i2 ← Slice.index_usize v 2#usize
+    let (b1, _) ←
+      coreopsfunctionFnMutT0PairU32U32BoolInst.call_mut f1 (i1, i2)
+    ok b1
+  else ok false
+
+/-- Trait declaration: [closures_mut_captures::Visit]
+    Source: 'tests/src/closures-mut-captures.rs', lines 69:0-80:1
+    Visibility: public -/
+structure Visit (Self : Type _) where
+  size : Self → Result Std.U32
+  each : forall {T1 : Type} (coreopsfunctionFnMutPTupleU32TupleInst :
+    core.ops.function.FnMut T1 Std.U32 Unit), Self → T1 → Result Unit
+
+/-- [closures_mut_captures::Visit::each]: loop body 0:
+    Source: 'tests/src/closures-mut-captures.rs', lines 75:8-78:9
+    Visibility: public -/
+@[rust_loop_body, trait_default]
+def Visit.each.default_loop.body
+  {Self : Type _} {T1 : Type _} (VisitInst : Visit Self)
+  (coreopsfunctionFnMutT1TupleU32TupleInst : core.ops.function.FnMut T1 Std.U32
+  Unit) (self : Self) (f : T1) (i : Std.U32) :
+  Result (ControlFlow (T1 × Std.U32) Unit)
+  := do
+  let i1 ← VisitInst.size self
+  if i < i1
+  then
+    let (_, f1) ← coreopsfunctionFnMutT1TupleU32TupleInst.call_mut f i
+    let i2 ← i + 1#u32
+    ok (cont (f1, i2))
+  else ok (done ())
+
+/-- [closures_mut_captures::Visit::each]: loop 0:
+    Source: 'tests/src/closures-mut-captures.rs', lines 75:8-78:9
+    Visibility: public -/
+@[rust_loop, trait_default]
+def Visit.each.default_loop
+  {Self : Type _} {T1 : Type _} (VisitInst : Visit Self)
+  (coreopsfunctionFnMutT1TupleU32TupleInst : core.ops.function.FnMut T1 Std.U32
+  Unit) (self : Self) (f : T1) (i : Std.U32) :
+  Result Unit
+  := do
+  loop
+    (fun (f1, i1) => Visit.each.default_loop.body VisitInst
+      coreopsfunctionFnMutT1TupleU32TupleInst self f1 i1)
+    (f, i)
+
+/-- [closures_mut_captures::Visit::each]:
+    Source: 'tests/src/closures-mut-captures.rs', lines 73:4-79:5
+    Visibility: public -/
+@[reducible, trait_default]
+def Visit.each.default
+  {Self : Type _} {T1 : Type _} (VisitInst : Visit Self)
+  (coreopsfunctionFnMutT1TupleU32TupleInst : core.ops.function.FnMut T1 Std.U32
+  Unit) (self : Self) (f : T1) :
+  Result Unit
+  := do
+  Visit.each.default_loop VisitInst coreopsfunctionFnMutT1TupleU32TupleInst
+    self f 0#u32
+
+/-- [closures_mut_captures::sum_upto::{impl core::ops::function::FnMut<(u32,), ()> for closures_mut_captures::sum_upto::{closure#1}<'_0>}::call_mut]:
+    Source: 'tests/src/closures-mut-captures.rs', lines 93:11-93:24 -/
+def sum_upto.closure_1.Insts.CoreOpsFunctionFnMutTupleU32Tuple.call_mut
+  (c : sum_upto.closure_1) (tupled_args : Std.U32) :
+  Result (Unit × sum_upto.closure_1 × (sum_upto.closure_1 →
+    sum_upto.closure_1))
+  := do
+  let i ← c + tupled_args
+  let back := fun c1 => c1
+  ok ((), i, back)
+
+/-- [closures_mut_captures::Visit::each::<_, _, closures_mut_captures::sum_upto::{closure#1}<_>>]: loop body 0:
+    Source: 'tests/src/closures-mut-captures.rs', lines 75:8-78:9
+    Visibility: public -/
+@[rust_loop_body, trait_default]
+def Visit.each0T0closure_1.default_loop.body
+  {T0 : Type _} (VisitInst : Visit T0) (self : T0) (back : Std.U32 → Std.U32)
+  (i : Std.U32) (i1 : Std.U32) :
+  Result (ControlFlow ((Std.U32 → Std.U32) × Std.U32 × Std.U32) Std.U32)
+  := do
+  let i2 ← VisitInst.size self
+  if i1 < i2
+  then
+    let (_, f, call_mut_back) ←
+      sum_upto.closure_1.Insts.CoreOpsFunctionFnMutTupleU32Tuple.call_mut i i1
+    let i3 ← i1 + 1#u32
+    ok (cont (fun i4 => let i5 := call_mut_back i4
+                        back i5, f, i3))
+  else ok (done (back i))
+
+/-- [closures_mut_captures::Visit::each::<_, _, closures_mut_captures::sum_upto::{closure#1}<_>>]: loop 0:
+    Source: 'tests/src/closures-mut-captures.rs', lines 75:8-78:9
+    Visibility: public -/
+@[rust_loop, trait_default]
+def Visit.each0T0closure_1.default_loop
+  {T0 : Type _} (VisitInst : Visit T0) (back : Std.U32 → Std.U32) (self : T0)
+  (i : Std.U32) (i1 : Std.U32) :
+  Result Std.U32
+  := do
+  loop
+    (fun (back1, i2, i3) => Visit.each0T0closure_1.default_loop.body VisitInst
+      self back1 i2 i3)
+    (back, i, i1)
+
+/-- [closures_mut_captures::Visit::each::<_, _, closures_mut_captures::sum_upto::{closure#1}<_>>]:
+    Source: 'tests/src/closures-mut-captures.rs', lines 73:4-79:5
+    Visibility: public -/
+@[trait_default]
+def Visit.each0T0closure_1.default
+  {T0 : Type _} (VisitInst : Visit T0) (self : T0) (f : sum_upto.closure_1) :
+  Result sum_upto.closure_1
+  := do
+  let back ←
+    Visit.each0T0closure_1.default_loop VisitInst (fun i => i) self f 0#u32
+  ok back
+
+/-- [closures_mut_captures::Upto]
+    Source: 'tests/src/closures-mut-captures.rs', lines 82:0-82:25
+    Visibility: public -/
+@[reducible]
+def Upto := Std.U32
+
+/-- [closures_mut_captures::{impl closures_mut_captures::Visit for closures_mut_captures::Upto}::size]:
+    Source: 'tests/src/closures-mut-captures.rs', lines 85:4-87:5
+    Visibility: public -/
+def Upto.Insts.Closures_mut_capturesVisit.size
+  (self : Upto) : Result Std.U32 := do
+  ok self
+
+/-- Trait implementation: [closures_mut_captures::{impl closures_mut_captures::Visit for closures_mut_captures::Upto}]
+    Source: 'tests/src/closures-mut-captures.rs', lines 84:0-88:1 -/
+@[reducible]
+impl_def Upto.Insts.Closures_mut_capturesVisit : Visit Upto := {
+  size := Upto.Insts.Closures_mut_capturesVisit.size
+  each := fun {T1 : Type} (coreopsfunctionFnMutPTupleU32TupleInst :
+    core.ops.function.FnMut T1 Std.U32 Unit) => Visit.each.default
+    Upto.Insts.Closures_mut_capturesVisit
+    coreopsfunctionFnMutPTupleU32TupleInst
+}
+
+/-- [closures_mut_captures::sum_upto::{closure}]
+    Source: 'tests/src/closures-mut-captures.rs', lines 92:11-92:17 -/
+@[reducible]
+def sum_upto.closure := Unit
+
+/-- [closures_mut_captures::sum_upto::{impl core::ops::function::FnMut<(u32,), ()> for closures_mut_captures::sum_upto::{closure}}::call_mut]:
+    Source: 'tests/src/closures-mut-captures.rs', lines 92:11-92:17 -/
+def sum_upto.closure.Insts.CoreOpsFunctionFnMutTupleU32Tuple.call_mut
+  (c : sum_upto.closure) (tupled_args : Std.U32) :
+  Result (Unit × sum_upto.closure)
+  := do
+  ok ((), c)
+
+/-- [closures_mut_captures::sum_upto::{impl core::ops::function::FnOnce<(u32,), ()> for closures_mut_captures::sum_upto::{closure}}::call_once]:
+    Source: 'tests/src/closures-mut-captures.rs', lines 92:11-92:17 -/
+def sum_upto.closure.Insts.CoreOpsFunctionFnOnceTupleU32Tuple.call_once
+  (c : sum_upto.closure) (i : Std.U32) : Result Unit := do
+  let _ ←
+    sum_upto.closure.Insts.CoreOpsFunctionFnMutTupleU32Tuple.call_mut c i
+  ok ()
+
+/-- Trait implementation: [closures_mut_captures::sum_upto::{impl core::ops::function::FnOnce<(u32,), ()> for closures_mut_captures::sum_upto::{closure}}]
+    Source: 'tests/src/closures-mut-captures.rs', lines 92:11-92:17 -/
+@[reducible]
+def sum_upto.closure.Insts.CoreOpsFunctionFnOnceTupleU32Tuple :
+  core.ops.function.FnOnce sum_upto.closure Std.U32 Unit := {
+  call_once :=
+    sum_upto.closure.Insts.CoreOpsFunctionFnOnceTupleU32Tuple.call_once
+}
+
+/-- Trait implementation: [closures_mut_captures::sum_upto::{impl core::ops::function::FnMut<(u32,), ()> for closures_mut_captures::sum_upto::{closure}}]
+    Source: 'tests/src/closures-mut-captures.rs', lines 92:11-92:17 -/
+@[reducible]
+def sum_upto.closure.Insts.CoreOpsFunctionFnMutTupleU32Tuple :
+  core.ops.function.FnMut sum_upto.closure Std.U32 Unit := {
+  FnOnceInst := sum_upto.closure.Insts.CoreOpsFunctionFnOnceTupleU32Tuple
+  call_mut := sum_upto.closure.Insts.CoreOpsFunctionFnMutTupleU32Tuple.call_mut
+}
+
+/-- [closures_mut_captures::sum_upto]:
+    Source: 'tests/src/closures-mut-captures.rs', lines 90:0-94:1
+    Visibility: public -/
+def sum_upto (n : Std.U32) (acc : Std.U32) : Result Std.U32 := do
+  Visit.each.default Upto.Insts.Closures_mut_capturesVisit
+    sum_upto.closure.Insts.CoreOpsFunctionFnMutTupleU32Tuple n ()
+  Visit.each0T0closure_1.default Upto.Insts.Closures_mut_capturesVisit n acc
+
 /-- [closures_mut_captures::test_count]:
-    Source: 'tests/src/closures-mut-captures.rs', lines 60:0-66:1
+    Source: 'tests/src/closures-mut-captures.rs', lines 97:0-103:1
     Visibility: public -/
 def test_count : Result Unit := do
   let (r, e, count_back) ←
@@ -406,7 +681,7 @@ def test_count : Result Unit := do
 #guard (test_count).reducesTo ()
 
 /-- [closures_mut_captures::test_push_counter]:
-    Source: 'tests/src/closures-mut-captures.rs', lines 69:0-74:1
+    Source: 'tests/src/closures-mut-captures.rs', lines 106:0-111:1
     Visibility: public -/
 def test_push_counter : Result Unit := do
   let (i, v, k) ← push_counter (alloc.vec.Vec.new Std.U32) 10#u32
@@ -423,5 +698,30 @@ def test_push_counter : Result Unit := do
 
 /- Unit test for [closures_mut_captures::test_push_counter] -/
 #guard (test_push_counter).reducesTo ()
+
+/-- [closures_mut_captures::test_consecutive]:
+    Source: 'tests/src/closures-mut-captures.rs', lines 114:0-119:1
+    Visibility: public -/
+def test_consecutive : Result Unit := do
+  let s ← lift (Array.to_slice (Array.make 3#usize [ 1#u32, 2#u32, 3#u32 ]))
+  let (b, e, _) ←
+    Eng.consecutive { t := (alloc.vec.Vec.new Std.U32), d := 3#u32 } s
+  massert b
+  let s1 ← lift (Array.to_slice (Array.make 3#usize [ 1#u32, 3#u32, 4#u32 ]))
+  let (b1, _, _) ← Eng.consecutive e s1
+  massert (¬ b1)
+
+/- Unit test for [closures_mut_captures::test_consecutive] -/
+#guard (test_consecutive).reducesTo ()
+
+/-- [closures_mut_captures::test_sum_upto]:
+    Source: 'tests/src/closures-mut-captures.rs', lines 122:0-126:1
+    Visibility: public -/
+def test_sum_upto : Result Unit := do
+  let acc ← sum_upto 4#u32 1#u32
+  massert (acc = 7#u32)
+
+/- Unit test for [closures_mut_captures::test_sum_upto] -/
+#guard (test_sum_upto).reducesTo ()
 
 end closures_mut_captures

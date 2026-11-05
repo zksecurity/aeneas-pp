@@ -39,6 +39,12 @@ impl<'a> Eng<'a> {
         })?;
         Ok((c, seen))
     }
+
+    /// The closure captures [self] by shared borrow, and another closure.
+    pub fn consecutive(&mut self, v: &[u32]) -> bool {
+        let shift = |e: &Self, x: u32| e.d + x;
+        both_pairs(v, |a, b| shift(self, b) == shift(self, a) + 1)
+    }
 }
 
 fn call_mut_twice(v: &mut Vec<u32>, mut f: impl FnMut(&mut Vec<u32>) -> u32) -> u32 {
@@ -56,6 +62,37 @@ pub fn push_counter(v: &mut Vec<u32>, k: &mut u32) -> u32 {
     })
 }
 
+fn both_pairs(v: &[u32], mut f: impl FnMut(u32, u32) -> bool) -> bool {
+    f(v[0], v[1]) && f(v[1], v[2])
+}
+
+pub trait Visit {
+    fn size(&self) -> u32;
+
+    /// A default method, which Charon specializes for the closures capturing mutable borrows.
+    fn each(&self, mut f: impl FnMut(u32)) {
+        let mut i = 0;
+        while i < self.size() {
+            f(i);
+            i += 1;
+        }
+    }
+}
+
+pub struct Upto(pub u32);
+
+impl Visit for Upto {
+    fn size(&self) -> u32 {
+        self.0
+    }
+}
+
+pub fn sum_upto(n: u32, acc: &mut u32) {
+    let u = Upto(n);
+    u.each(|_| ());
+    u.each(|i| *acc += i);
+}
+
 #[verify::test]
 pub fn test_count() {
     let mut t = Vec::new();
@@ -71,4 +108,19 @@ pub fn test_push_counter() {
     let mut k = 10;
     assert!(push_counter(&mut v, &mut k) == 23);
     assert!(k == 12 && v[0] == 11 && v[1] == 12);
+}
+
+#[verify::test]
+pub fn test_consecutive() {
+    let mut t = Vec::new();
+    let mut e = Eng { t: &mut t, d: 3 };
+    assert!(e.consecutive(&[1, 2, 3]));
+    assert!(!e.consecutive(&[1, 3, 4]));
+}
+
+#[verify::test]
+pub fn test_sum_upto() {
+    let mut acc = 1;
+    sum_upto(4, &mut acc);
+    assert!(acc == 7);
 }

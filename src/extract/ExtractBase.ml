@@ -1773,10 +1773,21 @@ let ctx_compute_trait_impl_name_raw (ctx : extraction_ctx)
   match trait_impl.item_meta.attr_info.rename with
   | None -> (
       let params = trait_impl.generics in
-      let args = trait_impl.impl_trait.generics in
-      let name =
-        ctx_prepare_name trait_impl.item_meta ctx trait_decl.item_meta.name
+      (* The name of a partial instantiation of a trait declaration includes the
+         arguments of the instantiation: we name the implementation after the
+         trait it instantiates, applied to the instantiated arguments (in
+         particular, the self type is the one of the implementation) *)
+      let trait_decl_name, args =
+        match List.rev trait_decl.item_meta.name with
+        | PeInstantiated binder :: rest_rev
+          when LlbcAstUtils.name_is_partially_instantiated
+                 trait_decl.item_meta.name ->
+            ( List.rev rest_rev,
+              Charon.Substitute.instantiate_name_generics binder
+                trait_impl.impl_trait.generics )
+        | _ -> (trait_decl.item_meta.name, trait_impl.impl_trait.generics)
       in
+      let name = ctx_prepare_name trait_impl.item_meta ctx trait_decl_name in
       (* Check if the impl is a blanket impl and add a suffix to avoid name
              clashes if it is the case *)
       let is_blanket =
@@ -1804,8 +1815,7 @@ let ctx_compute_trait_impl_name_raw (ctx : extraction_ctx)
             let params = trait_impl.generics in
             let args = trait_impl.impl_trait.generics in
             let name =
-              ctx_prepare_name trait_impl.item_meta ctx
-                trait_decl.item_meta.name
+              ctx_prepare_name trait_impl.item_meta ctx trait_decl_name
             in
             let name =
               opt_rename_llbc_name trait_impl.item_meta.attr_info name
@@ -1858,8 +1868,8 @@ let ctx_compute_trait_impl_name_raw (ctx : extraction_ctx)
 
             (* Generate the name for the trait *)
             let trait_name =
-              name_with_generics_to_simple_name ctx.trans_ctx
-                trait_decl.item_meta.name params args
+              name_with_generics_to_simple_name ctx.trans_ctx trait_decl_name
+                params args
               |> flatten_name_no_sep
             in
             [%ldebug "trait_name: " ^ trait_name];
