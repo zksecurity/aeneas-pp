@@ -3423,6 +3423,43 @@ let extract_trait_decl_extra_info (ctx : extraction_ctx) (fmt : F.formatter)
 (** Small helper.
 
     Extract the items for a method in a trait impl. *)
+(** The implementations of [FnMut::call_mut] give the closure state among the
+    other components of their result (see
+    {!SymbolicToPureTypes.fn_mut_receiver_position}), while the record of
+    [FnMut] gives it separately. Returns the number of components and the
+    position of the closure state, if the record needs to repack them. *)
+let fn_mut_call_mut_repacking (ctx : extraction_ctx) (impl : trait_impl)
+    (method_decl_id : FunDeclId.id) : (int * int) option =
+  let decls_ctx = ctx.trans_ctx in
+  match
+    (TraitDeclId.Map.find impl.impl_trait.trait_decl_id
+       decls_ctx.crate.trait_decls)
+      .item_meta
+      .lang_item
+  with
+  | Some RustcLangItemFnMut ->
+      let fdef = FunDeclId.Map.find method_decl_id decls_ctx.crate.fun_decls in
+      let span = Some fdef.item_meta.span in
+      let inst_sg =
+        SymbolicToPureTypes.inst_fun_sig_of_bound_sig span decls_ctx
+          (LlbcAstUtils.bound_fun_sig_of_decl fdef)
+      in
+      let dsg =
+        (SymbolicToPureTypes.translate_fun_sigs_from_decl decls_ctx fdef).dsg
+          .fun_ty
+      in
+      let num_components =
+        List.length (SymbolicToPureTypes.raw_output_components dsg)
+      in
+      let receiver =
+        SymbolicToPureTypes.fn_mut_receiver_position span inst_sg dsg
+      in
+      (* The tuples are nested to the right: the last component of a pair is
+         the second component *)
+      if receiver = num_components - 1 && num_components <= 2 then None
+      else Some (num_components, receiver)
+  | _ -> None
+
 let extract_trait_impl_method_items_aux (ctx : extraction_ctx)
     (fmt : F.formatter) (impl : trait_impl) (method_id : trait_method_id)
     (fn : fun_decl_ref binder) : unit =
@@ -3459,11 +3496,33 @@ let extract_trait_impl_method_items_aux (ctx : extraction_ctx)
 
     (* Extract the function call *)
     F.pp_print_space fmt ();
-    let fun_name = ctx_get_local_function span method_decl_id None ctx in
-    F.pp_print_string fmt fun_name;
-    extract_generic_args span ctx fmt TypeDeclId.TreeSet.empty
-      ~explicit:(Some trans.f.signature.explicit_info)
-      fn.binder_value.fun_generics
+    let extract_fun () =
+      let fun_name = ctx_get_local_function span method_decl_id None ctx in
+      F.pp_print_string fmt fun_name;
+      extract_generic_args span ctx fmt TypeDeclId.TreeSet.empty
+        ~explicit:(Some trans.f.signature.explicit_info)
+        fn.binder_value.fun_generics
+    in
+    match fn_mut_call_mut_repacking ctx impl method_decl_id with
+    | None -> extract_fun ()
+    | Some (num_components, receiver) ->
+        (* The record of [FnMut] gives the closure state separately from the
+           other components of the result of the implementation *)
+        [%cassert] span (backend () = Lean) "Unimplemented";
+        let component i = "x" ^ string_of_int i in
+        let components = List.init num_components component in
+        let others = List.filter (fun x -> x <> component receiver) components in
+        let tuple xs =
+          match xs with
+          | [] -> "()"
+          | [ x ] -> x
+          | _ -> "(" ^ String.concat ", " xs ^ ")"
+        in
+        F.pp_print_string fmt "fun s a => (";
+        extract_fun ();
+        F.pp_print_string fmt
+          (" s a) >>= fun " ^ tuple components ^ " => ok (" ^ tuple others ^ ", "
+          ^ component receiver ^ ")")
   in
 
   extract_trait_impl_item ctx fmt fun_name ty

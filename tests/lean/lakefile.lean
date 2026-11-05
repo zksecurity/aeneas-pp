@@ -27,6 +27,7 @@ package «tests» {}
 @[default_target] lean_lib ChunksExact
 @[default_target] lean_lib ClosureRecursion
 @[default_target] lean_lib Closures
+@[default_target] lean_lib ClosuresFnmutArgs
 @[default_target] lean_lib ClosuresMutArgs
 @[default_target] lean_lib Constants
 @[default_target] lean_lib ConstantsLean

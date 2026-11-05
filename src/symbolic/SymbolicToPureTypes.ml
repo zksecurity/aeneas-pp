@@ -1093,14 +1093,7 @@ and lower_fn_trait_output (span : span option) (decls_ctx : C.decls_ctx)
     match trait_decl.item_meta.lang_item with
     | Some RustcLangItemFnOnce -> Some "call_once"
     | Some RustcLangItemFn -> Some "call"
-    | Some RustcLangItemFnMut ->
-        (* The calls to [call_mut] give back the closure state before the
-           values given back to the arguments: we don't support the latter yet *)
-        [%cassert_opt_span] span
-          (not (List.exists has_mut_borrows tr.generics.types))
-          "Closures implementing [FnMut] with mutable borrows in their arguments \
-           are not supported yet";
-        None
+    | Some RustcLangItemFnMut -> Some "call_mut"
     | _ -> None
   in
   Option.map
@@ -1227,8 +1220,60 @@ and lower_fn_trait_output (span : span option) (decls_ctx : C.decls_ctx)
           inst_sg sg.item_binder_value.output
           (List.map (fun _ -> None) inputs)
       in
-      compute_raw_output_ty_from_decomposed dsg)
+      match trait_decl.item_meta.lang_item with
+      | Some RustcLangItemFnMut ->
+          (* The record gives the closure state separately *)
+          let receiver = fn_mut_receiver_position span inst_sg dsg in
+          mk_simpl_tuple_ty
+            (List.filteri
+               (fun i _ -> i <> receiver)
+               (raw_output_components dsg))
+      | _ -> compute_raw_output_ty_from_decomposed dsg)
     method_name
+
+(** The position of the closure state in the result of a call to [call_mut]
+    (among the output of the call and the values given back, see
+    {!raw_output_components}), for an instantiated signature of [call_mut] and
+    its decomposition. The record of [FnMut] gives the closure state separately
+    ([call_mut : Self → Args → Result (Output × Self)]), while the calls to the
+    implementations give it at this position. *)
+and fn_mut_receiver_position (span : span option) (sg : A.inst_fun_sig)
+    (dsg : decomposed_fun_type) : int =
+  let receiver_region =
+    match sg.inputs with
+    | T.TRef (r, _, RMut) :: _ -> r
+    | _ -> [%internal_error_opt_span] span
+  in
+  let group =
+    [%unwrap_opt_span] span
+      (List.find_opt
+         (fun (rg : T.region_group) -> List.mem receiver_region rg.regions)
+         sg.regions_hierarchy)
+      "Could not find the region group of the receiver"
+  in
+  let backs =
+    List.combine
+      (RegionGroupId.Map.keys dsg.back_sg)
+      (compute_back_tys dsg)
+  in
+  (* The closure state is given back right away (the backward function of the
+     receiver has no inputs): it is a value of the result of the call *)
+  let back = RegionGroupId.Map.find group.id dsg.back_sg in
+  [%cassert_opt_span] span
+    (List.for_all (fun (_, inputs) -> inputs = []) back.inputs
+    && List.length (List.concat_map snd back.outputs) = 1)
+    "Closures implementing [FnMut] whose state is not given back right away \
+     are not supported yet";
+  let rec position i backs =
+    match backs with
+    | [] -> [%internal_error_opt_span] span
+    | (gid, back) :: backs ->
+        if gid = group.id then (
+          [%sanity_check_opt_span] span (Option.is_some back);
+          i)
+        else position (if Option.is_some back then i + 1 else i) backs
+  in
+  position (if dsg.fwd_info.ignore_output then 0 else 1) backs
 
 (** The output of a function which decides whether we eliminate its (unit)
     output (see [uninst_output] in
@@ -1407,15 +1452,18 @@ and compute_back_tys (dsg : Pure.decomposed_fun_type) : ty option list =
     the types of the returned backward functions). *)
 and compute_raw_output_ty_from_decomposed (dsg : Pure.decomposed_fun_type) : ty
     =
+  mk_simpl_tuple_ty (raw_output_components dsg)
+
+(** The components of the output of a function, from a decomposed signature,
+    before wrapping it in the error monad if the function can fail: the value
+    returned by the forward function and the backward functions. *)
+and raw_output_components (dsg : Pure.decomposed_fun_type) : ty list =
   (* Compute the arrow types for all the backward functions *)
   let back_tys = List.filter_map (fun x -> x) (compute_back_tys dsg) in
   (* Group the forward output and the types of the backward functions.
      We might need to ignore the output of the forward function (if it is unit
      for instance) *)
-  let tys =
-    if dsg.fwd_info.ignore_output then back_tys else dsg.fwd_output :: back_tys
-  in
-  mk_simpl_tuple_ty tys
+  if dsg.fwd_info.ignore_output then back_tys else dsg.fwd_output :: back_tys
 
 (** Compute the output type of a function, from a decomposed signature. *)
 and compute_output_ty_from_decomposed (dsg : Pure.decomposed_fun_type) : ty =

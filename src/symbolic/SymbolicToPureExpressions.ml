@@ -545,7 +545,7 @@ and translate_function_call_aux (call : S.call) (e : S.expr) (ctx : bs_ctx) :
         let effect_info = get_fun_effect_info ctx fid_t None in
         (* Generate the variables for the backward functions returned by the forward
            function. *)
-        let ctx, ignore_fwd_output, back_funs =
+        let ctx, ignore_fwd_output, back_funs, fn_mut_receiver =
           (* We need to compute the signatures of the backward functions. *)
           let sg = Option.get call.sg in
           let inst_sg = Option.get call.inst_sg in
@@ -631,8 +631,20 @@ and translate_function_call_aux (call : S.call) (e : S.expr) (ctx : bs_ctx) :
             ctx
           in
 
-          (* *)
-          (ctx, dsg.fwd_info.ignore_output, back_funs)
+          (* The calls through [FnMut::call_mut] give the closure state
+             separately (see {!fn_mut_receiver_position}) *)
+          let fn_mut_receiver =
+            match fid with
+            | TraitMethod (trait_ref, _)
+              when (T.TraitDeclId.Map.find trait_ref.trait_decl_ref.id
+                      decls_ctx.crate.trait_decls)
+                     .item_meta
+                     .lang_item
+                   = Some RustcLangItemFnMut ->
+                Some (fn_mut_receiver_position (Some ctx.span) inst_sg dsg)
+            | _ -> None
+          in
+          (ctx, dsg.fwd_info.ignore_output, back_funs, fn_mut_receiver)
         in
         (* Compute the pattern for the destination *)
         let ctx, dest = fresh_var_for_symbolic_value call.dest ctx in
@@ -650,7 +662,14 @@ and translate_function_call_aux (call : S.call) (e : S.expr) (ctx : bs_ctx) :
           let vars =
             if ignore_fwd_output then back_funs else dest :: back_funs
           in
-          mk_simpl_tuple_pat vars
+          match fn_mut_receiver with
+          | None -> mk_simpl_tuple_pat vars
+          | Some receiver ->
+              mk_simpl_tuple_pat
+                [
+                  mk_simpl_tuple_pat (List.filteri (fun i _ -> i <> receiver) vars);
+                  List.nth vars receiver;
+                ]
         in
         (* Register the forward call (some information, for instance about
            the places where the values come from, will be useful later to
