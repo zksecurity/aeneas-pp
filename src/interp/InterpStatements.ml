@@ -1222,6 +1222,11 @@ and eval_switch_with_join (config : config) (span : Meta.span)
             | _ -> abs)
         joined_ctx
     in
+    (* Introducing the continuations destructures the abstractions: we put
+       their values back in the canonical order the matching expects *)
+    let joined_ctx =
+      InterpAbs.reorder_fresh_abs span false ctx0_aids joined_ctx
+    in
     [%ldebug
       "Joined ctx (after updating the abs conts):\n"
       ^ eval_ctx_to_string joined_ctx];

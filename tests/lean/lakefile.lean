@@ -29,6 +29,7 @@ package «tests» {}
 @[default_target] lean_lib Closures
 @[default_target] lean_lib ClosuresFnmutArgs
 @[default_target] lean_lib ClosuresMutArgs
+@[default_target] lean_lib ClosuresMutCaptures
 @[default_target] lean_lib Constants
 @[default_target] lean_lib ConstantsLean
 @[default_target] lean_lib ConstShadow

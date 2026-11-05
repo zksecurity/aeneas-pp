@@ -1514,7 +1514,7 @@ let bind_outputs_from_output_input (span : Meta.span) (ctx : eval_ctx)
 
                  TODO: make more precise
               *)
-              if is_eignored child.value && is_eignored given_back.value then
+              if is_eignored_adt child && is_eignored_adt given_back then
                 { pat = PIgnored; ty = output.ty }
               else if
                 not (ty_has_mut_borrows ctx.type_ctx.type_infos given_back.ty)

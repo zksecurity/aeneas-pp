@@ -107,6 +107,14 @@ let is_eignored (v : evalue) : bool =
   | EIgnored _ -> true
   | _ -> false
 
+(** Whether an evalue doesn't contain anything: it is ignored, or an ADT whose
+    fields are all ignored *)
+let rec is_eignored_adt (v : tevalue) : bool =
+  match v.value with
+  | EIgnored _ -> true
+  | EAdt adt -> List.for_all is_eignored_adt adt.fields
+  | _ -> false
+
 let is_symbolic (v : value) : bool =
   match v with
   | VSymbolic _ -> true

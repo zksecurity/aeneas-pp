@@ -550,7 +550,7 @@ def find_mut_loop.body
     Std.U32) × (Option Std.U32 → Slice Std.U32)))
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum (Std.U32 × (Std.U32 → Slice Std.U32) × (Std.U32 →
+  let s : _root_.Sum (Std.U32 × (Std.U32 → Std.U32) × (Std.U32 → Slice
     Std.U32)) (_root_.Sum ((Slice Std.U32) × Std.U32 × Std.Usize) ((Option
     Std.U32) × Std.U32 × (Option Std.U32 → Slice Std.U32))) ←
     if i < i1
@@ -560,7 +560,7 @@ def find_mut_loop.body
       if i2 = x
       then
         let (i3, index_mut_back) ← Slice.index_mut_usize a i
-        ok (Sum.inl (i3, index_mut_back, fun i4 => i4))
+        ok (Sum.inl (i3, fun i4 => i4, index_mut_back))
       else let i3 ← i + 1#usize
            ok (Sum.inr (Sum.inl (a, x, i3)))
     else ok (Sum.inr (Sum.inr (none, x, fun o => a)))
@@ -572,8 +572,8 @@ def find_mut_loop.body
         let i3 := match o with
                   | some i4 => i4
                   | _ => i2
-        let i4 := back1 i3
-        back i4))
+        let i4 := back i3
+        back1 i4))
   | Sum.inr s1 =>
     match s1 with
     | Sum.inl t => let (s2, i2, i3) := t

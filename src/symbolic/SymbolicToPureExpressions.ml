@@ -464,11 +464,9 @@ and check_fn_trait_dictionaries (ctx : bs_ctx) (span : Meta.span)
     (fid : A.FunDeclId.id) (generics : generic_args) : unit =
   let decls_ctx = ctx.decls_ctx in
   let is_fn_trait (id : trait_decl_id) =
-    match
-      (T.TraitDeclId.Map.find id decls_ctx.crate.trait_decls).item_meta.lang_item
-    with
-    | Some (RustcLangItemFnOnce | RustcLangItemFnMut | RustcLangItemFn) -> true
-    | _ -> false
+    LlbcAstUtils.closure_trait_lang_item
+      (T.TraitDeclId.Map.find id decls_ctx.crate.trait_decls)
+    <> None
   in
   (* If the signature of the function couldn't be translated, translating the
      call fails anyway *)
@@ -638,10 +636,9 @@ and translate_function_call_aux (call : S.call) (e : S.expr) (ctx : bs_ctx) :
           let fn_mut_receiver =
             match fid with
             | TraitMethod (trait_ref, _)
-              when (T.TraitDeclId.Map.find trait_ref.trait_decl_ref.id
-                      decls_ctx.crate.trait_decls)
-                     .item_meta
-                     .lang_item
+              when LlbcAstUtils.closure_trait_lang_item
+                     (T.TraitDeclId.Map.find trait_ref.trait_decl_ref.id
+                        decls_ctx.crate.trait_decls)
                    = Some RustcLangItemFnMut ->
                 Some (fn_mut_receiver_position (Some ctx.span) inst_sg dsg)
             | _ -> None

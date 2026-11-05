@@ -42,17 +42,9 @@ let name_with_generics_to_simple_name (ctx : trans_ctx)
 let name_matcher_expr_to_simple_name span (n : NameMatcher.expr) : string =
   name_matcher_expr_to_extract_name span n
 
-(** Whether an item was obtained by partially instantiating its parent (for
-    instance by Charon's [--monomorphize-mut]): its signature differs from the
-    one of its parent, so it doesn't match the builtin definitions *)
-let name_is_partially_instantiated (name : Types.name) : bool =
-  match List.rev name with
-  | Types.PeInstantiated binder :: _ -> binder.binder_params <> TypesUtils.empty_generic_params
-  | _ -> false
-
 let match_name_find_opt (ctx : trans_ctx) (name : Types.name)
     (m : 'a NameMatcher.NameMatcherMap.t) : 'a option =
-  if name_is_partially_instantiated name then None
+  if LlbcAstUtils.name_is_partially_instantiated name then None
   else
     let mctx = NameMatcher.ctx_from_crate ctx.crate in
     ExtractBuiltin.NameMatcherMap.find_opt mctx name m
@@ -60,7 +52,7 @@ let match_name_find_opt (ctx : trans_ctx) (name : Types.name)
 let match_name_with_generics_find_opt (ctx : trans_ctx) (name : Types.name)
     (generics : Types.generic_args) (m : 'a NameMatcher.NameMatcherMap.t) :
     'a option =
-  if name_is_partially_instantiated name then None
+  if LlbcAstUtils.name_is_partially_instantiated name then None
   else
     let mctx = NameMatcher.ctx_from_crate ctx.crate in
     ExtractBuiltin.NameMatcherMap.find_with_generics_opt mctx name generics m

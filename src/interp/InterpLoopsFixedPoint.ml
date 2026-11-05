@@ -14,9 +14,6 @@ let log = Logging.loops_fixed_point_log
     such as region group ids, continuation expressions, etc. *)
 let loop_abs_reorder_and_add_info (span : Meta.span) (fixed_ids : ids_sets)
     (ctx : eval_ctx) : eval_ctx =
-  (* Reorder the fresh abstractions in the fixed-point *)
-  let fp = reorder_fresh_abs span false fixed_ids.aids ctx in
-
   (* Introduce continuation expressions. *)
   let add_abs_cont_to_abs (abs : abs) (loop_id : loop_id) : abs =
     InterpAbs.add_abs_cont_to_abs span ctx abs (ELoop (abs.abs_id, loop_id))
@@ -35,10 +32,12 @@ let loop_abs_reorder_and_add_info (span : Meta.span) (fixed_ids : ids_sets)
     visitor#visit_eval_ctx () ctx
   in
 
-  let fp = add_abs_conts fp in
+  let fp = add_abs_conts ctx in
 
-  (* Return *)
-  fp
+  (* Reorder the fresh abstractions in the fixed-point. We do this after
+     introducing the continuations, because doing so destructures the
+     abstractions. *)
+  reorder_fresh_abs span false fixed_ids.aids fp
 
 (* TODO: remove the output ids_sets *)
 let compute_loop_entry_fixed_point (config : config) (span : Meta.span)

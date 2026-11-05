@@ -2557,7 +2557,12 @@ let match_ctxs (span : Meta.span) ~(check_equiv : bool)
                 match_abstractions ~recover:true abs0 abs1;
                 [%ltrace "Found matching abs:\n" ^ abs_to_string span ctx1 abs1];
                 Some abs1
-              with Distinct _ | Errors.RFailure ->
+              with
+              | Distinct msg ->
+                  [%ltrace "Could not match: " ^ msg];
+                  restore_maps maps;
+                  None
+              | Errors.RFailure ->
                 (* Restore the state and continue exploring *)
                 restore_maps maps;
                 None

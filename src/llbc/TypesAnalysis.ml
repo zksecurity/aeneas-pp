@@ -1062,11 +1062,7 @@ let check_fun_decl_no_bound_free_implied_bounds
   let ({ inputs; output; _ } : fun_sig) = f.signature in
   let is_fn_trait (id : trait_decl_id) =
     match TraitDeclId.Map.find_opt id trait_decls with
-    | Some d -> (
-        match d.item_meta.lang_item with
-        | Some (RustcLangItemFnOnce | RustcLangItemFnMut | RustcLangItemFn) ->
-            true
-        | _ -> false)
+    | Some d -> LlbcAstUtils.closure_trait_lang_item d <> None
     | None -> false
   in
   let mentions_bound_region (ty : ty) =

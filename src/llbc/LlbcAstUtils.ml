@@ -333,3 +333,27 @@ let mixed_group_is_funs_and_impls (ids : Charon.Meta.item_id list) : bool =
       | IdFun _ | IdTraitImpl _ -> true
       | IdType _ | IdTraitDecl _ | IdGlobal _ -> false)
     ids
+
+(** Whether an item was obtained by partially instantiating its parent (for
+    instance by Charon's [--monomorphize-mut]): its signature differs from the
+    one of its parent *)
+let name_is_partially_instantiated (name : name) : bool =
+  match List.rev name with
+  | PeInstantiated binder :: _ ->
+      binder.binder_params <> Charon.TypesUtils.empty_generic_params
+  | _ -> false
+
+(** The closure trait ([FnOnce], [FnMut], [Fn]) a trait declaration is, as
+    declared in [core]. The arguments of the closure are a parameter of the
+    trait: the signatures of its methods don't show which arguments contain
+    mutable borrows, and we take them into account in the references to the
+    trait (see {!SymbolicToPureTypes.lower_fn_trait_output}). A partial
+    instantiation of a closure trait (see {!name_is_partially_instantiated})
+    gives the arguments in the signatures of its methods: it is a trait like
+    any other. *)
+let closure_trait_lang_item (d : trait_decl) : rustc_lang_item option =
+  match d.item_meta.lang_item with
+  | Some (RustcLangItemFnOnce | RustcLangItemFnMut | RustcLangItemFn)
+    when not (name_is_partially_instantiated d.item_meta.name) ->
+      d.item_meta.lang_item
+  | _ -> None

@@ -1096,7 +1096,7 @@ and lower_fn_trait_output (span : span option) (decls_ctx : C.decls_ctx)
     TypesUtils.ty_has_mut_borrows decls_ctx.type_ctx.type_infos ty
   in
   let method_name =
-    match trait_decl.item_meta.lang_item with
+    match LlbcAstUtils.closure_trait_lang_item trait_decl with
     | Some RustcLangItemFnOnce -> Some "call_once"
     | Some RustcLangItemFn -> Some "call"
     | Some RustcLangItemFnMut -> Some "call_mut"

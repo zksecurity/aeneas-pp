@@ -3433,10 +3433,9 @@ let fn_mut_call_mut_repacking (ctx : extraction_ctx) (impl : trait_impl)
     (method_decl_id : FunDeclId.id) : (int * int) option =
   let decls_ctx = ctx.trans_ctx in
   match
-    (TraitDeclId.Map.find impl.impl_trait.trait_decl_id
-       decls_ctx.crate.trait_decls)
-      .item_meta
-      .lang_item
+    LlbcAstUtils.closure_trait_lang_item
+      (TraitDeclId.Map.find impl.impl_trait.trait_decl_id
+         decls_ctx.crate.trait_decls)
   with
   | Some RustcLangItemFnMut ->
       let fdef = FunDeclId.Map.find method_decl_id decls_ctx.crate.fun_decls in
