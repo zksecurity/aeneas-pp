@@ -1050,6 +1050,21 @@ and translate_end_abs (ectx : C.eval_ctx) (abs : V.abs)
   | V.Identity | V.CopySymbolicValue | V.Static ->
       translate_end_abs_identity ectx abs abs_level e ctx
 
+(** The number of projectors of borrows of an abstraction which handed off their
+    value at [level] (see the field [handoff] of {!Values.ended_proj_borrow_meta}) *)
+and abs_count_handoffs (abs : V.abs) (level : V.abs_level) : int =
+  let count = ref 0 in
+  let visitor =
+    object
+      inherit [_] V.iter_abs
+
+      method! visit_AEndedProjBorrows () { mvalues; _ } =
+        if mvalues.handoff = Some level then incr count
+    end
+  in
+  visitor#visit_abs () abs;
+  !count
+
 and translate_end_abstraction_synth_input (ectx : C.eval_ctx) (abs : V.abs)
     (e : S.expr) (ctx : bs_ctx) (rg_id : T.RegionGroupId.id)
     (abs_level : V.abs_level) : texpr =
@@ -1183,7 +1198,37 @@ and translate_end_abstraction_synth_input (ectx : C.eval_ctx) (abs : V.abs)
       List.combine input_values (List.map mk_texpr_from_fvar bound_values)
     in
     (* Translate the next expression *)
-    let next_e = translate_expr e ctx in
+    let next_e =
+      let back_sg = RegionGroupId.Map.find rg_id ctx.sg.fun_ty.back_sg in
+      if List.mem_assoc abs_level back_sg.outputs then (
+        (* A stage of a staged backward function (see
+           {!SymbolicToPureTypes.mk_back_ty}): it gives back the values it
+           received, which the abstraction handed off to the loans of the
+           replaced inner borrows (see the field [handoff] of
+           {!Values.ended_proj_borrow_meta}), and the next stage *)
+        [%cassert] ctx.span
+          (abs_count_handoffs abs abs_level = List.length input_values)
+          "Unimplemented: a stage of a backward function gives back values \
+           which were not handed off";
+        let next_inputs =
+          List.concat_map snd
+            (List.filter
+               (fun (level, _) -> level < abs_level)
+               (List.rev (AbsLevelMap.to_list (RegionGroupId.Map.find rg_id ctx.backward_inputs))))
+        in
+        let next_stage =
+          mk_closed_lambdas_from_fvars ctx.span next_inputs
+            (List.map (fun _ -> None) next_inputs)
+            (translate_expr e ctx)
+        in
+        mk_simpl_tuple_texpr ctx.span
+          [
+            mk_simpl_tuple_texpr ctx.span
+              (List.map mk_texpr_from_fvar bound_values);
+            next_stage;
+          ])
+      else translate_expr e ctx
+    in
     (* Generate the assignemnts *)
     let monadic = false in
     mk_closed_checked_lets __FILE__ __LINE__ ctx monadic eqs next_e)
@@ -1902,9 +1947,22 @@ and translate_forward_end (return_value : (C.eval_ctx * V.tvalue) option)
 
           let e = T.RegionGroupId.Map.find bid back_e in
           let finish e =
-            (* Wrap in lambdas if necessary *)
-            (* TODO: we shouldn't flatten? *)
-            let inputs = List.flatten (List.map snd backward_inputs) in
+            (* Wrap in lambdas if necessary. A staged backward function (see
+               {!SymbolicToPureTypes.mk_back_ty}) receives the inputs of the
+               levels below its first stage later *)
+            let back_sg = RegionGroupId.Map.find bid ctx.sg.fun_ty.back_sg in
+            let first_stage =
+              List.fold_left
+                (fun m (level, _) -> if level > 0 then max m level else m)
+                0 back_sg.outputs
+            in
+            let inputs =
+              List.flatten
+                (List.map snd
+                   (List.filter
+                      (fun (level, _) -> level >= first_stage)
+                      backward_inputs))
+            in
             let places = List.map (fun _ -> None) inputs in
             mk_closed_lambdas_from_fvars ctx.span inputs places e
           in

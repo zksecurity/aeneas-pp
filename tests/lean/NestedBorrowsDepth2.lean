@@ -31,27 +31,29 @@ structure E where
     Visibility: public -/
 def incr3
   (x : Std.U32) :
-  Result (Std.U32 × (Std.U32 → Std.U32) × (Std.U32 → Std.U32 →
-    Std.U32))
+  Result (Std.U32 × (Std.U32 → Std.U32) × (Std.U32 → (Std.U32 × (Std.U32
+    → Std.U32))))
   := do
   let x1 ← x + 1#u32
-  let back := fun x2 x3 => x3
+  let back := fun x2 => (x2, fun x3 => x3)
   ok (x1, fun x2 => x2, back)
 
 /-- [nested_borrows_depth2::read_e]:
     Source: 'tests/src/nested-borrows-depth2.rs', lines 12:0-14:1
     Visibility: public -/
 def read_e
-  (e : E) : Result (Std.U32 × E × (E → E) × (E → E → E)) := do
-  let back := fun e1 e2 => e2
+  (e : E) :
+  Result (Std.U32 × E × (E → E) × (E → (E × (E → E))))
+  := do
+  let back := fun e1 => (e1, fun e2 => e2)
   ok (e.t, e, fun e1 => e1, back)
 
 /-- [nested_borrows_depth2::incr_e]:
     Source: 'tests/src/nested-borrows-depth2.rs', lines 16:0-18:1
     Visibility: public -/
-def incr_e (e : E) : Result (E × (E → E) × (E → E → E)) := do
+def incr_e (e : E) : Result (E × (E → E) × (E → (E × (E → E)))) := do
   let i ← e.t + 1#u32
-  let back := fun e1 e2 => e2
+  let back := fun e1 => (e1, fun e2 => e2)
   ok ({ t := i }, fun e1 => e1, back)
 
 /-- [nested_borrows_depth2::retarget]:
@@ -59,10 +61,10 @@ def incr_e (e : E) : Result (E × (E → E) × (E → E → E)) := do
     Visibility: public -/
 def retarget
   (x : Std.U32) (z : Std.U32) :
-  Result (Std.U32 × (Std.U32 → Std.U32) × (Std.U32 → Std.U32 → (Std.U32
-    × Std.U32)))
+  Result (Std.U32 × (Std.U32 → Std.U32) × (Std.U32 → (Std.U32 × (Std.U32
+    → (Std.U32 × Std.U32)))))
   := do
-  let back'c := fun x1 x2 => (x, x2)
+  let back'c := fun x1 => (x1, fun x2 => (x, x2))
   ok (z, fun x1 => x1, back'c)
 
 end nested_borrows_depth2

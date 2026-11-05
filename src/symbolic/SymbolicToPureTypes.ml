@@ -883,6 +883,21 @@ and translate_inst_fun_sig_to_decomposed_fun_type (span : Meta.span option)
         translate_back_output_ty span decls_ctx get_region_group gid level
           ~from_input
     in
+    (* A region group whose mutable borrows are nested two levels deep in the
+       inputs, and which doesn't appear in the output, has a staged backward
+       function: it first receives the state of the references which replaced
+       the inner borrows (level 2), and gives it back to the caller (who lends
+       it to the original inner borrows), then receives the values given back
+       at the end of the outer borrows (level 1) which restore the original
+       loans (level 0). *)
+    let staged =
+      num_levels = 3
+      && not
+           (TypesUtils.ty_has_mut_borrow_for_region_in_pred
+              decls_ctx.type_ctx.type_infos
+              (fun r -> get_region_group r = gid)
+              sg.output)
+    in
     let translate_level (level : int) :
         (abs_level * (string option * ty) list) option =
       (* Mutable borrows in input types can only lead to more inputs for the backward function.
@@ -902,6 +917,18 @@ and translate_inst_fun_sig_to_decomposed_fun_type (span : Meta.span option)
             | None -> None
             | Some ty -> Some (name, ty))
           (List.map (fun (name, ty) -> (name, ty, true)) inputs @ outputs)
+      in
+      (* The values given back at level 2 of a staged backward function *)
+      let tys =
+        if staged && (not to_input) && level = 2 then
+          List.filter_map
+            (fun (name, ty) ->
+              Option.map
+                (fun ty -> (name, ty))
+                (translate_back_input_ty span decls_ctx get_region_group gid
+                   level ~from_input:true ty))
+            (List.combine input_names sg.inputs)
+        else tys
       in
       match tys with
       | [] -> None
@@ -1476,14 +1503,48 @@ and compute_back_tys_with_info (dsg : Pure.decomposed_fun_type) :
       (* Filter if necessary *)
       if !Config.simplify_merged_fwd_backs && inputs = [] && outputs = [] then
         None
-      else
-        let output = mk_simpl_tuple_ty outputs in
-        let output =
-          mk_back_output_ty_from_effect_info effect_info inputs output
-        in
-        let ty = mk_arrows inputs output in
-        Some (back_sg, ty))
+      else Some (back_sg, mk_back_ty effect_info back_sg))
     (RegionGroupId.Map.values dsg.back_sg)
+
+(** The type of a backward function. It is staged when it gives back values
+    before receiving all its inputs (see
+    {!translate_back_inputs_or_outputs_for_gid}): each stage receives the inputs
+    of a level, and gives back the outputs of this level along with the next
+    stage. Otherwise, it receives all its inputs, highest level first, and gives
+    back all its outputs. Only the last stage can fail. *)
+and mk_back_ty (effect_info : fun_effect_info) (back_sg : back_sg_info) : ty =
+  let tys_at (l : (abs_level * (string option * ty) list) list) level =
+    match List.assoc_opt level l with
+    | None -> []
+    | Some tys -> [ mk_simpl_tuple_ty (List.map snd tys) ]
+  in
+  let levels =
+    List.sort_uniq (fun l0 l1 -> compare l1 l0)
+      (List.map fst back_sg.inputs @ List.map fst back_sg.outputs)
+  in
+  let rec stage (levels : abs_level list) : ty =
+    match levels with
+    | [] -> mk_simpl_tuple_ty []
+    | [ level ] ->
+        let inputs = tys_at back_sg.inputs level in
+        let output = mk_simpl_tuple_ty (tys_at back_sg.outputs level) in
+        let all_inputs =
+          List.map
+            (fun (_, tys) -> mk_simpl_tuple_ty (List.map snd tys))
+            back_sg.inputs
+        in
+        mk_arrows inputs
+          (mk_back_output_ty_from_effect_info effect_info all_inputs output)
+    | level :: levels ->
+        let inputs = tys_at back_sg.inputs level in
+        let outputs = tys_at back_sg.outputs level in
+        let next = stage levels in
+        let body =
+          if outputs = [] then next else mk_simpl_tuple_ty (outputs @ [ next ])
+        in
+        mk_arrows inputs body
+  in
+  stage levels
 
 and compute_back_tys (dsg : Pure.decomposed_fun_type) : ty option list =
   List.map (Option.map snd) (compute_back_tys_with_info dsg)
