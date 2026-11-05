@@ -7,13 +7,28 @@ open Config
 include ExtractBase
 module T = Types
 
+(** Escape a character of a (UTF-8) string literal. Lean string literals are
+    UTF-8: we keep the non-ASCII bytes as they are, and escape the quotes, the
+    backslashes and the control characters. For the other backends we use the
+    OCaml escape conventions for now (TODO: does this really work?). *)
+let escape_string_char (c : char) : string =
+  match backend () with
+  | Lean -> (
+      match c with
+      | '"' -> "\\\""
+      | '\\' -> "\\\\"
+      | '\n' -> "\\n"
+      | '\t' -> "\\t"
+      | '\r' -> "\\r"
+      | c when Char.code c < 0x20 || Char.code c = 0x7f ->
+          Printf.sprintf "\\x%02x" (Char.code c)
+      | c -> String.make 1 c)
+  | FStar | Coq | HOL4 -> Char.escaped c
+
 (** Print a string literal (without any conversion to [str]) *)
 let extract_pure_string (fmt : F.formatter) (s : string) : unit =
   let chars = StringUtils.string_to_chars s in
-  (* Using the OCaml escape conventions for now.
-
-     TODO: does this really work? *)
-  let s = String.concat "" (List.map Char.escaped chars) in
+  let s = String.concat "" (List.map escape_string_char chars) in
   F.pp_print_string fmt ("\"" ^ s ^ "\"")
 
 let extract_str (_span : Meta.span) (fmt : F.formatter) ~(inside : bool)

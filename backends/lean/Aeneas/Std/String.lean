@@ -26,9 +26,9 @@ theorem ByteArray.length_toList (bs : ByteArray) :
   rw [loop_length 0 [] (Nat.zero_le _)]
   simp
 
-/-- Convert a Lean `String` literal to a Rust `str`. -/
+/-- The `str` made of the UTF-8 encoding of `s`. -/
 @[expose]
-def toStr (s : String) (h : s.toByteArray.size ≤ U32.max := by rw [U32.max_eq]; decide +kernel) : Str :=
+def toStrOfLe (s : String) (h : s.toByteArray.size ≤ U32.max) : Str :=
   .from (s.toByteArray.toList.map
     (fun x => ⟨ x.toNat, by cases x; simp only [UInt8.toNat_ofBitVec, UScalarTy.U8_numBits_eq, Nat.reducePow]; omega  ⟩))
     (by
@@ -37,8 +37,25 @@ def toStr (s : String) (h : s.toByteArray.size ≤ U32.max := by rw [U32.max_eq]
       rw [ByteArray.length_toList]
       exact h.trans (by scalar_tac))
 
+/-- Convert a Lean `String` literal to a Rust `str`. The bound on the length of
+    the encoding is checked by the definition rather than proved where the
+    literal is written: the proof (by evaluation in the kernel) costs time and
+    recursion depth proportional to the length of the literal. The encoding of a
+    Rust string literal always fits: the empty `str` in the other case is never
+    reached. The definition is irreducible so that the elaboration of the
+    literals does not evaluate the check either (use `toStr_eq`). -/
+@[expose, irreducible]
+def toStr (s : String) : Str :=
+  if h : s.toByteArray.size ≤ U32.max then toStrOfLe s h else .from [] (by simp)
+
+theorem toStr_eq (s : String) (h : s.toByteArray.size ≤ U32.max) :
+    toStr s = toStrOfLe s h := by
+  unfold toStr
+  exact dite_eq_left h
+
 example : Str := toStr "hello"
 example : Str := toStr "héllo ∀"
 example : Str := toStr ""
+example : toStr "héllo" = toStrOfLe "héllo" (by rw [U32.max_eq]; decide +kernel) := toStr_eq _ _
 
 end Aeneas.Std
