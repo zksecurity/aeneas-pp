@@ -2664,7 +2664,10 @@ let rec simplify_dummy_values_useless_abs_aux (config : config)
         EBinding (BVar vid, v) :: explore_env ctx env
     | EAbs abs :: env
       when simplify_abs && abs.can_end
-           && AbsId.Set.is_empty abs.parents
+           (* The ended parents are not in the context anymore *)
+           && AbsId.Set.for_all
+                (fun pid -> Option.is_none (ctx_lookup_abs_opt ctx pid))
+                abs.parents
            && not (AbsId.Set.mem abs.abs_id frozen_abs) -> (
         [%ldebug "Diving into abs:\n" ^ abs_to_string span ctx abs];
         (* End the shared loans with no corresponding borrows *)
