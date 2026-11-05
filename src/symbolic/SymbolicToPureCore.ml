@@ -165,6 +165,11 @@ type bs_ctx = {
       (** Whenever we encounter a new symbolic value (introduced because of a
           symbolic expansion or upon ending an abstraction, for instance) we
           introduce a new variable (with a let-binding). *)
+  other_groups_svs : V.SymbolicValueId.Set.t;
+      (** The symbolic values which are inputs of the backward functions of the
+          region groups other than the one we synthesize, and the values
+          computed from them (see {!translate_end_abstraction_synth_ret}):
+          they are not available in the backward function we synthesize. *)
   fresh_fvar_id : unit -> fvar_id;
   fvars : fvar FVarId.Map.t;
       (** The free variables introduced so far.

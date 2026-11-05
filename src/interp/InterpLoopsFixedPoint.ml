@@ -123,10 +123,12 @@ let compute_loop_entry_fixed_point (config : config) (span : Meta.span)
   let join_ctxs (ctx1 : eval_ctx) (ctxs : eval_ctx list) : eval_ctx =
     [%ltrace "join_ctxs"];
     (* Join the context with the context at the loop entry *)
-    update_fixed_ids ctxs;
-    let (_, _), ctx2 =
+    let (_, ctxs), ctx2 =
       loop_join_origin_with_continue_ctxs config span loop_id ctx1 ctxs
     in
+    (* The joined contexts, in which the frozen abstractions are restored (see
+       {!InterpJoin.restore_frozen_abs}) *)
+    update_fixed_ids ctxs;
     ctx2
   in
 
@@ -341,7 +343,8 @@ let compute_loop_exit_contexts (config : config) (span : Meta.span)
       let ctxs = ctxs @ exit_ctxs_to exit (Lazy.force refreshed_exit_ctxs) in
       (* Join the contexts *)
       let break_ctx =
-        loop_join_break_ctxs config span loop_id fixed_aids fixed_dids ctxs
+        loop_join_break_ctxs config span loop_id fixed_aids fixed_dids fp_ctx
+          ctxs
       in
       (* Debug *)
       [%ltrace

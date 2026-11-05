@@ -102,6 +102,18 @@ end
 @[expose] def IScalar.cast_fromBool (ty : IScalarTy) (x : Bool) : IScalar ty :=
   if x then ⟨ 1#ty.numBits ⟩ else ⟨ 0#ty.numBits ⟩
 
+/-- `c as T`: the code point of `c`, truncated to the width of `T` -/
+@[expose] def UScalar.cast_fromChar (ty : UScalarTy) (c : Char) : UScalar ty :=
+  ⟨ BitVec.ofNat ty.numBits c.toNat ⟩
+
+/-- `c as T`: the code point of `c`, truncated to the width of `T` -/
+@[expose] def IScalar.cast_fromChar (ty : IScalarTy) (c : Char) : IScalar ty :=
+  ⟨ BitVec.ofNat ty.numBits c.toNat ⟩
+
+#guard (UScalar.cast_fromChar .U32 'λ').val = 955 -- assert_eq!('λ' as u32, 955);
+#guard (UScalar.cast_fromChar .U8 'λ').val = 187 -- assert_eq!('λ' as u8, 187);
+#guard (IScalar.cast_fromChar .I8 'λ').val = -69 -- assert_eq!('λ' as i8, -69);
+
 /-!
 # Casts: Theorems
 -/

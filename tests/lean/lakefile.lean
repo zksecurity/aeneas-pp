@@ -24,6 +24,7 @@ package «tests» {}
 @[default_target] lean_lib BuiltinAuto
 @[default_target] lean_lib CallBorrowJoins
 @[default_target] lean_lib CastSigned
+@[default_target] lean_lib CharCasts
 @[default_target] lean_lib ChunksExact
 @[default_target] lean_lib ClosureRecursion
 @[default_target] lean_lib ClosureRegionRequirements
@@ -53,6 +54,7 @@ package «tests» {}
 @[default_target] lean_lib ForwardScopes
 @[default_target] lean_lib FromTo
 @[default_target] lean_lib FrozenMutBorrows
+@[default_target] lean_lib FrozenSharedRefinements
 @[default_target] lean_lib GenericUnitOutput
 @[default_target] lean_lib GlobalStaticBorrows
 @[default_target] lean_lib Hashmap
@@ -91,7 +93,9 @@ package «tests» {}
 @[default_target] lean_lib JoinDuplicate
 @[default_target] lean_lib JoinInnerLoans
 @[default_target] lean_lib JoinLiveBorrows
+@[default_target] lean_lib JoinRenamedCallOutputs
 @[default_target] lean_lib Joins
+@[default_target] lean_lib JoinSharedBorrowInstances
 @[default_target] lean_lib JoinSharedProjections
 @[default_target] lean_lib JoinTargetSharedBorrows
 @[default_target] lean_lib LeanKeywords
@@ -129,6 +133,7 @@ package «tests» {}
 @[default_target] lean_lib PoloniusList
 @[default_target] lean_lib Print
 @[default_target] lean_lib Range
+@[default_target] lean_lib ReborrowNestedRegionsCall
 @[default_target] lean_lib RenameAttribute
 @[default_target] lean_lib RustBorrowCheckIssues
 @[default_target] lean_lib Scalars
