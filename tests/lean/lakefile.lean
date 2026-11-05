@@ -88,6 +88,7 @@ package «tests» {}
 @[default_target] lean_lib JoinLiveBorrows
 @[default_target] lean_lib Joins
 @[default_target] lean_lib JoinSharedProjections
+@[default_target] lean_lib JoinTargetSharedBorrows
 @[default_target] lean_lib LeanKeywords
 @[default_target] lean_lib LeanKeywordsClash
 @[default_target] lean_lib ListBorrows
