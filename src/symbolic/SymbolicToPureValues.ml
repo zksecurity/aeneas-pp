@@ -649,39 +649,46 @@ and aproj_to_consumed_aux (ctx : bs_ctx) (_abs_regions : T.region_set)
         let msv : V.symbolic_value = { sv_id = msv; sv_ty = ty } in
         Some (symbolic_value_to_texpr ctx msv)
       else None
-  | V.AEndedProjLoans
-      { proj = _; consumed = [ (mnv, child_aproj) ]; borrows = [] } ->
+  | V.AEndedProjLoans { proj = _; consumed = [ (mnv, child_aproj) ]; borrows }
+    ->
       if abs_level = current_level then (
         [%sanity_check] ctx.span (child_aproj = AEmpty);
-        (* TODO: check that the updated symbolic values covers all the cases
-           (part of the symbolic value might have been updated, and the rest
-           left unchanged) - it might happen with nested borrows (see the documentation
-           of [AProjLoans]). For now we check that there are no nested borrows
-           to make sure we have to update this part of the code once we add support
-           for nested borrows.
-        *)
-        [%sanity_check] ctx.span
-          (not
-             (TypesUtils.ty_has_nested_borrows (Some ctx.span)
-                ctx.type_ctx.type_infos ty));
-        (* The symbolic value was updated.
+        (* The symbolic value was updated (the projectors of borrows over the
+           value given back to outer borrows, if there are nested borrows, are
+           one level below).
 
          We're using the projection type as the type of the symbolic value -
          it doesn't really matter. *)
         let mnv : V.symbolic_value = { sv_id = mnv.sv_id; sv_ty = ty } in
         Some (symbolic_value_to_texpr ctx mnv))
-      else [%craise] ctx.span "Unimplemented"
+      else (
+        (* One level below: the projectors of borrows over the values given
+           back to outer borrows don't consume anything *)
+        [%cassert] ctx.span
+          (abs_level = current_level + 1 && child_aproj = AEmpty
+          && List.for_all
+               (fun (_, (b : V.aproj)) ->
+                 match b with
+                 | AEndedProjBorrows _ -> true
+                 | _ -> false)
+               borrows)
+          "Unimplemented";
+        None)
   | V.AEndedProjLoans _ ->
       (* The symbolic value was updated, and the given back values come from several
          abstractions *)
       [%craise] ctx.span "Unimplemented"
   | AEndedProjBorrows { mvalues = _; loans } -> (
-      (* Happens in the case of nested borrows *)
-      match loans with
-      | [] ->
-          (* No inner loans because of additional nested borrows *)
-          None
-      | _ -> [%craise] ctx.span "Unimplemented")
+      (* Happens in the case of nested borrows: the loans projected over the
+         value given back (because outer borrows ended) are one level below *)
+      if abs_level <> current_level + 1 then None
+      else
+        match loans with
+        | [] -> None
+        | [ (_, loan) ] ->
+            aproj_to_consumed_aux ctx _abs_regions abs_level
+              (current_level + 1) loan ty
+        | _ -> [%craise] ctx.span "Unimplemented")
   | AEmpty | AProjLoans _ | AProjBorrows _ -> [%craise] ctx.span "Unreachable"
 
 let tavalue_to_consumed (ctx : bs_ctx) (ectx : C.eval_ctx)
@@ -933,18 +940,26 @@ and nested_ended_to_given_back_aux ~(filter : bool) (abs_regions : T.region_set)
         tavalue_to_given_back_aux ~filter abs_regions abs_level
           (current_level + 1) mp given_back ctx
 
-and aproj_to_given_back_aux (_abs_level : abs_level)
-    (_current_level : abs_level) (mp : mplace option) (aproj : V.aproj)
+and aproj_to_given_back_aux (abs_level : abs_level)
+    (current_level : abs_level) (mp : mplace option) (aproj : V.aproj)
     (ty : T.ty) (ctx : bs_ctx) : bs_ctx * tpat option =
   match aproj with
-  | V.AEndedProjLoans { proj = _; consumed; borrows } ->
-      [%cassert] ctx.span (borrows = []) "Unimplemented";
+  | V.AEndedProjLoans { proj = _; consumed; borrows } -> (
       (match consumed with
       | [] | [ _ ] -> ()
       | _ -> [%craise] ctx.span "Unimplemented");
-      (ctx, None)
-  | AEndedProjBorrows { mvalues = mv; loans } ->
-      [%cassert] ctx.span (loans = []) "Unreachable";
+      (* The projectors of borrows over the values given back to outer borrows
+         (with nested borrows) are one level below *)
+      match borrows with
+      | [] -> (ctx, None)
+      | [ (_, borrow) ] when abs_level = current_level + 1 ->
+          aproj_to_given_back_aux abs_level (current_level + 1) mp borrow ty
+            ctx
+      | [ _ ] -> (ctx, None)
+      | _ -> [%craise] ctx.span "Unimplemented")
+  | AEndedProjBorrows { mvalues = mv; loans = _ } ->
+      (* The loans projected over the value given back (because outer borrows
+         ended) are one level below: they are consumed values, not given back *)
       (* Return the meta-value *)
       let ctx, var = fresh_var_for_symbolic_value mv.given_back ctx in
       let pat = mk_tpat_from_fvar mp var in
