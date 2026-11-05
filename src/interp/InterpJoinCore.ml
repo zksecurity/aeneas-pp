@@ -27,6 +27,10 @@ type join_info = {
   symbolic_to_value : (tvalue * tvalue) SymbolicValueId.Map.t;
       (** Map from fresh symbolic value to the values coming from the left and
           right contexts *)
+  renamed1 : (symbolic_value * symbolic_value) list;
+      (** The symbolic values of the right context which the joined context
+          refers to with fresh ids, paired with their fresh counterparts (see
+          {!InterpJoin.freshen_regions_ended_in_other}) *)
 }
 
 type join_info_or_update = (join_info, updt_env_kind) result
