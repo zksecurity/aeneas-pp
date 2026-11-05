@@ -233,12 +233,15 @@ let compute_abs_borrows_loans_maps (span : Meta.span) (explore : abs -> bool)
             [%cassert] span (is_aignored child.value) "Not implemented yet";
             [%cassert] span (is_aignored given_back.value) "Not implemented yet"
         | AEndedSharedLoan (sv, child) ->
-            (* TODO: there may be a problem here, because we need the marker which was
-               in [ASharedLoan] to explore the shared value and register its borrows.
-               For now we check that there are no loans/borrows inside. *)
+            (* The shared and frozen borrows of the shared value are not
+               registered (see the [ASharedLoan] case). TODO: registering its
+               loans requires the marker which was in [ASharedLoan]: for now we
+               check that there are none. *)
             [%cassert] span
-              (not (tvalue_has_loans_or_borrows (Some span) ctx sv))
+              (not (value_has_loans sv.value))
               "Not implemented yet";
+            [%sanity_check] span
+              (not (value_has_mut_borrows (Some span) ctx sv.value));
             self#visit_tavalue (abs, pm) child
 
       (** Make sure we don't register the ignored ids *)
@@ -328,6 +331,41 @@ let compute_abs_borrows_loans_maps (span : Meta.span) (explore : abs -> bool)
     borrow_proj_to_abs = !borrow_proj_to_abs;
     loan_proj_to_abs = !loan_proj_to_abs;
   }
+
+(** The region abstractions to introduce when joining values of type [ty],
+    whose fresh regions are [fresh_regions]: one per group of the hierarchy of
+    the fresh regions, whose parents are the abstractions of the regions it
+    outlives (like for the abstractions introduced for the inputs of a
+    function), and one for the static region if [ty] contains it (the static
+    region is not refreshed, and it may be hidden in an ADT, see
+    {!TypesUtils.adt_has_hidden_static}). *)
+let join_abs_region_groups (span : Meta.span) (ctx : eval_ctx)
+    (fresh_regions : RegionId.id list) (ty : ty) : LlbcAst.abs_region_groups =
+  let groups =
+    RegionsHierarchy.compute_regions_hierarchy_for_ty (Some span) ctx.crate
+      fresh_regions ty
+  in
+  let abs_ids =
+    RegionGroupId.Map.of_list
+      (List.map (fun (rg : region_group) -> (rg.id, ctx.fresh_abs_id ())) groups)
+  in
+  let groups =
+    List.map
+      (fun (rg : region_group) : LlbcAst.abs_region_group ->
+        {
+          id = RegionGroupId.Map.find rg.id abs_ids;
+          regions = rg.regions;
+          parents =
+            List.map (fun id -> RegionGroupId.Map.find id abs_ids) rg.parents;
+        })
+      groups
+  in
+  if
+    ty_has_regions_in_set ctx.type_ctx.type_infos
+      (RegionSet.singleton RStatic)
+      ty
+  then groups @ [ { id = ctx.fresh_abs_id (); regions = [ RStatic ]; parents = [] } ]
+  else groups
 
 (** Match two types during a join.
 
@@ -759,8 +797,8 @@ module MakeJoinMatcher (S : MatchJoinState) : PrimMatcher = struct
     let sv_s = tvalue_as_symbolic span sv in
 
     (* Project the ADTs into different region abstractions *)
-    let project (r : region) =
-      let regions = RegionSet.singleton r in
+    let project (rg : LlbcAst.abs_region_group) =
+      let regions = RegionSet.of_list rg.regions in
       let avl0, output0 =
         convert_value_to_output_avalues span ctx0 PLeft v0 regions
           ty_with_regions
@@ -836,10 +874,10 @@ module MakeJoinMatcher (S : MatchJoinState) : PrimMatcher = struct
       (* Generate the abstraction *)
       let abs =
         {
-          abs_id = ctx0.fresh_abs_id ();
+          abs_id = rg.id;
           kind = S.fresh_abs_kind;
           can_end = true;
-          parents = AbsId.Set.empty;
+          parents = AbsId.Set.of_list rg.parents;
           regions = { owned = regions };
           ended_subabs = AbsLevelSet.empty;
           avalues = avl0 @ avl1 @ [ av ];
@@ -849,15 +887,8 @@ module MakeJoinMatcher (S : MatchJoinState) : PrimMatcher = struct
       [%ldebug "Pushing abs:\n" ^ abs_to_string span ctx0 abs];
       push_abs abs
     in
-    List.iter (fun rid -> project (RVar (Free rid))) fresh_regions;
-    (* The static region is not refreshed: if the type contains it (note that
-       it may be hidden in an ADT, see {!TypesUtils.adt_has_hidden_static}) we
-       also need to introduce an abstraction for the static region. *)
-    if
-      ty_has_regions_in_set ctx0.type_ctx.type_infos
-        (RegionSet.singleton RStatic)
-        ty_with_regions
-    then project RStatic;
+    List.iter project
+      (join_abs_region_groups span ctx0 fresh_regions ty_with_regions);
 
     (* *)
     sv
@@ -1486,22 +1517,9 @@ module MakeJoinMatcher (S : MatchJoinState) : PrimMatcher = struct
         let svj = get_symbolic_tvalue span svj in
         let proj_svj = mk_aproj_loans PNone svj.sv_id proj_ty in
         let avalues = [ proj_s0; proj_s1; proj_svj ] in
-        (* Note that the static region is not refreshed: if the type contains it
-           (it may be hidden in an ADT, see {!TypesUtils.adt_has_hidden_static})
-           we also need to introduce an abstraction for the static region. *)
-        let regions =
-          List.map (fun rid -> RVar (Free rid)) fresh_regions
-          @
-          if
-            ty_has_regions_in_set ctx0.type_ctx.type_infos
-              (RegionSet.singleton RStatic)
-              proj_ty
-          then [ RStatic ]
-          else []
-        in
         List.iter
-          (fun r ->
-            let owned = RegionSet.singleton r in
+          (fun (rg : LlbcAst.abs_region_group) ->
+            let owned = RegionSet.of_list rg.regions in
             (* The abstraction expression continuation *)
             let cont : abs_cont option =
               if S.with_abs_conts then
@@ -1546,10 +1564,10 @@ module MakeJoinMatcher (S : MatchJoinState) : PrimMatcher = struct
             (* Create the abstraction *)
             let abs =
               {
-                abs_id = ctx0.fresh_abs_id ();
+                abs_id = rg.id;
                 kind = S.fresh_abs_kind;
                 can_end = true;
-                parents = AbsId.Set.empty;
+                parents = AbsId.Set.of_list rg.parents;
                 regions = { owned };
                 ended_subabs = AbsLevelSet.empty;
                 avalues;
@@ -1557,7 +1575,7 @@ module MakeJoinMatcher (S : MatchJoinState) : PrimMatcher = struct
               }
             in
             push_abs abs)
-          regions;
+          (join_abs_region_groups span ctx0 fresh_regions proj_ty);
         svj)
       else
         (* Otherwise we simply introduce a fresh symbolic value, or reuse a

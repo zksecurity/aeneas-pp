@@ -162,76 +162,17 @@ let sig_static_interacts_with_other_regions (span : Meta.span option)
   in
   List.exists check (sg.item_binder_value.output :: sg.item_binder_value.inputs)
 
-let compute_regions_hierarchy_for_sig (span : Meta.span option) (crate : crate)
-    (type_infos : TypesAnalysis.type_infos) (sg : bound_fun_sig) : region_groups
-    =
-  (* Create the dependency graph.
+(** Visit the value of a region binder which binds no regions *)
+let add_edges_from_region_binder (span : Meta.span option) (visit : 'a -> unit)
+    (c : 'a region_binder) : unit =
+  [%sanity_check_opt_span] span (c.binder_regions = []);
+  visit c.binder_value
 
-     An edge from 'long to 'short means that 'long outlives 'short (that is
-     we have 'long : 'short,  using Rust notations).
-  *)
-  (* First initialize the regions map.
-
-     We add:
-     - the region variables
-     - the static region
-     - edges from the static region to the region variables
-
-     Note that we only consider the regions bound at the
-     level of the signature (this excludes the regions locally bound inside
-     the types, for instance at the level of an arrow type).
-  *)
-  let g : RegionSet.t RegionMap.t ref =
-    let rvars =
-      List.map
-        (fun (r : region_param) -> RVar (Free r.index))
-        sg.item_binder_params.regions
-    in
-    let s = (RStatic, RegionSet.of_list rvars) in
-    let rsets = List.map (fun r -> (r, RegionSet.empty)) rvars in
-    ref (RegionMap.of_list (s :: rsets))
-  in
-
-  let add_edge ~(long : region) ~(short : region) =
-    (* Sanity checks *)
-    [%sanity_check_opt_span] span (short <> RErased);
-    [%sanity_check_opt_span] span (long <> RErased);
-    (* Ignore the locally bound regions (at the level of arrow types for instance *)
-    match (short, long) with
-    | RLub _, _ | _, RLub _ -> [%craise_opt_span] span "Unexpected Lub region"
-    | RVar (Bound _), _ | _, RVar (Bound _) -> ()
-    | _, _ ->
-        let m = !g in
-        let s = RegionMap.find long !g in
-        let s = RegionSet.add short s in
-        g := RegionMap.add long s m
-  in
-
-  let add_edges_from_region_binder :
-      'a. ('a -> unit) -> 'a region_binder -> unit =
-   fun visit c ->
-    [%sanity_check_opt_span] span (c.binder_regions = []);
-    visit c.binder_value
-  in
-
-  let add_edges ~(long : region) ~(shorts : region list) =
-    (* TODO: shouldn't have to use List.iter *)
-    List.iter (fun short -> add_edge ~long ~short) shorts
-  in
-
-  (* Explore the clauses - we only explore the "region outlives" clause,
-     not the "type outlives" clauses *)
-  List.iter
-    (fun (c : outlives_pred region_binder) ->
-      match c.binder_value with
-      | RLub _, _ -> ()
-      | _ ->
-          add_edges_from_region_binder
-            (fun (long, short) -> add_edge ~long ~short)
-            c)
-    sg.item_binder_params.outlives;
-
-  (* Explore the types in the signature to add the edges *)
+(** Explore a type to register the outlives constraints its well-formedness
+    implies between the regions it contains: [add_edges ~long ~shorts] registers
+    that [long] outlives every region of [shorts]. *)
+let add_ty_outlives_edges (span : Meta.span option) (crate : crate)
+    (add_edges : long:region -> shorts:region list -> unit) (ty : ty) : unit =
   let rec explore_ty (outer : region list) (ty : ty) =
     match ty with
     | TAdt { id; generics; builtin } ->
@@ -261,7 +202,7 @@ let compute_regions_hierarchy_for_sig (span : Meta.span option) (crate : crate)
               | _ -> add_edges ~long ~shorts:(short :: outer)
             in
             List.iter
-              (add_edges_from_region_binder add_edges_from_outlives)
+              (add_edges_from_region_binder span add_edges_from_outlives)
               predicates.outlives
         | Some (TTuple | TBox | TStr) -> (* No clauses for those *) ());
         (* Explore the generics *)
@@ -307,10 +248,73 @@ let compute_regions_hierarchy_for_sig (span : Meta.span option) (crate : crate)
     List.iter (fun long -> add_edges ~long ~shorts:outer) regions;
     List.iter (explore_ty outer) types
   in
+  explore_ty [] ty
 
-  (* Substitute the regions in a type, then explore *)
-  let explore_ty_subst ty = explore_ty [] ty in
-  List.iter explore_ty_subst
+let compute_regions_hierarchy_for_sig (span : Meta.span option) (crate : crate)
+    (type_infos : TypesAnalysis.type_infos) (sg : bound_fun_sig) : region_groups
+    =
+  (* Create the dependency graph.
+
+     An edge from 'long to 'short means that 'long outlives 'short (that is
+     we have 'long : 'short,  using Rust notations).
+  *)
+  (* First initialize the regions map.
+
+     We add:
+     - the region variables
+     - the static region
+     - edges from the static region to the region variables
+
+     Note that we only consider the regions bound at the
+     level of the signature (this excludes the regions locally bound inside
+     the types, for instance at the level of an arrow type).
+  *)
+  let g : RegionSet.t RegionMap.t ref =
+    let rvars =
+      List.map
+        (fun (r : region_param) -> RVar (Free r.index))
+        sg.item_binder_params.regions
+    in
+    let s = (RStatic, RegionSet.of_list rvars) in
+    let rsets = List.map (fun r -> (r, RegionSet.empty)) rvars in
+    ref (RegionMap.of_list (s :: rsets))
+  in
+
+  let add_edge ~(long : region) ~(short : region) =
+    (* Sanity checks *)
+    [%sanity_check_opt_span] span (short <> RErased);
+    [%sanity_check_opt_span] span (long <> RErased);
+    (* Ignore the locally bound regions (at the level of arrow types for instance *)
+    match (short, long) with
+    | RLub _, _ | _, RLub _ -> [%craise_opt_span] span "Unexpected Lub region"
+    | RVar (Bound _), _ | _, RVar (Bound _) -> ()
+    | _, _ ->
+        let m = !g in
+        let s = RegionMap.find long !g in
+        let s = RegionSet.add short s in
+        g := RegionMap.add long s m
+  in
+
+  let add_edges ~(long : region) ~(shorts : region list) =
+    (* TODO: shouldn't have to use List.iter *)
+    List.iter (fun short -> add_edge ~long ~short) shorts
+  in
+
+  (* Explore the clauses - we only explore the "region outlives" clause,
+     not the "type outlives" clauses *)
+  List.iter
+    (fun (c : outlives_pred region_binder) ->
+      match c.binder_value with
+      | RLub _, _ -> ()
+      | _ ->
+          add_edges_from_region_binder span
+            (fun (long, short) -> add_edge ~long ~short)
+            c)
+    sg.item_binder_params.outlives;
+
+  (* Explore the types in the signature to add the edges *)
+  List.iter
+    (add_ty_outlives_edges span crate add_edges)
     (sg.item_binder_value.output :: sg.item_binder_value.inputs);
 
   (* Compute the ordered SCCs *)
@@ -467,3 +471,66 @@ let rec list_ancestor_region_groups (regions_hierarchy : region_groups)
       let parents = list_ancestor_region_groups regions_hierarchy gid in
       RegionGroupId.Set.union s (RegionGroupId.Set.add gid parents))
     RegionGroupId.Set.empty rg.parents
+
+(** Compute the hierarchy of the regions [rids] of a type [ty]: the region
+    groups are the SCCs of the outlives relation that the well-formedness of
+    [ty] implies between those regions (see {!add_ty_outlives_edges}), and the
+    parents of a group are the groups it outlives. The groups (and the regions
+    inside the groups) follow the order of [rids]. *)
+let compute_regions_hierarchy_for_ty (span : Meta.span option) (crate : crate)
+    (rids : RegionId.id list) (ty : ty) : region_groups =
+  let regions = List.map (fun rid -> RVar (Free rid)) rids in
+  let g : RegionSet.t RegionMap.t ref =
+    ref (RegionMap.of_list (List.map (fun r -> (r, RegionSet.empty)) regions))
+  in
+  (* The other regions (the static region, the regions locally bound inside
+     the type) don't belong to the hierarchy *)
+  let add_edges ~(long : region) ~(shorts : region list) =
+    List.iter
+      (fun short ->
+        match RegionMap.find_opt long !g with
+        | Some s when RegionMap.mem short !g ->
+            g := RegionMap.add long (RegionSet.add short s) !g
+        | _ -> ())
+      shorts
+  in
+  add_ty_outlives_edges span crate add_edges ty;
+  let module Scc = SCC.Make (RegionOrderedType) in
+  let sccs = Scc.compute (RegionMap.bindings !g) in
+  let scc_of_region =
+    RegionMap.of_list
+      (List.concat_map
+         (fun (scc_id, scc) -> List.map (fun r -> (r, scc_id)) scc)
+         (SccId.Map.bindings sccs.sccs))
+  in
+  (* The SCCs in the order of their first region in [rids] *)
+  let ordered_sccs =
+    List.fold_left
+      (fun ordered r ->
+        let scc_id = RegionMap.find r scc_of_region in
+        if List.mem scc_id ordered then ordered else ordered @ [ scc_id ])
+      [] regions
+  in
+  let group_ids =
+    SccId.Map.of_list
+      (List.mapi
+         (fun i scc_id -> (scc_id, RegionGroupId.of_int i))
+         ordered_sccs)
+  in
+  let to_group_id (scc_id : SccId.id) : RegionGroupId.id =
+    SccId.Map.find scc_id group_ids
+  in
+  List.map
+    (fun scc_id ->
+      let scc = SccId.Map.find scc_id sccs.sccs in
+      let parents =
+        List.map to_group_id
+          (SccId.Set.elements (SccId.Map.find scc_id sccs.scc_deps))
+      in
+      ({
+         id = to_group_id scc_id;
+         regions = List.filter (fun r -> List.mem r scc) regions;
+         parents;
+       }
+        : region_group))
+    ordered_sccs

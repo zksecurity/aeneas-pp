@@ -2108,9 +2108,8 @@ let destructure_abs (span : Meta.span) (abs_kind : abs_kind) ~(can_end : bool)
         | AEndedSharedLoan (sv, child_av) ->
             (* We don't support nested borrows for now *)
             [%cassert] span
-              (not
-                 (ty_has_borrows (Some span) ctx.type_ctx.type_infos child_av.ty))
-              "Nested borrows are not supported yet";
+              (not (value_has_mut_borrows (Some span) ctx sv.value))
+              "Mutable borrows inside shared borrows are not supported yet";
             (* Explore the shared value *)
             (* Destructure the shared value *)
             let avl, _ =
