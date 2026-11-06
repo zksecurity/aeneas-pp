@@ -907,7 +907,7 @@ and eval_switch (config : config) (span : Meta.span) (data : switch_data)
 and eval_switch_prepare (span : Meta.span) : cm_fun =
  fun ctx ->
   InterpJoin.reborrow_ashared_loans_symbolic_borrows span None
-    ~with_abs_conts:true ctx
+    ~with_abs_conts:true ~all_shared_values:false ctx
 
 and eval_switch_raw (config : config) (span : Meta.span) (data : switch_data)
     (branches : block list) : stl_cm_fun =

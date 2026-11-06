@@ -14,9 +14,22 @@ open InterpMatchCtxs
 (** The local logger *)
 let log = Logging.join_log
 
+(** Whether the symbolic execution never expands the values of a type, nor
+    borrows their parts: the values of arrays, slices, strings and opaque types
+    are only accessed through functions. A shared value of such a type never
+    changes. *)
+let ty_is_never_expanded (ctx : eval_ctx) (ty : ty) : bool =
+  match ty with
+  | TArray _ | TSlice _ | TAdt { builtin = Some TStr; _ } -> true
+  | TAdt { id; builtin = None; _ } -> (
+      match (TypeDeclId.Map.find id ctx.type_ctx.type_decls).kind with
+      | Opaque -> true
+      | _ -> false)
+  | _ -> false
+
 (** Auxiliary helper for [reborrow_ashared_loans_symbolic_borrows] *)
 let reborrow_ashared_loans (span : Meta.span) (loop_id : LoopId.id option)
-    ~(with_abs_conts : bool) : cm_fun =
+    ~(with_abs_conts : bool) ~(all_shared_values : bool) : cm_fun =
  fun ctx0 ->
   let ctx = ctx0 in
   [%ldebug "ctx0:\n" ^ eval_ctx_to_string ctx];
@@ -213,8 +226,12 @@ let reborrow_ashared_loans (span : Meta.span) (loop_id : LoopId.id option)
             (* Do nothing *)
             super#visit_VSharedBorrow env bid sid
         | Some (abs, sv, rty) ->
-            (* Check if the region abstraction is frozen *)
-            if not abs.can_end then
+            (* Check if the region abstraction is frozen, and if we reborrow
+               the shared value *)
+            if
+              (not abs.can_end)
+              && (all_shared_values || not (ty_is_never_expanded ctx sv.ty))
+            then
               let bid, sid = push_abs_for_shared_value abs sv rty bid sid in
               VSharedBorrow (bid, sid)
             else super#visit_VSharedBorrow env bid sid
@@ -437,11 +454,14 @@ let reborrow_symbolic_borrows (span : Meta.span) (loop_id : LoopId.id option)
   (ctx, cf)
 
 let reborrow_ashared_loans_symbolic_borrows (span : Meta.span)
-    (loop_id : LoopId.id option) ~(with_abs_conts : bool) : cm_fun =
+    (loop_id : LoopId.id option) ~(with_abs_conts : bool)
+    ~(all_shared_values : bool) : cm_fun =
  fun ctx0 ->
   let ctx = ctx0 in
   [%ldebug "ctx0:\n" ^ eval_ctx_to_string ctx];
-  let ctx, cc = reborrow_ashared_loans span loop_id ~with_abs_conts ctx in
+  let ctx, cc =
+    reborrow_ashared_loans span loop_id ~with_abs_conts ~all_shared_values ctx
+  in
 
   comp cc (reborrow_symbolic_borrows span loop_id ~with_abs_conts ctx)
 
@@ -449,7 +469,7 @@ let reborrow_ashared_loans_symbolic_borrows_no_synth (span : Meta.span)
     (loop_id : LoopId.id) ~(with_abs_conts : bool) (ctx : eval_ctx) : eval_ctx =
   fst
     (reborrow_ashared_loans_symbolic_borrows span (Some loop_id) ~with_abs_conts
-       ctx)
+       ~all_shared_values:true ctx)
 
 (** The symbolic values of the meta-values which the abstraction continuations
     of a context consume (see {!Values.menv}), in the order of the environment.
