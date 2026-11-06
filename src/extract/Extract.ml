@@ -601,7 +601,8 @@ let extract_unop (span : Meta.span)
     - argument 1 *)
 let extract_binop (span : Meta.span) (ctx : extraction_ctx)
     (extract_expr : inside:bool -> texpr -> unit) (fmt : F.formatter)
-    ~(inside : bool) (binop : binop) (arg0 : texpr) (arg1 : texpr) : unit =
+    ~(inside : bool) ~(prop : bool) (binop : binop) (arg0 : texpr)
+    (arg1 : texpr) : unit =
   if inside then F.pp_print_string fmt "(";
   (* Some binary operations have a special notation depending on the backend *)
   (match (backend (), binop) with
@@ -648,11 +649,24 @@ let extract_binop (span : Meta.span) (ctx : extraction_ctx)
         | Coq, _ -> "s" ^ binop_str
         | _ -> binop_str
       in
+      (* In Lean, the comparisons are propositions: we use them as such in the
+         conditions, and convert them to booleans elsewhere (the coercion only
+         applies where the expected type is known, which is not the case of,
+         e.g., the branches of a [match] bound by a [let]) *)
+      let decide =
+        backend () = Lean && (not prop)
+        &&
+        match binop with
+        | Eq _ | Lt _ | Le _ | Ge _ | Gt _ -> true
+        | _ -> false
+      in
+      if decide then F.pp_print_string fmt "decide (";
       extract_expr ~inside:true arg0;
       F.pp_print_space fmt ();
       F.pp_print_string fmt binop_str;
       F.pp_print_space fmt ();
-      extract_expr ~inside:true arg1
+      extract_expr ~inside:true arg1;
+      if decide then F.pp_print_string fmt ")"
   | ( Lean,
       ( Add (OWrap, _)
       | Sub (OWrap, _)
@@ -783,6 +797,18 @@ let rec extract_texpr (span : Meta.span) (ctx : extraction_ctx)
       (* The loop nodes should have been eliminated in {!PureMicroPasses} *)
       [%admit_raise] span "Unreachable" fmt
   | EError (_, _) -> extract_texpr_errors fmt
+
+(** Extract a boolean used as a condition (of an [if], an assertion): a
+    comparison is left as a proposition (see {!extract_binop}) *)
+and extract_condition (span : Meta.span) (ctx : extraction_ctx)
+    (fmt : F.formatter) ~(inside : bool) ~(inside_do : bool) (e : texpr) : unit
+    =
+  match destruct_apps e with
+  | { e = Qualif { id = FunOrOp (Binop binop); _ }; _ }, [ arg0; arg1 ] ->
+      extract_binop span ctx
+        (extract_texpr span ctx fmt ~inside_do)
+        fmt ~inside ~prop:true binop arg0 arg1
+  | _ -> extract_texpr span ctx fmt ~inside ~inside_do e
 
 (* Extract an application *or* a top-level qualif (function extraction has
  * to handle top-level qualifiers, so it seemed more natural to merge the
@@ -963,7 +989,7 @@ and extract_function_call (span : Meta.span) (ctx : extraction_ctx)
       (* Number of arguments: similar to unop *)
       extract_binop span ctx
         (extract_texpr span ctx fmt ~inside_do)
-        fmt ~inside binop arg0 arg1
+        fmt ~inside ~prop:false binop arg0 arg1
   | Fun fun_id, _ ->
       let use_brackets = inside in
       if use_brackets then F.pp_print_string fmt "(";
@@ -1128,10 +1154,15 @@ and extract_function_call (span : Meta.span) (ctx : extraction_ctx)
             "/- ERROR: ill-formed builtin: invalid number of filtering \
              arguments -/");
       (* Print the arguments *)
+      let extract_arg =
+        match fun_id with
+        | Pure Assert -> extract_condition span ctx fmt
+        | _ -> extract_texpr span ctx fmt
+      in
       List.iter
         (fun ve ->
           F.pp_print_space fmt ();
-          extract_texpr span ctx fmt ~inside:true ~inside_do ve)
+          extract_arg ~inside:true ~inside_do ve)
         args;
       (* Close the box for the function call *)
       (*F.pp_close_box fmt ();*)
@@ -1533,7 +1564,8 @@ and extract_Switch (span : Meta.span) (ctx : extraction_ctx) (fmt : F.formatter)
       if backend () = Lean && ctx.use_dep_ite then F.pp_print_string fmt " h:";
       F.pp_print_space fmt ();
       let scrut_inside = PureUtils.texpr_requires_parentheses span scrut in
-      extract_texpr span ctx fmt ~inside:scrut_inside ~inside_do:false scrut;
+      extract_condition span ctx fmt ~inside:scrut_inside ~inside_do:false
+        scrut;
       (* Close the box for the [if e] *)
       F.pp_close_box fmt ();
 

@@ -60,7 +60,7 @@ def Wrap.Insts.CoreMarkerStructuralPartialEq : core.marker.StructuralPartialEq
     Visibility: public -/
 def Wrap.Insts.CoreCmpPartialEqWrap.eq
   (self : Wrap) (other : Wrap) : Result Bool := do
-  ok (self = other)
+  ok (decide (self = other))
 
 /-- Trait implementation: [order::{impl core::cmp::PartialEq<order::Wrap> for order::Wrap}]
     Source: 'tests/src/order.rs', lines 23:9-23:18 -/
@@ -291,7 +291,7 @@ def Rank.Insts.CoreCmpPartialEqRank.eq
   (self : Rank) (other : Rank) : Result Bool := do
   let self1 := read_discriminant self
   let other1 := read_discriminant other
-  ok (self1 = other1)
+  ok (decide (self1 = other1))
 
 /-- Trait implementation: [order::{impl core::cmp::PartialEq<order::Rank> for order::Rank}]
     Source: 'tests/src/order.rs', lines 87:9-87:18 -/
@@ -545,7 +545,7 @@ structure Keyed where
     Visibility: public -/
 def Keyed.Insts.CoreCmpPartialEqKeyed.eq
   (self : Keyed) (other : Keyed) : Result Bool := do
-  ok (self.key = other.key)
+  ok (decide (self.key = other.key))
 
 /-- Trait implementation: [order::{impl core::cmp::PartialEq<order::Keyed> for order::Keyed}]
     Source: 'tests/src/order.rs', lines 193:0-197:1 -/

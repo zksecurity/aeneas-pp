@@ -264,7 +264,7 @@ def even (n : Std.U32) : Result Bool := do
           even.closure
           Std.U32
           Std.U32) () i
-    ok (i1 = 1#u32)
+    ok (decide (i1 = 1#u32))
 partial_fixpoint
 
 /-- [closure_recursion::even::{impl core::ops::function::FnOnce<(u32,), u32> for closure_recursion::even::{closure}}::call_once]:
@@ -295,7 +295,7 @@ def odd (n : Std.U32) : Result Bool := do
           odd.closure
           Std.U32
           Std.U32) () i
-    ok (i1 = 1#u32)
+    ok (decide (i1 = 1#u32))
 partial_fixpoint
 
 /-- [closure_recursion::odd::{impl core::ops::function::FnOnce<(u32,), u32> for closure_recursion::odd::{closure}}::call_once]:

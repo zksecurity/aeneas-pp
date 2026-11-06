@@ -33,7 +33,7 @@ inductive Node where
 def allowed (index : Std.U32) (params : Slice Std.U32) : Result Bool := do
   let i := Slice.len params
   let i1 ← lift (UScalar.cast .U32 i)
-  ok (i1 = index)
+  ok (decide (i1 = index))
 
 /-- [join_common_calls::parameters]:
     Source: 'tests/src/join-common-calls.rs', lines 20:0-26:1

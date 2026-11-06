@@ -2212,6 +2212,286 @@ let fix_anon_const_initializers (crate : crate) (f : fun_decl) : fun_decl =
     }
   else f
 
+(** Turn the opaque default methods used by trait implementations into opaque
+    methods of the implementations.
+
+    An implementation refers to the default methods it does not override with
+    the implementation itself as the instance of the trait (the default
+    [Trait::m] of [impl Trait for T] is [Trait.m.default Impl]): in Lean, the
+    [impl_def] command resolves this self-reference by unfolding the default.
+    An opaque default (an axiom) cannot be unfolded, so we replace it, in the
+    implementation, by the default instantiated for the implementation, which
+    is opaque as well. We leave the defaults which have a model in the
+    standard library. *)
+let instantiate_opaque_default_methods (crate : crate) : crate =
+  let builtin_funs = ExtractBuiltin.builtin_funs_map () in
+  let mctx = Charon.NameMatcher.ctx_from_crate crate in
+  let is_opaque_default (fid : FunDeclId.id) : bool =
+    match FunDeclId.Map.find_opt fid crate.fun_decls with
+    | Some ({ src = TraitDefaultFun _; _ } as d) ->
+        (not (Charon.GAstUtils.has_body d.body))
+        && not
+             (ExtractBuiltin.NameMatcherMap.mem mctx d.item_meta.name
+                builtin_funs)
+    | _ -> false
+  in
+  (* The registered items include the ones which failed to translate *)
+  let first_free_id =
+    1
+    + List.fold_left
+        (fun n (id : item_id) ->
+          match id with
+          | IdFun id -> max n (FunDeclId.to_int id)
+          | _ -> n)
+        (-1)
+        (Charon.Meta.AnyDeclIdHashMap.keys crate.item_names)
+  in
+  (* The implementations modeled in the library are not extracted *)
+  let builtin_impls = ExtractBuiltin.builtin_trait_impls_map () in
+  let is_builtin_impl (timpl : trait_impl) : bool =
+    match TraitDeclId.Map.find_opt timpl.impl_trait.id crate.trait_decls with
+    | Some tdecl ->
+        Option.is_some
+          (ExtractBuiltin.NameMatcherMap.find_with_generics_opt mctx
+             tdecl.item_meta.name timpl.impl_trait.generics builtin_impls)
+    | None -> false
+  in
+  let new_decls = ref [] in
+  (* For each default method and implementation: the instantiated method, the
+     position of the [Self] clause among the trait references of the default and
+     the generic arguments the implementation gives to the default (in which
+     the parameters of the method are bound variables) *)
+  let instantiated = ref [] in
+  let self_clause_index (timpl : trait_impl) (bound_fn : fun_decl_ref binder) :
+      int =
+    Option.get
+      (List.find_index
+         (fun (tref : poly_trait_ref) ->
+           match tref.binder_value.kind with
+           | TraitImpl { id; _ } -> id = timpl.def_id
+           | _ -> false)
+         bound_fn.binder_value.generics.trait_refs)
+  in
+  let instantiate (timpl : trait_impl) (method_id : TraitMethodId.id)
+      (bound_fn : fun_decl_ref binder) : fun_decl_ref binder =
+    let default = FunDeclId.Map.find bound_fn.binder_value.id crate.fun_decls in
+    (* The generics of the instantiated method are the generics of the
+       implementation followed by the generics of the method *)
+    let fused =
+      Charon.Substitute.fuse_binders
+        Charon.Substitute.st_substitute_visitor#visit_fun_decl_ref
+        { item_binder_params = timpl.generics; item_binder_value = bound_fn }
+    in
+    let signature =
+      Charon.Substitute.st_substitute_visitor#visit_fun_sig
+        (Charon.Substitute.make_subst_from_generics default.generics
+           fused.item_binder_value.generics Self)
+        default.signature
+    in
+    let def_id = FunDeclId.of_int (first_free_id + List.length !new_decls) in
+    let method_name =
+      Charon.GAstUtils.get_method_name crate timpl.impl_trait.id method_id
+    in
+    let name =
+      timpl.item_meta.name @ [ PeIdent (method_name, Disambiguator.zero) ]
+    in
+    let impl_ref : trait_impl_ref =
+      {
+        id = timpl.def_id;
+        generics = generic_args_of_params None timpl.generics;
+      }
+    in
+    let decl : fun_decl =
+      {
+        def_id;
+        item_meta = { timpl.item_meta with name };
+        generics = fused.item_binder_params;
+        signature;
+        src = TraitImplFun (impl_ref, timpl.impl_trait, method_id, true);
+        body = OpaqueBody;
+      }
+    in
+    new_decls := (timpl.def_id, decl) :: !new_decls;
+    instantiated :=
+      ( (bound_fn.binder_value.id, timpl.def_id),
+        ( def_id,
+          self_clause_index timpl bound_fn,
+          (bound_fn.binder_params, bound_fn.binder_value.generics) ) )
+      :: !instantiated;
+    let impl_args = generic_args_of_params None timpl.generics in
+    let method_args =
+      Charon.Substitute.bound_identity_args bound_fn.binder_params
+    in
+    {
+      bound_fn with
+      binder_value =
+        {
+          id = def_id;
+          generics =
+            {
+              regions = impl_args.regions @ method_args.regions;
+              types = impl_args.types @ method_args.types;
+              const_generics =
+                impl_args.const_generics @ method_args.const_generics;
+              trait_refs = impl_args.trait_refs @ method_args.trait_refs;
+            };
+        };
+    }
+  in
+  let trait_impls =
+    TraitImplId.Map.map
+      (fun (timpl : trait_impl) ->
+        let methods =
+          TraitMethodId.Map.mapi
+            (fun method_id (bound_fn : fun_decl_ref binder) ->
+              if
+                is_opaque_default bound_fn.binder_value.id
+                && not (is_builtin_impl timpl)
+              then
+                instantiate timpl method_id bound_fn
+              else bound_fn)
+            timpl.methods
+        in
+        { timpl with methods })
+      crate.trait_impls
+  in
+  (* The calls of a default method with an implementation as the instance (e.g.
+     [<Big as Prim>::to_u32] resolved by Charon) call the instantiated method *)
+  (* The arguments of the method parameters among the arguments [args] of the
+     default: where the implementation gives the default the parameters *)
+  let method_args (method_params : generic_params)
+      (impl_generics : generic_args) (args : generic_args) : generic_args =
+    let find : 'a 'b. ('a -> bool) -> 'a list -> 'b list -> 'b =
+     fun is_param impl_args args ->
+      snd (List.find (fun (a, _) -> is_param a) (List.combine impl_args args))
+    in
+    {
+      regions =
+        List.map
+          (fun (r : region_param) ->
+            find
+              (fun x -> x = RVar (Bound (0, r.index)))
+              impl_generics.regions args.regions)
+          method_params.regions;
+      types =
+        List.map
+          (fun (t : type_param) ->
+            find
+              (fun x -> x = TVar (Bound (0, t.index)))
+              impl_generics.types args.types)
+          method_params.types;
+      const_generics =
+        List.map
+          (fun (c : const_generic_param) ->
+            find
+              (fun (x : constant_expr) -> x.kind = CVar (Bound (0, c.index)))
+              impl_generics.const_generics args.const_generics)
+          method_params.const_generics;
+      trait_refs =
+        List.map
+          (fun (c : trait_param) ->
+            find
+              (fun (x : poly_trait_ref) ->
+                match x.binder_value.kind with
+                | Clause (Bound (_, id), _) -> id = c.clause_id
+                | _ -> false)
+              impl_generics.trait_refs args.trait_refs)
+          method_params.trait_clauses;
+    }
+  in
+  let redirect (fn : fn_ptr) : fn_ptr =
+    match fn.kind with
+    | Fun fid -> (
+        let impls =
+          List.filter_map
+            (fun ((default_id, impl_id), x) ->
+              if default_id = fid then Some (impl_id, x) else None)
+            !instantiated
+        in
+        match impls with
+        | [] -> fn
+        | (_, (_, k, _)) :: _ -> (
+            match (List.nth fn.generics.trait_refs k).binder_value.kind with
+            | TraitImpl { id; generics = impl_args } -> (
+                match List.assoc_opt id impls with
+                | Some (new_id, _, (method_params, impl_generics)) ->
+                    let margs =
+                      method_args method_params impl_generics fn.generics
+                    in
+                    {
+                      kind = Fun new_id;
+                      generics =
+                        {
+                          regions = impl_args.regions @ margs.regions;
+                          types = impl_args.types @ margs.types;
+                          const_generics =
+                            impl_args.const_generics @ margs.const_generics;
+                          trait_refs = impl_args.trait_refs @ margs.trait_refs;
+                        };
+                    }
+                | None -> fn)
+            | _ -> fn))
+    | TraitMethod _ -> fn
+  in
+  let visitor =
+    object
+      inherit [_] map_statement
+      method! visit_fn_ptr _ fn = redirect fn
+    end
+  in
+  let redirect_body (f : fun_decl) : fun_decl =
+    match f.body with
+    | StructuredBody body ->
+        {
+          f with
+          body =
+            StructuredBody
+              { body with body = visitor#visit_block () body.body };
+        }
+    | _ -> f
+  in
+  let fun_decls =
+    FunDeclId.Map.of_list
+      (List.map
+         (fun (id, f) -> (id, redirect_body f))
+         (FunDeclId.Map.bindings crate.fun_decls)
+      @ List.map (fun (_, (d : fun_decl)) -> (d.def_id, d)) !new_decls)
+  in
+  let item_names =
+    Charon.Meta.AnyDeclIdHashMap.of_list
+      (Charon.Meta.AnyDeclIdHashMap.bindings crate.item_names
+      @ List.map
+          (fun (_, (d : fun_decl)) -> (IdFun d.def_id, d.item_meta.name))
+          !new_decls)
+  in
+  (* The instantiated methods come right before their implementations *)
+  let declarations =
+    Option.map
+      (List.concat_map (fun (g : declaration_group) ->
+           let impls =
+             match g with
+             | TraitImplGroup g ->
+                 Charon.GAstUtils.g_declaration_group_to_list g
+             | MixedGroup g ->
+                 List.filter_map
+                   (fun (id : item_id) ->
+                     match id with
+                     | IdTraitImpl id -> Some id
+                     | _ -> None)
+                   (Charon.GAstUtils.g_declaration_group_to_list g)
+             | TypeGroup _ | FunGroup _ | GlobalGroup _ | TraitDeclGroup _ -> []
+           in
+           List.filter_map
+             (fun (impl_id, (d : fun_decl)) ->
+               if List.mem impl_id impls then
+                 Some (FunGroup (NonRecGroup d.def_id))
+               else None)
+             (List.rev !new_decls)
+           @ [ g ]))
+      crate.declarations
+  in
+  { crate with fun_decls; trait_impls; declarations; item_names }
+
 let apply_passes (crate : crate) : crate =
   (* Passes that apply to the whole crate *)
   let crate = update_array_default crate in
@@ -2281,5 +2561,6 @@ let apply_passes (crate : crate) : crate =
   let crate = remove_vtables crate in
   let crate = rename_type_vars crate in
   let crate = simplify_trait_calls crate in
+  let crate = instantiate_opaque_default_methods crate in
   [%ltrace "After pre-passes:\n" ^ Print.crate_to_string crate ^ "\n"];
   crate

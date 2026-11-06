@@ -49,6 +49,21 @@ axiom core.iter.adapters.map.Map.Insts.CoreIterTraitsIteratorIterator.next
   core.iter.adapters.map.Map I F → Result ((Option B) ×
     (core.iter.adapters.map.Map I F))
 
+/-- [core::iter::adapters::map::{impl core::iter::traits::iterator::Iterator<B> for core::iter::adapters::map::Map<I, F>}::map]:
+    Source: '/rustc/library/core/src/iter/adapters/map.rs', lines 99:0-101:27
+    Name pattern: [core::iter::adapters::map::{core::iter::traits::iterator::Iterator<core::iter::adapters::map::Map<@I, @F>, @B>}::map] -/
+@[rust_fun
+  "core::iter::adapters::map::{core::iter::traits::iterator::Iterator<core::iter::adapters::map::Map<@I, @F>, @B>}::map"]
+axiom core.iter.adapters.map.Map.Insts.CoreIterTraitsIteratorIterator.map
+  {B : Type _} {I : Type _} {F : Type _} {Clause0_Item : Type _} {B1 : Type _}
+  {F1 : Type _} (traitsiteratorIteratorInst :
+  core.iter.traits.iterator.Iterator I Clause0_Item)
+  (opsfunctionFnMutFTupleClause0_ItemBInst : core.ops.function.FnMut F
+  Clause0_Item B) (opsfunctionFnMutFTupleBBInst : core.ops.function.FnMut F1 B
+  B1) :
+  core.iter.adapters.map.Map I F → F1 → Result (core.iter.adapters.map.Map
+    (core.iter.adapters.map.Map I F) F1)
+
 /-- Trait implementation: [core::iter::adapters::map::{impl core::iter::traits::iterator::Iterator<B> for core::iter::adapters::map::Map<I, F>}]
     Source: '/rustc/library/core/src/iter/adapters/map.rs', lines 99:0-101:27
     Name pattern: [core::iter::traits::iterator::Iterator<core::iter::adapters::map::Map<@I, @F>, @B>] -/

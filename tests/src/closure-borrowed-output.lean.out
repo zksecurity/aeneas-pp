@@ -1,5 +1,5 @@
 [[92mInfo[39m ] Imported: tests/llbc/closure_borrowed_output.llbc
 [[91mError[39m] Closures whose output borrows from their arguments are not supported yet
 Source: 'tests/src/closure-borrowed-output.rs', lines 14:0-16:1
-Compiler source: symbolic/SymbolicToPureTypes.ml, line 1219
+Compiler source: symbolic/SymbolicToPureTypes.ml, line 1213
 

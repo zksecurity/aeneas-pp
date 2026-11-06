@@ -31,6 +31,11 @@ pub fn same(a: &Arc<u32>, b: &Arc<u32>) -> bool {
     a == b
 }
 
+/// `Arc::as_ref` as a function item.
+pub fn get(o: Option<&Arc<u32>>) -> Option<&u32> {
+    o.map(Arc::as_ref)
+}
+
 #[verify::test]
 pub fn test_arc() {
     let b = push(Arc::new(Bucket { id: 1, rest: None }), 2);

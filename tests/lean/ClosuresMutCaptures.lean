@@ -97,54 +97,13 @@ def Eng.consecutive.closure := Unit
     Source: 'tests/src/closures-mut-captures.rs', lines 46:22-46:65 -/
 def Eng.consecutive.closure_1 := Eng.consecutive.closure × Eng
 
-/-- Trait declaration: [core::ops::function::FnOnce::<_, (&_ mut _,), _>]
-    Source: '/rustc/library/core/src/ops/function.rs', lines 242:0-242:35
-    Name pattern: [core::ops::function::FnOnce]
-    Visibility: public -/
-@[rust_trait "core::ops::function::FnOnce"]
-structure core.ops.function.FnOnceT0TupleMut0T1T2 (T0 : Type _) (T1 : Type _)
-  (T2 : Type _) where
-  call_once : T0 → T1 → Result (T2 × T1)
-
-/-- Trait declaration: [core::ops::function::FnMut::<_, (&_ mut _,), _>]
-    Source: '/rustc/library/core/src/ops/function.rs', lines 163:0-163:48
-    Name pattern: [core::ops::function::FnMut]
-    Visibility: public -/
-@[rust_trait "core::ops::function::FnMut"
-  (parentClauses := ["FnOnceT0TupleMut0T1T2Inst"])]
-structure core.ops.function.FnMutT0TupleMut0T1T2 (T0 : Type _) (T1 : Type _)
-  (T2 : Type _) where
-  FnOnceT0TupleMut0T1T2Inst : core.ops.function.FnOnceT0TupleMut0T1T2 T0 T1 T2
-  call_mut : T0 → T1 → Result (T2 × T1 × T0)
-
-/-- Trait declaration: [core::ops::function::FnOnce::<_, (&_ mut closures_mut_captures::Eng<_>, _), _>]
-    Source: '/rustc/library/core/src/ops/function.rs', lines 242:0-242:35
-    Name pattern: [core::ops::function::FnOnce]
-    Visibility: public -/
-@[rust_trait "core::ops::function::FnOnce"]
-structure core.ops.function.FnOnceT0PairMut0EngT1T2 (T0 : Type _) (T1 : Type _)
-  (T2 : Type _) where
-  call_once : T0 → (Eng × T1) → Result (T2 × Eng × (Eng → Eng))
-
-/-- Trait declaration: [core::ops::function::FnMut::<_, (&_ mut closures_mut_captures::Eng<_>, _), _>]
-    Source: '/rustc/library/core/src/ops/function.rs', lines 163:0-163:48
-    Name pattern: [core::ops::function::FnMut]
-    Visibility: public -/
-@[rust_trait "core::ops::function::FnMut"
-  (parentClauses := ["FnOnceT0PairMut0EngT1T2Inst"])]
-structure core.ops.function.FnMutT0PairMut0EngT1T2 (T0 : Type _) (T1 : Type _)
-  (T2 : Type _) where
-  FnOnceT0PairMut0EngT1T2Inst : core.ops.function.FnOnceT0PairMut0EngT1T2 T0 T1
-    T2
-  call_mut : T0 → (Eng × T1) → Result (T2 × Eng × (Eng → Eng) × T0)
-
 /-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::telescope]: loop body 0:
     Source: 'tests/src/closures-mut-captures.rs', lines 21:8-28:5 -/
 @[rust_loop_body]
 def Eng.telescope_loop.body
   {T1 : Type _} (coreopsfunctionFnMutT1PairMutEngU32ResultBoolTupleInst :
-  core.ops.function.FnMutT0PairMut0EngT1T2 T1 Std.U32 (core.result.Result Bool
-  Unit)) (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)
+  core.ops.function.FnMut T1 (Eng × Std.U32) ((core.result.Result Bool Unit) ×
+  Eng × (Eng → Eng))) (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)
   (v : alloc.vec.Vec Std.U32) (i : Std.U32) (n : Std.U32) (next : T1)
   (i1 : Std.U32) (c : Std.U32) :
   Result (ControlFlow ((alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) ×
@@ -161,9 +120,9 @@ def Eng.telescope_loop.body
     if i1 < n
     then
       do
-      let (r, self, call_mut_back, next1) ←
+      let ((r, self, call_mut_back), next1) ←
         coreopsfunctionFnMutT1PairMutEngU32ResultBoolTupleInst.call_mut next
-          ({ t := v, d := i }, i1)
+          (({ t := v, d := i } : Eng), i1)
       let cf ← core.result.Result.Insts.CoreOpsTry.branch r
       match cf with
       | core.ops.control_flow.ControlFlow.Continue val =>
@@ -202,8 +161,8 @@ def Eng.telescope_loop.body
 @[rust_loop]
 def Eng.telescope_loop
   {T1 : Type _} (coreopsfunctionFnMutT1PairMutEngU32ResultBoolTupleInst :
-  core.ops.function.FnMutT0PairMut0EngT1T2 T1 Std.U32 (core.result.Result Bool
-  Unit)) (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)
+  core.ops.function.FnMut T1 (Eng × Std.U32) ((core.result.Result Bool Unit) ×
+  Eng × (Eng → Eng))) (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)
   (v : alloc.vec.Vec Std.U32) (i : Std.U32) (n : Std.U32) (next : T1)
   (i1 : Std.U32) (c : Std.U32) :
   Result ((core.result.Result Std.U32 Unit) × (alloc.vec.Vec Std.U32) × Std.U32
@@ -219,8 +178,8 @@ def Eng.telescope_loop
     Source: 'tests/src/closures-mut-captures.rs', lines 14:4-28:5 -/
 def Eng.telescope
   {T1 : Type _} (coreopsfunctionFnMutT1PairMutAEngU32ResultBoolTupleInst :
-  core.ops.function.FnMutT0PairMut0EngT1T2 T1 Std.U32 (core.result.Result Bool
-  Unit)) (self : Eng) (n : Std.U32) (next : T1) :
+  core.ops.function.FnMut T1 (Eng × Std.U32) ((core.result.Result Bool Unit) ×
+  Eng × (Eng → Eng))) (self : Eng) (n : Std.U32) (next : T1) :
   Result ((core.result.Result Std.U32 Unit) × Eng × (Eng → Eng))
   := do
   let (r, v, i, back) ←
@@ -247,7 +206,8 @@ def
   let i1 ← i % 2#u32
   let back := fun (tupled_args1 : Eng) => { e with t := tupled_args1.t }
   let back1 := fun c1 => c1
-  ok (core.result.Result.Ok (i1 = 0#u32), b, { e with t := v }, back, back1)
+  ok (core.result.Result.Ok (decide (i1 = 0#u32)), b, { e with t := v }, back,
+    back1)
 
 /-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::telescope::<_, _, closures_mut_captures::{closures_mut_captures::Eng<'a>}::count::{closure}<_, _, _, _>>]: loop body 0:
     Source: 'tests/src/closures-mut-captures.rs', lines 21:8-28:5 -/
@@ -399,7 +359,7 @@ def Eng.consecutive.closure_1.Insts.CoreOpsFunctionFnMutPairU32U32Bool.call_mut
       (e, a)
   let i2 ← i1 + 1#u32
   let back := fun c1 => c
-  ok (i = i2, ((), e), back)
+  ok (decide (i = i2), ((), e), back)
 
 /-- [closures_mut_captures::both_pairs::<_, closures_mut_captures::{closures_mut_captures::Eng<'a>}::consecutive::{closure#1}<_, _, _, _, _, _, _>>]:
     Source: 'tests/src/closures-mut-captures.rs', lines 81:0-83:1 -/
@@ -441,7 +401,7 @@ def Eng.record
   let v ← alloc.vec.Vec.push self.t x
   let i ← x + self.d
   let back'a := fun (self1 : Eng) => { self with t := self1.t }
-  ok (i = y, { self with t := v }, back'a)
+  ok (decide (i = y), { self with t := v }, back'a)
 
 /-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::shifted]:
     Source: 'tests/src/closures-mut-captures.rs', lines 56:4-58:5
@@ -536,12 +496,13 @@ def Eng.shifted_below.closure.Insts.CoreOpsFunctionFnMutTupleU32Bool.call_mut
     Source: 'tests/src/closures-mut-captures.rs', lines 66:0-70:1 -/
 def call_mut_twice
   {T0 : Type _} (coreopsfunctionFnMutT0TupleMut0VecU32U32Inst :
-  core.ops.function.FnMutT0TupleMut0T1T2 T0 (alloc.vec.Vec Std.U32) Std.U32)
-  (v : alloc.vec.Vec Std.U32) (f : T0) :
+  core.ops.function.FnMut T0 (alloc.vec.Vec Std.U32) (Std.U32 × (alloc.vec.Vec
+  Std.U32))) (v : alloc.vec.Vec Std.U32) (f : T0) :
   Result (Std.U32 × (alloc.vec.Vec Std.U32))
   := do
-  let (a, v1, f1) ← coreopsfunctionFnMutT0TupleMut0VecU32U32Inst.call_mut f v
-  let (b, v2, _) ← coreopsfunctionFnMutT0TupleMut0VecU32U32Inst.call_mut f1 v1
+  let ((a, v1), f1) ← coreopsfunctionFnMutT0TupleMut0VecU32U32Inst.call_mut f v
+  let ((b, v2), _) ←
+    coreopsfunctionFnMutT0TupleMut0VecU32U32Inst.call_mut f1 v1
   let i ← a + b
   ok (i, v2)
 
