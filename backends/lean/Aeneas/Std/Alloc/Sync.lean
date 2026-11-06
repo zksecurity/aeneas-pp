@@ -1,6 +1,7 @@
 /- `alloc::sync`: `Arc<T>` is `T` in the extracted code. -/
 module
 public import Aeneas.Std.Alloc.Vec
+public import Aeneas.Std.Core.Borrow
 public import Aeneas.Std.Core.Cmp
 public import Aeneas.Std.Core.Default
 public import Aeneas.Std.Core.Convert
@@ -75,6 +76,12 @@ def core.convert.AsRefArc (T : Type _) : core.convert.AsRef (alloc.sync.Arc T) T
   as_ref x := ok (alloc.sync.Arc.as_ref x)
 }
 
+@[expose, reducible, rust_trait_impl "core::borrow::Borrow<alloc::sync::Arc<@T>, @T>"
+    (keepParams := [true, false])]
+def core.borrow.BorrowArc (T : Type _) : core.borrow.Borrow (alloc.sync.Arc T) T := {
+  borrow x := ok (alloc.sync.Arc.borrow x)
+}
+
 @[expose, reducible, rust_trait_impl "core::cmp::PartialEq<alloc::sync::Arc<@T>, alloc::sync::Arc<@T>>"
     (keepParams := [true, false])]
 def core.cmp.PartialEqArc {T : Type _} (PartialEqInst : core.cmp.PartialEq T T) :
@@ -87,6 +94,13 @@ def core.cmp.PartialEqArc {T : Type _} (PartialEqInst : core.cmp.PartialEq T T) 
 def core.default.DefaultArc {T : Type _} (DefaultInst : core.default.Default T) :
     core.default.Default (alloc.sync.Arc T) := {
   default := alloc.sync.Arc.default DefaultInst
+}
+
+@[expose, reducible, rust_trait_impl "core::convert::From<alloc::sync::Arc<[@T]>, alloc::vec::Vec<@T>>"
+    (keepParams := [true, false]) (keepTraitClauses := [false])]
+def core.convert.FromArcSliceVec (T : Type _) :
+    core.convert.From (alloc.sync.Arc (Slice T)) (alloc.vec.Vec T) := {
+  «from» v := ok (alloc.sync.Arc.from_vec v)
 }
 
 end Aeneas.Std
