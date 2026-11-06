@@ -387,6 +387,81 @@ let update_array_default (crate : crate) : crate =
     in
     visitor#visit_crate None crate
 
+(** What a [break] out of an enclosing loop continues with (see
+    {!terminal_prefix}) *)
+type loop_exit_cont =
+  | RealLoopExit  (** The loop may iterate *)
+  | ScopeExit of statement list option
+      (** The loop is a forward scope (see
+          {!LlbcAstUtils.loop_is_forward_scope}): the straight-line code after
+          it which ends the function, if it exists *)
+
+(** Shift the indices of the jumps out of [stl] by [k] *)
+let shift_jumps (k : int) (stl : statement list) : statement list =
+  let visitor =
+    object
+      inherit [_] map_statement as super
+      method! visit_Loop depth body = super#visit_Loop (depth + 1) body
+      method! visit_Break depth i = if i >= depth then Break (i + k) else Break i
+
+      method! visit_Continue depth i =
+        if i >= depth then Continue (i + k) else Continue i
+    end
+  in
+  List.map (visitor#visit_statement 0) stl
+
+(** The statements of [stl] up to the point where the control flow leaves it,
+    if they are straight-line code which ends the function: we don't duplicate
+    control flow. [k] gives the statements which end the function when [stl]
+    falls through, and [loops] the exits of the innermost enclosing loops: a
+    [break] out of forward scopes continues with the statements after them. *)
+let rec terminal_prefix (stl : statement list) (k : statement list option)
+    (loops : loop_exit_cont list) : statement list option =
+  match stl with
+  | [] -> k
+  | st :: stl -> (
+      match st.kind with
+      | Return | Panic _ | UnwindTerminate | UndefinedBehavior -> Some [ st ]
+      | Break i -> (
+          if
+            i >= List.length loops
+            || List.mem RealLoopExit (Collections.List.prefix (i + 1) loops)
+          then None
+          else
+            match List.nth loops i with
+            | ScopeExit cont -> Option.map (shift_jumps (i + 1)) cont
+            | RealLoopExit -> None)
+      | Assign _ | SetDiscriminant _ | StorageLive _ | StorageDead _
+      | PlaceMention _ | Borrowck _ | Drop _ | Assert _ | Call _ | Nop ->
+          Option.map (fun stl -> st :: stl) (terminal_prefix stl k loops)
+      | InlineAsm _ | Switch _ | Loop _ | Continue _ | UnwindResume -> None)
+
+(** Replace the breaks out of the loop whose body is [body] with [stl], which
+    we move into the loops of [body] (see {!shift_jumps}). [in_loops]: whether
+    we replace the breaks in the loops of [body] which may iterate. *)
+let replace_breaks ~(in_loops : bool) (stl : statement list) (body : block) :
+    block =
+  let visitor =
+    object
+      inherit [_] map_statement as super
+
+      method! visit_Loop (depth, active) body =
+        super#visit_Loop
+          (depth + 1, active && (in_loops || loop_is_forward_scope body))
+          body
+
+      method! visit_block (depth, active) b =
+        let b = super#visit_block (depth, active) b in
+        let replace (st : statement) =
+          match st.kind with
+          | Break i when i = depth && active -> shift_jumps (depth + 1) stl
+          | _ -> [ st ]
+        in
+        { b with statements = List.concat_map replace b.statements }
+    end
+  in
+  visitor#visit_block (0, true) body
+
 (** Move the statements which follow a loop and end the function to the places
     which break out of the loop, if the loop returns from the function: all the
     exits of the loop then reach the end of the function, and its translation
@@ -428,21 +503,6 @@ let update_array_default (crate : crate) : crate =
     indices of their [break] and [continue] statements by the number of loops
     we move them into. *)
 let inline_terminal_loop_exits (_crate : crate) (f : fun_decl) : fun_decl =
-  (* The statements of [stl] up to the end of the function, if they are
-     straight-line code which ends it: we don't duplicate control flow *)
-  let rec terminal_prefix (stl : statement list) : statement list option =
-    match stl with
-    | [] -> None
-    | st :: stl -> (
-        match st.kind with
-        | Return | Panic _ | UnwindTerminate | UndefinedBehavior -> Some [ st ]
-        | Assign _ | SetDiscriminant _ | StorageLive _ | StorageDead _
-        | PlaceMention _ | Borrowck _ | Drop _ | Assert _ | Call _ | Nop ->
-            Option.map (fun stl -> st :: stl) (terminal_prefix stl)
-        | InlineAsm _ | Switch _ | Loop _ | Break _ | Continue _ | UnwindResume
-          ->
-            None)
-  in
   let contains_return (b : block) : bool =
     let visitor =
       object
@@ -455,39 +515,6 @@ let inline_terminal_loop_exits (_crate : crate) (f : fun_decl) : fun_decl =
       false
     with Utils.Found -> true
   in
-  (* Shift the indices of the jumps out of [stl] by [k] *)
-  let shift (k : int) (stl : statement list) : statement list =
-    let visitor =
-      object
-        inherit [_] map_statement as super
-        method! visit_Loop depth body = super#visit_Loop (depth + 1) body
-        method! visit_Break depth i = if i >= depth then Break (i + k) else Break i
-
-        method! visit_Continue depth i =
-          if i >= depth then Continue (i + k) else Continue i
-      end
-    in
-    List.map (visitor#visit_statement 0) stl
-  in
-  (* Replace the breaks out of the loop whose body is [body] with [stl] *)
-  let replace_breaks (stl : statement list) (body : block) : block =
-    let visitor =
-      object
-        inherit [_] map_statement as super
-        method! visit_Loop depth body = super#visit_Loop (depth + 1) body
-
-        method! visit_block depth b =
-          let b = super#visit_block depth b in
-          let replace (st : statement) =
-            match st.kind with
-            | Break i when i = depth -> shift (depth + 1) stl
-            | _ -> [ st ]
-          in
-          { b with statements = List.concat_map replace b.statements }
-      end
-    in
-    visitor#visit_block 0 body
-  in
   let visitor =
     object (self)
       inherit [_] map_statement
@@ -499,11 +526,14 @@ let inline_terminal_loop_exits (_crate : crate) (f : fun_decl) : fun_decl =
           | ({ kind = Loop body; _ } as st) :: after
             when (not (loop_is_forward_scope body)) && contains_return body
             -> (
-              match terminal_prefix after with
+              match terminal_prefix after None [] with
               | Some stl ->
                   [
                     self#visit_statement env
-                      { st with kind = Loop (replace_breaks stl body) };
+                      {
+                        st with
+                        kind = Loop (replace_breaks ~in_loops:true stl body);
+                      };
                   ]
               | None -> self#visit_statement env st :: update after)
           | st :: after -> self#visit_statement env st :: update after
@@ -519,9 +549,73 @@ let inline_terminal_loop_exits (_crate : crate) (f : fun_decl) : fun_decl =
   in
   { f with body }
 
+(** Move the statements which follow a forward scope (see
+    {!LlbcAstUtils.loop_is_forward_scope}) and end the function to the [break]
+    statements targeting the scope: they become returns, and the symbolic
+    execution doesn't join the contexts reaching the end of the function. We
+    only move straight-line code. The statements which end the function after
+    the scope may follow the branching expression the scope is in: a branch
+    which falls through continues after the branching, and a [break] continues
+    after the scopes it exits.
+
+    We leave the loops which may iterate unchanged: their exits remain
+    distinct, and their contexts are joined as before (the joins of the
+    contexts at the exits of a loop are more restricted than the joins after a
+    switch: see {!InterpJoin.freshen_regions_ended_in_other}). *)
+let inline_terminal_scope_exits (_crate : crate) (f : fun_decl) : fun_decl =
+  (* The visitor environment gives the statements which end the function when
+     the visited block falls through, if they exist, and the exits of the
+     enclosing loops (see {!terminal_prefix}) *)
+  let visitor =
+    object (self)
+      inherit [_] map_statement
+
+      method! visit_block (k, loops) b =
+        let rec update (stl : statement list) : statement list =
+          match stl with
+          | [] -> []
+          | ({ kind = Loop body; _ } as st) :: after ->
+              if loop_is_forward_scope body then
+                let cont = terminal_prefix after k loops in
+                let body =
+                  match cont with
+                  | Some stl -> replace_breaks ~in_loops:false stl body
+                  | None -> body
+                in
+                let st =
+                  self#visit_statement
+                    (None, ScopeExit cont :: loops)
+                    { st with kind = Loop body }
+                in
+                (* The loops which may iterate still exit to the statements
+                   after the scope *)
+                if Collections.IntSet.mem 0 (block_control_effects body).breaks
+                then st :: update after
+                else [ st ]
+              else
+                self#visit_statement (None, RealLoopExit :: loops) st
+                :: update after
+          | ({ kind = Switch _; _ } as st) :: after ->
+              self#visit_statement (terminal_prefix after k loops, loops) st
+              :: update after
+          | st :: after -> self#visit_statement (None, loops) st :: update after
+        in
+        { b with statements = update b.statements }
+    end
+  in
+  let body =
+    match f.body with
+    | StructuredBody body ->
+        StructuredBody
+          { body with body = visitor#visit_block (None, []) body.body }
+    | other -> other
+  in
+  { f with body }
+
 (** Inline what comes after an [if then else], a [switch] or a [match], etc.
     under certain conditions, to prevent useless joins from being performed by
-    the symbolic execution.
+    the symbolic execution: when it is cheap, or when it is straight-line code
+    which ends the function (see {!terminal_prefix}).
 
     The main goal of this pass is to improve the quality of the generated code.
 *)
@@ -554,7 +648,11 @@ let remove_useless_joins (crate : crate) (f : fun_decl) : fun_decl =
         | Switch (data, branches) ->
             [%ldebug "Switch: can_inline: " ^ Print.bool_to_string can_inline];
             (* Attempt to inline inside the body *)
-            let to_inline, ls = if can_inline then (ls, []) else ([], ls) in
+            let to_inline, ls =
+              if can_inline || Option.is_some (terminal_prefix ls None []) then
+                (ls, [])
+              else ([], ls)
+            in
             let update b = snd (update_block to_inline b) in
             let branches = List.map update branches in
             let ls = { st with kind = Switch (data, branches) } :: ls in
@@ -2505,6 +2603,7 @@ let apply_passes (crate : crate) : crate =
       ("erase_body_regions", erase_body_regions);
       ("remove_unreachable", remove_unreachable);
       ("inline_terminal_loop_exits", inline_terminal_loop_exits);
+      ("inline_terminal_scope_exits", inline_terminal_scope_exits);
       ("remove_useless_joins", remove_useless_joins);
       ( "remove_shallow_borrows_storage_live_dead",
         remove_shallow_borrows_storage_live_dead );

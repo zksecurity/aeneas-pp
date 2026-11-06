@@ -619,49 +619,37 @@ let eval_global_as_fresh_symbolic_value (span : Meta.span)
       in
       (ctx, mk_tvalue_from_symbolic_value sval, ty, cc)
 
-(** Where [break i] goes: the end of the [i]th enclosing loop if it is a
-    forward scope (see {!LlbcAstUtils.loop_is_forward_scope}) not enclosing the
-    innermost loop which may iterate, otherwise an exit of this loop *)
-let break_target (span : Meta.span) (config : config) (i : int) :
-    SA.exit_target =
-  let rec find (scopes : loop_scope list) (i : int) =
-    match scopes with
-    | ForwardScope id :: scopes -> if i = 0 then SA.ExitJoin id else find scopes (i - 1)
-    | RealLoop :: _ -> SA.ExitLoop (LoopExitBreak i)
-    | [] -> [%internal_error] span
-  in
-  find config.loop_scopes i
-
-(** Where [continue i] goes: the next iteration of the innermost loop which may
-    iterate, or an exit of this loop if the [continue] targets an outer loop *)
-let continue_target (span : Meta.span) (config : config) (i : int) :
-    SA.exit_target =
-  let rec find (scopes : loop_scope list) (i : int) =
-    match scopes with
-    | ForwardScope _ :: scopes ->
-        [%sanity_check] span (i > 0);
-        find scopes (i - 1)
-    | RealLoop :: _ ->
-        if i = 0 then SA.ExitLoopContinue else SA.ExitLoop (LoopExitContinue i)
-    | [] -> [%internal_error] span
-  in
-  find config.loop_scopes i
-
-(** Where a [return] goes: the end of the function, or an exit of the innermost
-    loop which may iterate *)
-let return_target (config : config) : SA.exit_target =
-  if List.mem RealLoop config.loop_scopes then SA.ExitLoop LoopExitReturn
-  else SA.ExitReturn
-
-(** Where a branch which doesn't reach the join of a switch or of a forward
-    scope goes *)
-let exit_target_of_result (config : config) (span : Meta.span)
-    (res : statement_eval_res) : SA.exit_target =
-  match res with
-  | Return -> return_target config
-  | Break i -> break_target span config i
-  | Continue i -> continue_target span config i
-  | Unit | Panic -> [%internal_error] span
+(** The targets an expression which doesn't reach the join of a switch goes to
+    (see {!SymbolicAst.exit_target}): the joins of the enclosing let-bindings,
+    the end of the function and the exits of the enclosing loop *)
+let rec exit_targets (e : SA.expr) : SA.exit_target list =
+  match e with
+  | Return _ | ForwardEnd _ -> [ ExitReturn ]
+  | Panic | Error _ | TargetDispatch _ -> []
+  | FunCall (_, e)
+  | EndAbs (_, _, _, e)
+  | EvalGlobal (_, _, _, e)
+  | Assertion (_, _, _, e)
+  | IntroSymbolic (_, _, _, _, e)
+  | SubstituteAbsIds (_, _, e)
+  | Meta (_, e) -> exit_targets e
+  | Expansion (_, _, exp) -> (
+      match exp with
+      | ExpandNoBranch (_, e) -> exit_targets e
+      | ExpandAdt branches ->
+          List.concat_map (fun (_, _, e) -> exit_targets e) branches
+      | ExpandBool (e0, e1) -> exit_targets e0 @ exit_targets e1
+      | ExpandInt (_, branches, e) ->
+          List.concat_map (fun (_, e) -> exit_targets e) branches
+          @ exit_targets e)
+  | LoopContinue _ -> [ ExitLoopContinue ]
+  | LoopBreak (_, _, exit, _, _) -> [ ExitLoop exit ]
+  | Loop loop ->
+      List.concat_map
+        (fun (exit : SA.loop_exit_info) -> exit_targets exit.exit_expr)
+        loop.exits
+  | Let lete -> lete.exits @ exit_targets lete.next_expr
+  | Join (join_id, _, _, _) -> [ ExitJoin join_id ]
 
 (** Evaluate a statement. *)
 let rec eval_statement (config : config) (st : statement) : stl_cm_fun =
@@ -825,10 +813,7 @@ and eval_statement_raw (config : config) (st : statement) : stl_cm_fun =
       if loop_is_forward_scope loop_body then
         eval_forward_scope config st.span loop_body ctx
       else
-        let body_config =
-          { config with loop_scopes = RealLoop :: config.loop_scopes }
-        in
-        let eval_loop_body = eval_block body_config loop_body in
+        let eval_loop_body = eval_block config loop_body in
         InterpLoops.eval_loop config st.span eval_loop_body ctx
   | Switch (data, branches) -> eval_switch config st.span data branches ctx
   | _ ->
@@ -947,7 +932,7 @@ and eval_switch_raw (config : config) (span : Meta.span) (data : switch_data)
             (try
               eval_switch_with_join config span
                 (ctx0.fresh_symbolic_expr_id ())
-                ~always_bind:false cc ctx0 ctx_resl
+                cc ctx0 ctx_resl
             with Errors.RFailure ->
               (* If the join threw a recoverable error we do not join
                  and simply duplicate the code *)
@@ -1001,7 +986,7 @@ and eval_switch_raw (config : config) (span : Meta.span) (data : switch_data)
             (try
               eval_switch_with_join config span
                 (ctx0.fresh_symbolic_expr_id ())
-                ~always_bind:false cf ctx0 resl
+                cf ctx0 resl
             with Errors.RFailure ->
               (* If the join threw a recoverable error we do not join
                  and simply duplicate the code *)
@@ -1055,7 +1040,7 @@ and eval_switch_raw (config : config) (span : Meta.span) (data : switch_data)
             (try
               eval_switch_with_join config span
                 (ctx0.fresh_symbolic_expr_id ())
-                ~always_bind:false cc ctx0 ctx_resl
+                cc ctx0 ctx_resl
             with Errors.RFailure ->
               (* If the join threw a recoverable error we do not join
                  and simply duplicate the code *)
@@ -1087,11 +1072,7 @@ and eval_switch_raw (config : config) (span : Meta.span) (data : switch_data)
 and eval_forward_scope (config : config) (span : Meta.span) (body : block) :
     stl_cm_fun =
  fun ctx ->
-  let join_id = ctx.fresh_symbolic_expr_id () in
-  let body_config =
-    { config with loop_scopes = ForwardScope join_id :: config.loop_scopes }
-  in
-  let ctx_resl, cf = eval_block body_config body ctx in
+  let ctx_resl, cf = eval_block config body ctx in
   (* The [break] statements targeting the scope continue after it; the
      others target loops enclosing the scope *)
   let ctx_resl =
@@ -1110,24 +1091,21 @@ and eval_forward_scope (config : config) (span : Meta.span) (body : block) :
         (ctx, res))
       ctx_resl
   in
-  eval_switch_with_join config span join_id ~always_bind:true cf ctx ctx_resl
+  eval_switch_with_join config span (ctx.fresh_symbolic_expr_id ()) cf ctx
+    ctx_resl
 
 and eval_switch_with_join (config : config) (span : Meta.span)
-    (join_id : SA.symbolic_expr_id) ~(always_bind : bool)
-    (cf : SA.expr list -> SA.expr) (ctx0 : eval_ctx)
+    (join_id : SA.symbolic_expr_id) (cf : SA.expr list -> SA.expr)
+    (ctx0 : eval_ctx)
     (ctx_resl : (eval_ctx * statement_eval_res) list) :
     (eval_ctx * statement_eval_res) list * (SA.expr list -> SA.expr) =
   (* We join the contexts of the branches which continue after the switch
      ([Unit]). The other branches return or jump forward out of an enclosing
      forward scope: those results are transmitted as they are, and the code
      they lead to is part of the bound expression of the let-binding we
-     generate (see {!exit_target_of_result}). Panics don't produce results: we
-     stop the symbolic execution there (we simply synthesize a panic node in
-     the symbolic AST).
-
-     [always_bind]: introduce the let-binding even if there is a single
-     context to join (the joins of forward scopes are the targets of the
-     branches of nested let-bindings which jump out of them). *)
+     generate (see {!exit_targets}). Panics don't produce results: we stop the
+     symbolic execution there (we simply synthesize a panic node in the
+     symbolic AST). *)
   let ctxl =
     InterpJoin.drop_locals_uninit_in_some_ctx
       (List.filter_map
@@ -1164,7 +1142,7 @@ and eval_switch_with_join (config : config) (span : Meta.span)
            | _ -> (ctxl, (ctx, res)))
          ctxl ctx_resl)
   in
-  if ctxl = [] || (List.length ctxl = 1 && not always_bind) then
+  if List.length ctxl <= 1 then
     (* No need to join the contexts: continue with the current context, and
        inline what happens after the switch inside the branching expression. *)
     (ctx_resl, cf)
@@ -1361,9 +1339,7 @@ and eval_switch_with_join (config : config) (span : Meta.span)
               join_id;
               exits =
                 List.sort_uniq Stdlib.compare
-                  (List.map
-                     (fun (_, res) -> exit_target_of_result config span res)
-                     exits);
+                  (List.concat_map exit_targets exit_exprs);
               next_expr;
               span;
             }

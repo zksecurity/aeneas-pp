@@ -20,25 +20,13 @@ module BinderMap = Collections.MakeMap (OrderedBinder)
 
 type interpreter_mode = ConcreteMode | SymbolicMode [@@deriving show]
 
-(** A loop enclosing the statement being evaluated *)
-type loop_scope =
-  | RealLoop  (** A loop which may iterate *)
-  | ForwardScope of symbolic_expr_id
-      (** A loop which never iterates (see
-          {!LlbcAstUtils.loop_is_forward_scope}): a scope [break] statements
-          jump forward out of, to the join with the given id *)
-[@@deriving show]
-
 type config = {
   mode : interpreter_mode;
       (** Concrete mode (interpreter) or symbolic mode (for synthesis) **)
-  loop_scopes : loop_scope list;
-      (** The loops enclosing the statement being evaluated, from the
-          innermost one: the targets of [break i] and [continue i] *)
 }
 [@@deriving show]
 
-let mk_config (mode : interpreter_mode) : config = { mode; loop_scopes = [] }
+let mk_config (mode : interpreter_mode) : config = { mode }
 
 type type_ctx = {
   type_decls_groups : type_declaration_group TypeDeclId.Map.t;
