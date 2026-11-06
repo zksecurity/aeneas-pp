@@ -94,27 +94,17 @@ def Input.reach
     | Node.Name n =>
       do
       let r ← Input.get self n
-      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-      match cf with
-      | core.ops.control_flow.ControlFlow.Continue _ =>
-        ok (Sum.inr (self, 0#u32, fun i => i))
-      | core.ops.control_flow.ControlFlow.Break residual =>
-        let r1 ←
-          core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-            Std.U32 (core.convert.FromSame Unit) residual
-        ok (Sum.inl (r1, self))
+      match r with
+      | core.result.Result.Ok _ => ok (Sum.inr (self, 0#u32, fun i => i))
+      | core.result.Result.Err e =>
+        ok (Sum.inl (core.result.Result.Err e, self))
     | Node.Lit =>
       do
       let (r, self1) ← Input.literal self
-      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-      match cf with
-      | core.ops.control_flow.ControlFlow.Continue _ =>
-        ok (Sum.inr (self1, 0#u32, fun i => i))
-      | core.ops.control_flow.ControlFlow.Break residual =>
-        let r1 ←
-          core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-            Std.U32 (core.convert.FromSame Unit) residual
-        ok (Sum.inl (r1, self1))
+      match r with
+      | core.result.Result.Ok _ => ok (Sum.inr (self1, 0#u32, fun i => i))
+      | core.result.Result.Err e =>
+        ok (Sum.inl (core.result.Result.Err e, self1))
     | Node.Leaf => ok (Sum.inr (self, 0#u32, fun i => i))
   let s1 : _root_.Sum (Input × Std.U32 × (Std.U32 → Std.U32))
     ((core.result.Result Std.U32 Unit) × Input) ←

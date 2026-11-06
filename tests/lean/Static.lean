@@ -899,13 +899,7 @@ def question_mark_static_ref
   (r : core.result.Result Std.U32 WithStaticRef) :
   Result (core.result.Result Std.U32 WithStaticRef)
   := do
-  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-  match cf with
-  | core.ops.control_flow.ControlFlow.Continue val =>
-    ok (core.result.Result.Ok val)
-  | core.ops.control_flow.ControlFlow.Break residual =>
-    core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-      Std.U32 (core.convert.FromSame WithStaticRef) residual
+  ok r
 
 /-- [static::StaticError]
     Source: 'tests/src/static.rs', lines 537:0-540:1
@@ -928,14 +922,7 @@ def static_error_parse
     Visibility: public -/
 def static_error_question_mark
   (x : Std.U32) : Result (core.result.Result Std.U32 StaticError) := do
-  let r ← static_error_parse x
-  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-  match cf with
-  | core.ops.control_flow.ControlFlow.Continue val =>
-    ok (core.result.Result.Ok val)
-  | core.ops.control_flow.ControlFlow.Break residual =>
-    core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-      Std.U32 (core.convert.FromSame StaticError) residual
+  static_error_parse x
 
 /-- [static::static_error_match]:
     Source: 'tests/src/static.rs', lines 555:0-560:1
@@ -1016,18 +1003,13 @@ def static_error_loop_question_mark_loop.body
   if i < n
   then
     let r ← static_error_get v i
-    let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-    match cf with
-    | core.ops.control_flow.ControlFlow.Continue val =>
+    match r with
+    | core.result.Result.Ok val =>
       let i1 ← lift (UScalar.cast .U32 val)
       let s1 ← s + i1
       let i2 ← i + 1#usize
       ok (cont (i2, s1))
-    | core.ops.control_flow.ControlFlow.Break residual =>
-      let r1 ←
-        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-          Std.U32 (core.convert.FromSame StaticError) residual
-      ok (done r1)
+    | core.result.Result.Err e => ok (done (core.result.Result.Err e))
   else ok (done (core.result.Result.Ok s))
 
 /-- [static::static_error_loop_question_mark]: loop 0:

@@ -206,10 +206,9 @@ def Eng.work
     Eng.guarded
       Eng.work.closure.Insts.CoreOpsFunctionFnOnceTupleMut3EngResultU32U32 self
       x
-  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
   let (r1, self2, back) ←
-    match cf with
-    | core.ops.control_flow.ControlFlow.Continue val =>
+    match r with
+    | core.result.Result.Ok val =>
       do
       let (r2, self3, under_back) ←
         Eng.under
@@ -217,12 +216,7 @@ def Eng.work
           self1 val ()
       ok (r2, self3,
         fun e => (guarded_back { self1 with t := (under_back e).t }).t)
-    | core.ops.control_flow.ControlFlow.Break residual =>
-      do
-      let r2 ←
-        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-          Std.U32 (core.convert.FromSame Std.U32) residual
-      ok (r2, self1, fun e => (guarded_back e).t)
+    | core.result.Result.Err _ => ok (r, self1, fun e => (guarded_back e).t)
   let back'a :=
     fun (self3 : Eng) =>
       let v := back { self2 with t := self3.t }

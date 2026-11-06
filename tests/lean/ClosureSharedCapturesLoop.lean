@@ -101,9 +101,8 @@ def Checker.telescope_loop.body
       let ((r, self1, call_mut_back), next1) ←
         coreopsfunctionFnMutT1TupleMutCheckerUsizeU32ResultOptionU32TupleInst.call_mut
           next (self, i3, domain)
-      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-      match cf with
-      | core.ops.control_flow.ControlFlow.Continue val =>
+      match r with
+      | core.result.Result.Ok val =>
         match val with
         | none => ok (Sum.inl (self1, fun c => (call_mut_back c).t))
         | some v =>
@@ -111,12 +110,9 @@ def Checker.telescope_loop.body
           ok (Sum.inr (Sum.inl
             (fun c => back { self with t := (call_mut_back c).t }, self1, e,
             next1, values1, b)))
-      | core.ops.control_flow.ControlFlow.Break residual =>
-        let r1 ←
-          core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-            ((alloc.vec.Vec Std.U32) × Std.U32) (core.convert.FromSame Unit)
-            residual
-        ok (Sum.inr (Sum.inr (r1, self1, fun c => (call_mut_back c).t)))
+      | core.result.Result.Err e1 =>
+        ok (Sum.inr (Sum.inr (core.result.Result.Err e1, self1,
+          fun c => (call_mut_back c).t)))
     | Node.Other => ok (Sum.inl (self, fun (c : Checker) => c.t))
   let s1 : _root_.Sum ((core.result.Result ((alloc.vec.Vec Std.U32) × Std.U32)
     Unit) × Checker × (Checker → Terms)) (_root_.Sum ((Checker → Terms) ×
@@ -257,9 +253,8 @@ def Checker.telescope01generateclosure_loop.body
       let (r, self1, next1, call_mut_back, call_mut_back1) ←
         generate.closure.Insts.CoreOpsFunctionFnMutTupleMut4CheckerUsizeU32ResultOptionU32Tuple.call_mut
           next (self, i5, domain)
-      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-      match cf with
-      | core.ops.control_flow.ControlFlow.Continue val =>
+      match r with
+      | core.result.Result.Ok val =>
         match val with
         | none =>
           ok (Sum.inl (self1, next1,
@@ -271,12 +266,8 @@ def Checker.telescope01generateclosure_loop.body
             (fun c => back { self with t := (call_mut_back c).t },
             fun c => let (_, _, b1) := call_mut_back1 c
                      back1 (i1, v1, b1), self1, e, next1, values1, b, i, v)))
-      | core.ops.control_flow.ControlFlow.Break residual =>
-        let r1 ←
-          core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-            ((alloc.vec.Vec Std.U32) × Std.U32) (core.convert.FromSame Unit)
-            residual
-        ok (Sum.inr (Sum.inr (r1, self1, next1,
+      | core.result.Result.Err e1 =>
+        ok (Sum.inr (Sum.inr (core.result.Result.Err e1, self1, next1,
           fun c => let (_, _, b1) := call_mut_back1 c
                    b1, fun c => (call_mut_back c).t)))
     | Node.Other =>
@@ -365,10 +356,9 @@ def generate
   := do
   let (r, ck1, telescope_back, c) ←
     Checker.telescope01generateclosure ck ty (np, params, false)
-  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
   let (r1, back) ←
-    match cf with
-    | core.ops.control_flow.ControlFlow.Continue val =>
+    match r with
+    | core.result.Result.Ok val =>
       let (values, _) := val
       let (_, _, reflexive) := c
       if reflexive
@@ -377,12 +367,8 @@ def generate
         ok (core.result.Result.Ok (decide (i > 1#usize)),
           fun c1 => (telescope_back c1).t)
       else ok (core.result.Result.Ok false, fun c1 => (telescope_back c1).t)
-    | core.ops.control_flow.ControlFlow.Break residual =>
-      do
-      let r2 ←
-        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-          Bool (core.convert.FromSame Unit) residual
-      ok (r2, fun c1 => (telescope_back c1).t)
+    | core.result.Result.Err e =>
+      ok (core.result.Result.Err e, fun c1 => (telescope_back c1).t)
   let back1 :=
     fun (ck2 : Checker) => let t := back { ck1 with t := ck2.t }
                            { ck with t }

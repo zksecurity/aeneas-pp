@@ -119,9 +119,8 @@ def Eng.telescope_loop.body
       let ((r, self, call_mut_back), next1) ←
         coreopsfunctionFnMutT1PairMutEngU32ResultBoolTupleInst.call_mut next
           (e, i)
-      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-      match cf with
-      | core.ops.control_flow.ControlFlow.Continue val =>
+      match r with
+      | core.result.Result.Ok val =>
         let (c1, back1) ←
           if val
           then do
@@ -132,11 +131,9 @@ def Eng.telescope_loop.body
         ok (Sum.inr (Sum.inl
           (fun v => let v1 := back1 { self with t := v }
                     back v1, self, n, next1, i1, c1)))
-      | core.ops.control_flow.ControlFlow.Break residual =>
-        let r1 ←
-          core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-            Std.U32 (core.convert.FromSame Unit) residual
-        ok (Sum.inl (r1, self, fun e1 => (call_mut_back e1).t))
+      | core.result.Result.Err e1 =>
+        ok (Sum.inl (core.result.Result.Err e1, self,
+          fun e2 => (call_mut_back e2).t))
     else ok (Sum.inr (Sum.inr (core.result.Result.Ok c, e, back)))
   match s with
   | Sum.inl t =>
@@ -225,9 +222,8 @@ def Eng.telescope01countclosure_loop.body
       let (r, next, self, call_mut_back, call_mut_back1) ←
         Eng.count.closure.Insts.CoreOpsFunctionFnMutPairMut3EngU32ResultBoolTuple.call_mut
           b (e, i)
-      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-      match cf with
-      | core.ops.control_flow.ControlFlow.Continue val =>
+      match r with
+      | core.result.Result.Ok val =>
         let (c1, back2, back3) ←
           if val
           then
@@ -243,13 +239,10 @@ def Eng.telescope01countclosure_loop.body
           (fun v => let v1 := back3 { self with t := v }
                     back v1, fun b1 => let b2 := back2 b1
                                        back1 b2, self, n, next, i1, c1)))
-      | core.ops.control_flow.ControlFlow.Break residual =>
-        let r1 ←
-          core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-            Std.U32 (core.convert.FromSame Unit) residual
-        ok (Sum.inl (r1, self, next, fun c1 => let b1 := call_mut_back1 c1
-                                               b1,
-          fun e1 => (call_mut_back e1).t))
+      | core.result.Result.Err e1 =>
+        ok (Sum.inl (core.result.Result.Err e1, self, next,
+          fun c1 => let b1 := call_mut_back1 c1
+                    b1, fun e2 => (call_mut_back e2).t))
     else ok (Sum.inr (Sum.inr (core.result.Result.Ok c, e, b, back, back1)))
   match s with
   | Sum.inl t =>
@@ -302,17 +295,12 @@ def Eng.count
   Result ((core.result.Result (Std.U32 × Bool) Unit) × Eng × (Eng → Eng))
   := do
   let (r, self1, telescope_back, c) ← Eng.telescope01countclosure self n false
-  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
   let (r1, back) ←
-    match cf with
-    | core.ops.control_flow.ControlFlow.Continue val =>
+    match r with
+    | core.result.Result.Ok val =>
       ok (core.result.Result.Ok (val, c), fun e => (telescope_back e).t)
-    | core.ops.control_flow.ControlFlow.Break residual =>
-      do
-      let r2 ←
-        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-          (Std.U32 × Bool) (core.convert.FromSame Unit) residual
-      ok (r2, fun e => (telescope_back e).t)
+    | core.result.Result.Err e =>
+      ok (core.result.Result.Err e, fun e1 => (telescope_back e1).t)
   let back'a :=
     fun (self2 : Eng) =>
       let v := back { self1 with t := self2.t }

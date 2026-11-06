@@ -179,14 +179,13 @@ def Engine.eval_let_loop.body
     Engine × (Engine → Engine)))
   := do
   let (r, self1, eval_back) ← Engine.eval e env value
-  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
   let s1 : _root_.Sum ((core.result.Result Std.U32 Unit) × Engine × (Slice
     Node) × Std.U32 × (Engine → (Terms × Store)) × (Terms → Store → (Terms ×
     Store))) (_root_.Sum ((Terms → Store → (Terms × Store)) × Engine × Std.U32
     × Std.U32 × Std.U32 × (Slice Node)) ((core.result.Result Std.U32 Unit) ×
     Engine × (Engine → (Terms × Store)))) ←
-    match cf with
-    | core.ops.control_flow.ControlFlow.Continue val =>
+    match r with
+    | core.result.Result.Ok val =>
       do
       let (env1, self2, extend_back) ← Engine.extend self1 env val
       let v ← Engine.view self2
@@ -206,12 +205,8 @@ def Engine.eval_let_loop.body
           fun t s2 =>
             let e1 := extend_back { self2 with t, s := s2 }
             (e1.t, e1.s)))
-    | core.ops.control_flow.ControlFlow.Break residual =>
-      do
-      let r1 ←
-        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-          Std.U32 (core.convert.FromSame Unit) residual
-      ok (Sum.inr (Sum.inr (r1, self1,
+    | core.result.Result.Err _ =>
+      ok (Sum.inr (Sum.inr (r, self1,
         fun e1 => let e2 := eval_back e1
                   back e2.t e2.s)))
   match s1 with

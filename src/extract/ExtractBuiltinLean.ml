@@ -1081,6 +1081,15 @@ let lean_builtin_funs =
     (* file: "Aeneas/Std/Core/Iter.lean", line: 648 *)
     mk_fun "core::ops::range::{core::ops::range::RangeInclusive<@Idx>}::new"
       "core.ops.range.RangeInclusive.new";
+    (* file: "Aeneas/Std/Core/Convert.lean", line: 129 *)
+    mk_fun
+      "core::option::{core::ops::try_trait::FromResidual<core::option::Option<@T>, \
+       core::option::Option<!>>}::from_residual"
+      "core.option.Option.Insts.CoreOpsTry_traitFromResidualOption.from_residual";
+    (* file: "Aeneas/Std/Core/Convert.lean", line: 120 *)
+    mk_fun
+      "core::option::{core::ops::try_trait::Try<core::option::Option<@T>>}::branch"
+      "core.option.Option.Insts.CoreOpsTry.branch";
     (* file: "Aeneas/Std/Core/CoreOption.lean", line: 14 *)
     mk_fun "core::option::{core::option::Option<@T>}::expect"
       "core.option.Option.expect";

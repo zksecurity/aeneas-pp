@@ -314,14 +314,11 @@ def checked_div
 def use_question_mark
   (a : Std.U32) (b : Std.U32) : Result (core.result.Result Std.U32 Unit) := do
   let r ← checked_div a b
-  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-  match cf with
-  | core.ops.control_flow.ControlFlow.Continue val =>
+  match r with
+  | core.result.Result.Ok val =>
     let i ← val + 1#u32
     ok (core.result.Result.Ok i)
-  | core.ops.control_flow.ControlFlow.Break residual =>
-    core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-      Std.U32 (core.convert.FromSame Unit) residual
+  | core.result.Result.Err _ => ok r
 
 /-- [scalars::test_question_mark_ok]:
     Source: 'tests/src/scalars.rs', lines 219:0-223:1

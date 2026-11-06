@@ -50,9 +50,8 @@ def Eng.telescope_loop.body
       let ((r, self, call_mut_back), next1) ←
         coreopsfunctionFnMutT1PairMutEngU32ResultBoolU32Inst.call_mut next (e,
           i)
-      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-      match cf with
-      | core.ops.control_flow.ControlFlow.Continue val =>
+      match r with
+      | core.result.Result.Ok val =>
         let (c1, back1) ←
           if val
           then do
@@ -63,11 +62,9 @@ def Eng.telescope_loop.body
         ok (Sum.inr (Sum.inl
           (fun v => let v1 := back1 { self with t := v }
                     back v1, self, n, next1, i1, c1)))
-      | core.ops.control_flow.ControlFlow.Break residual =>
-        let r1 ←
-          core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-            Std.U32 (core.convert.FromSame Std.U32) residual
-        ok (Sum.inl (r1, self, fun e1 => (call_mut_back e1).t))
+      | core.result.Result.Err e1 =>
+        ok (Sum.inl (core.result.Result.Err e1, self,
+          fun e2 => (call_mut_back e2).t))
     else ok (Sum.inr (Sum.inr (core.result.Result.Ok c, e, back)))
   match s with
   | Sum.inl t =>

@@ -48,6 +48,9 @@ let passes :
       "inline_useless_var_assignments",
       inline_useless_var_assignments ~inline_named:true ~inline_const:true
         ~inline_pure:true ~inline_identity:true ~inline_loop_back_calls:false );
+    (* Unfold [?] on [Result] and [Option] into matches (the inlined variable
+       reassignments uncover the matches over the [ControlFlow] values) *)
+    (None, "unfold_try", unfold_try);
     (* Simplify the lambdas by applying beta-reduction *)
     (None, "apply_beta_reduction", apply_beta_reduction);
     (* Eliminate the box functions - note that the "box" types were eliminated

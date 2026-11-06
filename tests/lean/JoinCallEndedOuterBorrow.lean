@@ -133,11 +133,10 @@ def verify
       verify.closure.Insts.CoreOpsFunctionFnMutTupleShared2Shared0DeclBool i
       actual
   let r ← core.option.Option.ok_or o (toStr "unexpected")
-  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
   let s : _root_.Sum (core.result.Result Std.U32 String) (core.result.Result
     Std.U32 String) ←
-    match cf with
-    | core.ops.control_flow.ControlFlow.Continue val =>
+    match r with
+    | core.result.Result.Ok val =>
       do
       let s1 : _root_.Sum Unit (_root_.Sum (core.result.Result Std.U32 String)
         (core.result.Result Std.U32 String)) ←
@@ -196,12 +195,10 @@ def verify
         match s2 with
         | Sum.inl r1 => ok (Sum.inr r1)
         | Sum.inr r1 => ok (Sum.inl r1)
-    | core.ops.control_flow.ControlFlow.Break residual =>
+    | core.result.Result.Err e =>
       do
-      let r1 ←
-        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-          Std.U32 alloc.string.String.Insts.CoreConvertFromShared0Str residual
-      ok (Sum.inl r1)
+      let e1 ← alloc.string.String.Insts.CoreConvertFromShared0Str.«from» e
+      ok (Sum.inl (core.result.Result.Err e1))
   match s with
   | Sum.inl r1 => ok r1
   | Sum.inr r1 => ok r1

@@ -2509,6 +2509,306 @@ let simplify_trait_calls_visitor (ctx : ctx) (def : fun_decl) =
 
 let simplify_trait_calls = lift_expr_map_visitor simplify_trait_calls_visitor
 
+(** Unfold the [?] operator on [Result] and [Option] into a match on the value
+    it is applied to.
+
+    [x?] calls [Try::branch] on [x], matches the [ControlFlow] it returns, and
+    returns [FromResidual::from_residual] of the residual in the [Break]
+    branch. We unfold the definitions of [branch] and [from_residual] in the
+    Lean library (Aeneas/Std/Core/Convert.lean):
+    [core.result.Result.Insts.CoreOpsTry.branch],
+    [core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual],
+    [core.option.Option.Insts.CoreOpsTry.branch] and
+    [core.option.Option.Insts.CoreOpsTry_traitFromResidualOption.from_residual]:
+    {[
+      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+      ...
+      match cf with
+      | Continue v => e0
+      | Break residual => ... from_residual T FromInst residual ...
+
+        ~~>
+
+      ...
+      match r with
+      | Ok v => e0
+      | Err e => ... (do let e1 ← FromInst.from e; ok (Err e1)) ...
+    ]}
+    [branch] doesn't fail: we substitute its output in the matches over it,
+    provided they are its only uses. When [FromInst] is [core.convert.FromSame]
+    (the identity), whose [from] is [fun x => ok x], we write [ok (Err e)]
+    directly. *)
+type unfold_try_env = {
+  residuals : texpr FVarId.Map.t;
+  branches : (texpr * (string * string)) FVarId.Map.t;
+}
+
+let unfold_try_visitor (ctx : ctx) (def : fun_decl) =
+  let span = def.item_meta.span in
+  let match_ctx = Charon.NameMatcher.ctx_from_crate ctx.crate in
+  let config = ExtractName.default_match_config in
+  let mk_map : 'a. (string * 'a) list -> 'a NameMatcher.NameMatcherMap.t =
+   fun pats ->
+    NameMatcher.NameMatcherMap.of_list
+      (List.map (fun (pat, x) -> (NameMatcher.parse_pattern pat, x)) pats)
+  in
+  let find_opt : 'a. Types.name -> 'a NameMatcher.NameMatcherMap.t -> 'a option
+      =
+   fun name m -> NameMatcher.NameMatcherMap.find_opt match_ctx config name m
+  in
+  (* The name of the variant of the [branch] output which continues, and of the
+     variant of the input which is the residual *)
+  let branch_funs =
+    mk_map
+      [
+        ( "core::result::{core::ops::try_trait::Try<core::result::Result<@T, \
+           @E>>}::branch",
+          ("Ok", "Err") );
+        ( "core::option::{core::ops::try_trait::Try<core::option::Option<@T>>}::branch",
+          ("Some", "None") );
+      ]
+  in
+  let from_residual_funs =
+    mk_map
+      [
+        ( "core::result::{core::ops::try_trait::FromResidual<core::result::Result<@T, \
+           @F>, core::result::Result<!, @E>>}::from_residual",
+          "Err" );
+        ( "core::option::{core::ops::try_trait::FromResidual<core::option::Option<@T>, \
+           core::option::Option<!>>}::from_residual",
+          "None" );
+      ]
+  in
+  let from_same_impl =
+    mk_map [ ("core::convert::{core::convert::From<@T, @T>}", ()) ]
+  in
+  let fun_info : 'a. 'a NameMatcher.NameMatcherMap.t -> fun_or_op_id -> 'a option
+      =
+   fun m fun_id ->
+    match fun_id with
+    | Fun (FromLlbc (FunId fid, None)) ->
+        Option.bind (FunDeclId.Map.find_opt fid ctx.fun_decls) (fun d ->
+            find_opt d.item_meta.name m)
+    | _ -> None
+  in
+  let variant_id (ty : ty) (name : string) : VariantId.id =
+    let adt_id, _ = ty_as_adt span ty in
+    let variants =
+      match adt_id with
+      | TAdtId id -> (
+          match (TypeDeclId.Map.find id ctx.type_decls).kind with
+          | Enum variants -> variants
+          | _ -> [%internal_error] span)
+      | _ -> [%internal_error] span
+    in
+    VariantId.of_int
+      ([%unwrap_with_span] span
+         (List.find_index
+            (fun (v : variant) -> v.variant_name = name)
+            variants)
+         "Internal error")
+  in
+  let field_types (ty : ty) (variant_id : VariantId.id) : ty list =
+    let adt_id, generics = ty_as_adt span ty in
+    PureTypeCheck.get_adt_field_types span ctx.type_decls adt_id
+      (Some variant_id) generics
+  in
+  (* [FromInst.from e] *)
+  let mk_from_call (trait_ref : trait_ref) (e : texpr) (ret_ty : ty) : texpr =
+    let trait_decl =
+      TraitDeclId.Map.find trait_ref.trait_decl_ref.trait_decl_id
+        ctx.crate.trait_decls
+    in
+    let method_id =
+      fst
+        ([%unwrap_with_span] span
+           (List.find_opt
+              (fun (_, (m : LlbcAst.trait_method Types.binder)) ->
+                m.binder_value.name = "from")
+              (TraitMethodId.Map.bindings trait_decl.methods))
+           "Internal error")
+    in
+    let qualif : qualif =
+      {
+        id = FunOrOp (Fun (FromLlbc (TraitMethod (trait_ref, method_id), None)));
+        generics = empty_generic_args;
+      }
+    in
+    let qualif =
+      { e = Qualif qualif; ty = mk_arrows [ e.ty ] (mk_result_ty ret_ty) }
+    in
+    [%add_loc] mk_app span qualif e
+  in
+  let is_from_same (trait_ref : trait_ref) : bool =
+    match trait_ref.trait_id with
+    | TraitImpl (impl_id, _) -> (
+        match TraitImplId.Map.find_opt impl_id ctx.crate.trait_impls with
+        | Some impl ->
+            Option.is_some (find_opt impl.item_meta.name from_same_impl)
+        | None -> false)
+    | _ -> false
+  in
+
+  object (self)
+    inherit [_] map_expr as super
+
+    (* The environment maps the residuals to their values, and the outputs of
+       [branch] to its input and the names of its variants *)
+    method! visit_FVar (env : unfold_try_env) fid =
+      match FVarId.Map.find_opt fid env.residuals with
+      | Some (v : texpr) -> v.e
+      | None -> FVar fid
+
+    method! visit_Switch env scrut body =
+      let unfolded =
+        match (scrut.e, body) with
+        | FVar cf, Match branches -> (
+            match FVarId.Map.find_opt cf env.branches with
+            | None -> None
+            | Some (r, (continue_name, residual_name)) -> (
+                let continue_id = variant_id scrut.ty "Continue" in
+                let break_id = variant_id scrut.ty "Break" in
+                let branch_with_variant id =
+                  List.find_map
+                    (fun (br : match_branch) ->
+                      match br.pat.pat with
+                      | PAdt { variant_id = Some id'; fields = [ field ] }
+                        when id' = id -> Some (field, br.branch)
+                      | _ -> None)
+                    branches
+                in
+                match
+                  ( branches,
+                    branch_with_variant continue_id,
+                    branch_with_variant break_id )
+                with
+                | [ _; _ ], Some (v, cont), Some (residual, brk) -> (
+                    let ok_id = variant_id r.ty continue_name in
+                    let residual_id = variant_id r.ty residual_name in
+                    let fields =
+                      List.map
+                        (mk_fresh_fvar ctx ~basename:(Some "e"))
+                        (field_types r.ty residual_id)
+                    in
+                    let residual_value =
+                      mk_adt_texpr span residual.ty (Some residual_id)
+                        (List.map mk_texpr_from_fvar fields)
+                    in
+                    let brk_env =
+                      match residual.pat with
+                      | POpen (res, _) ->
+                          Some
+                            {
+                              env with
+                              residuals =
+                                FVarId.Map.add res.id residual_value
+                                  env.residuals;
+                            }
+                      | PIgnored -> Some env
+                      | _ -> None
+                    in
+                    match brk_env with
+                    | None -> None
+                    | Some brk_env ->
+                        let cont =
+                          {
+                            pat = mk_adt_pat r.ty (Some ok_id) [ v ];
+                            branch = self#visit_texpr env cont;
+                          }
+                        in
+                        let brk =
+                          {
+                            pat =
+                              mk_adt_pat r.ty (Some residual_id)
+                                (List.map (mk_tpat_from_fvar None) fields);
+                            branch = self#visit_texpr brk_env brk;
+                          }
+                        in
+                        Some (Switch (r, Match [ cont; brk ])))
+                | _ -> None))
+        | _ -> None
+      in
+      match unfolded with
+      | Some e -> e
+      | None -> super#visit_Switch env scrut body
+
+    method! visit_Let env monadic pat rv next =
+      match (monadic, pat.pat, opt_destruct_function_call rv) with
+      | true, POpen (cf, _), Some (fun_id, _, [ r ])
+        when Option.is_some (fun_info branch_funs fun_id) ->
+          (* [branch] doesn't fail: we substitute its output in the matches
+             over it, if they are its only uses *)
+          let r = self#visit_texpr env r in
+          let branches =
+            FVarId.Map.add cf.id
+              (r, Option.get (fun_info branch_funs fun_id))
+              env.branches
+          in
+          let unfolded = self#visit_texpr { env with branches } next in
+          if FVarId.Set.mem cf.id (texpr_get_fvars unfolded) then
+            super#visit_Let env monadic pat rv next
+          else unfolded.e
+      | _ -> (
+          match (monadic, self#unfold_from_residual env rv) with
+          | true, Some (conversion, out) ->
+              let next = self#visit_texpr env next in
+              let e = mk_opened_let false pat out next in
+              let e =
+                Option.fold ~none:e
+                  ~some:(fun (pat, call) -> mk_opened_let true pat call e)
+                  conversion
+              in
+              e.e
+          | _ -> super#visit_Let env monadic pat rv next)
+
+    (* Unfold [from_residual] applied to the residual variant: return the
+       conversion of the error, if any, and the output *)
+    method unfold_from_residual env (e : texpr) :
+        ((tpat * texpr) option * texpr) option =
+      match opt_destruct_function_call e with
+      | Some (fun_id, generics, [ residual ]) -> (
+          match fun_info from_residual_funs fun_id with
+          | None -> None
+          | Some residual_name -> (
+              let residual = self#visit_texpr env residual in
+              let out_ty = destruct_result span e.ty in
+              let out_id = variant_id out_ty residual_name in
+              let mk_out = mk_adt_texpr span out_ty (Some out_id) in
+              match opt_destruct_qualif_apps residual with
+              | Some ({ id = AdtCons { variant_id = Some id; _ }; _ }, fields)
+                when id = variant_id residual.ty residual_name -> (
+                  match (generics.trait_refs, fields) with
+                  | [], [] -> Some (None, mk_out [])
+                  | [ from_inst ], [ err ] when is_from_same from_inst ->
+                      Some (None, mk_out [ err ])
+                  | [ from_inst ], [ err ] ->
+                      let converted =
+                        mk_fresh_fvar ctx ~basename:(Some "e")
+                          (List.hd (field_types out_ty out_id))
+                      in
+                      Some
+                        ( Some
+                            ( mk_tpat_from_fvar None converted,
+                              mk_from_call from_inst err converted.ty ),
+                          mk_out [ mk_texpr_from_fvar converted ] )
+                  | _ -> [%internal_error] span)
+              | _ -> None))
+      | _ -> None
+
+    method! visit_texpr env e =
+      match self#unfold_from_residual env e with
+      | Some (conversion, out) ->
+          let out = mk_result_ok_texpr span out in
+          Option.fold ~none:out
+            ~some:(fun (pat, call) -> mk_opened_let true pat call out)
+            conversion
+      | None -> super#visit_texpr env e
+  end
+
+let unfold_try =
+  lift_expr_map_visitor_with_state unfold_try_visitor
+    { residuals = FVarId.Map.empty; branches = FVarId.Map.empty }
+
 (** Simplify the lambdas by applying beta-reduction *)
 let apply_beta_reduction_visitor (ctx : ctx) (def : fun_decl) =
   let span = def.item_meta.span in

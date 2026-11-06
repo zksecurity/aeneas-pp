@@ -124,12 +124,11 @@ def Eng.iota
   Result ((core.result.Result (Option Std.U32) Std.U32) × Eng × (Eng → Eng))
   := do
   let r ← Eng.decl self n
-  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
   let s : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) × Eng ×
     (Eng → alloc.vec.Vec Std.U32)) ((core.result.Result (Option Std.U32)
     Std.U32) × Eng × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)) ←
-    match cf with
-    | core.ops.control_flow.ControlFlow.Continue val =>
+    match r with
+    | core.result.Result.Ok val =>
       do
       let s1 : _root_.Sum (Eng × Std.U32 × (Eng → alloc.vec.Vec Std.U32))
         ((core.result.Result (Option Std.U32) Std.U32) × Eng × (Eng →
@@ -138,19 +137,13 @@ def Eng.iota
         then
           do
           let (r1, self1, kc_back) ← Eng.kc self val
-          let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
-          match cf1 with
-          | core.ops.control_flow.ControlFlow.Continue val1 =>
+          match r1 with
+          | core.result.Result.Ok val1 =>
             match val1 with
-            | none =>
-              ok (Sum.inr (core.result.Result.Ok none, self1,
-                fun e => (kc_back e).t))
+            | none => ok (Sum.inr (r1, self1, fun e => (kc_back e).t))
             | some c => ok (Sum.inl (self1, c, fun e => (kc_back e).t))
-          | core.ops.control_flow.ControlFlow.Break residual =>
-            let r2 ←
-              core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-                (Option Std.U32) (core.convert.FromSame Std.U32) residual
-            ok (Sum.inr (r2, self1, fun e => (kc_back e).t))
+          | core.result.Result.Err _ =>
+            ok (Sum.inr (r1, self1, fun e => (kc_back e).t))
         else ok (Sum.inl (self, val, fun (e : Eng) => e.t))
       match s1 with
       | Sum.inl t =>
@@ -159,12 +152,8 @@ def Eng.iota
         ok (Sum.inr (core.result.Result.Ok (some i), self1,
           fun v => back { self1 with t := v }))
       | Sum.inr t => ok (Sum.inl t)
-    | core.ops.control_flow.ControlFlow.Break residual =>
-      do
-      let r1 ←
-        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-          (Option Std.U32) (core.convert.FromSame Std.U32) residual
-      ok (Sum.inl (r1, self, fun (e : Eng) => e.t))
+    | core.result.Result.Err e =>
+      ok (Sum.inl (core.result.Result.Err e, self, fun (e1 : Eng) => e1.t))
   let (r1, e, back) ←
     match s with
     | Sum.inl t =>
@@ -275,10 +264,9 @@ def Eval.iota
   Result ((core.result.Result (Option Std.U32) Std.U32) × Eval × (Eval → Eval))
   := do
   let r ← Eval.decl self n
-  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
   let (r1, self1, back) ←
-    match cf with
-    | core.ops.control_flow.ControlFlow.Continue val =>
+    match r with
+    | core.result.Result.Ok val =>
       do
       let s : _root_.Sum (Eval × Std.U32 × (Eval → ((alloc.vec.Vec Std.U32) ×
         Store))) ((core.result.Result (Option Std.U32) Std.U32) × Eval ×
@@ -287,27 +275,22 @@ def Eval.iota
         then
           do
           let (r2, self2, kc_back) ← Eval.kc self val
-          let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r2
           let s1 : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) ×
             Eval × (Eval → ((alloc.vec.Vec Std.U32) × Store))) (Eval × Std.U32
             × (Eval → ((alloc.vec.Vec Std.U32) × Store))) ←
-            match cf1 with
-            | core.ops.control_flow.ControlFlow.Continue val1 =>
+            match r2 with
+            | core.result.Result.Ok val1 =>
               match val1 with
               | none =>
-                ok (Sum.inl (core.result.Result.Ok none, self2,
+                ok (Sum.inl (r2, self2,
                   fun e => let e1 := kc_back e
                            (e1.t, e1.s)))
               | some c =>
                 ok (Sum.inr (self2, c,
                   fun e => let e1 := kc_back e
                            (e1.t, e1.s)))
-            | core.ops.control_flow.ControlFlow.Break residual =>
-              do
-              let r3 ←
-                core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-                  (Option Std.U32) (core.convert.FromSame Std.U32) residual
-              ok (Sum.inl (r3, self2,
+            | core.result.Result.Err _ =>
+              ok (Sum.inl (r2, self2,
                 fun e => let e1 := kc_back e
                          (e1.t, e1.s)))
           match s1 with
@@ -336,19 +319,15 @@ def Eval.iota
             else
               do
               let (r2, self3, eta_back) ← Eval.eta self2 major
-              let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r2
-              match cf1 with
-              | core.ops.control_flow.ControlFlow.Continue val1 =>
+              match r2 with
+              | core.result.Result.Ok val1 =>
                 ok (Sum.inl (self3, val1,
                   fun e => let e1 := eta_back e
                            (e1.t, e1.s)))
-              | core.ops.control_flow.ControlFlow.Break residual =>
-                let r3 ←
-                  core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-                    (Option Std.U32) (core.convert.FromSame Std.U32) residual
-                ok (Sum.inr (r3, self3,
-                  fun e => let e1 := eta_back e
-                           (e1.t, e1.s)))
+              | core.result.Result.Err e =>
+                ok (Sum.inr (core.result.Result.Err e, self3,
+                  fun e1 => let e2 := eta_back e1
+                            (e2.t, e2.s)))
           let s3 : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) ×
             Eval × (Eval → ((alloc.vec.Vec Std.U32) × Store)))
             ((core.result.Result (Option Std.U32) Std.U32) × Eval × (Eval →
@@ -358,23 +337,19 @@ def Eval.iota
               do
               let (self3, major1, back2) := t1
               let (r2, self4, whnf_back) ← Eval.whnf self3 major1
-              let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r2
-              match cf1 with
-              | core.ops.control_flow.ControlFlow.Continue val1 =>
+              match r2 with
+              | core.result.Result.Ok val1 =>
                 let i ← val1 + val
                 ok (Sum.inr (core.result.Result.Ok (some i), self4,
                   fun e =>
                     let e1 := whnf_back e
                     let (v, s4) := back2 { e1 with env := self3.env }
                     back1 { self2 with t := v, s := s4 }))
-              | core.ops.control_flow.ControlFlow.Break residual =>
-                let r3 ←
-                  core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-                    (Option Std.U32) (core.convert.FromSame Std.U32) residual
-                ok (Sum.inl (r3, self4,
-                  fun e =>
-                    let e1 := whnf_back e
-                    back2 { e1 with env := self3.env }))
+              | core.result.Result.Err e =>
+                ok (Sum.inl (core.result.Result.Err e, self4,
+                  fun e1 =>
+                    let e2 := whnf_back e1
+                    back2 { e2 with env := self3.env }))
             | Sum.inr t1 => ok (Sum.inl t1)
           match s3 with
           | Sum.inl t1 =>
@@ -390,12 +365,8 @@ def Eval.iota
         let (r2, e, back1) := t
         ok (r2, e, fun (e1 : Eval) => back1 e1.t e1.s)
       | Sum.inr t => ok t
-    | core.ops.control_flow.ControlFlow.Break residual =>
-      do
-      let r2 ←
-        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-          (Option Std.U32) (core.convert.FromSame Std.U32) residual
-      ok (r2, self, fun (e : Eval) => (e.t, e.s))
+    | core.result.Result.Err e =>
+      ok (core.result.Result.Err e, self, fun (e1 : Eval) => (e1.t, e1.s))
   let back'a :=
     fun self2 =>
       let (v, s) := back { self2 with env := self1.env }

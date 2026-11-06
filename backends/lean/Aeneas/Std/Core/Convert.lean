@@ -116,6 +116,24 @@ def core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
       let v ← convertFromInst.from e
       .ok (.Err v)
 
+/-- `Option::branch` (`Try`): `Some v ⇒ Continue v`, `None ⇒ Break None`. -/
+@[expose, rust_fun
+  "core::option::{core::ops::try_trait::Try<core::option::Option<@T>>}::branch"]
+def core.option.Option.Insts.CoreOpsTry.branch
+  {T : Type _} :
+  Option T → Std.Result (core.ops.control_flow.ControlFlow (Option Never) T)
+  | some v => .ok (.Continue v)
+  | none => .ok (.Break none)
+
+/-- `Option::from_residual` (`FromResidual`): converts a `None`-residual. -/
+@[expose, rust_fun
+  "core::option::{core::ops::try_trait::FromResidual<core::option::Option<@T>, core::option::Option<!>>}::from_residual"]
+def core.option.Option.Insts.CoreOpsTry_traitFromResidualOption.from_residual
+  (T : Type _) (r : Option Never) : Std.Result (Option T) :=
+  match r with
+  | some x => x.casesOn
+  | none => .ok none
+
 /-- Step spec for `Result::is_ok`: returns `true` iff the input is `Ok`. -/
 @[step]
 theorem core.result.Result.is_ok.step_spec {T E : Type _}

@@ -23,26 +23,6 @@ noncomputable section
 
 namespace nested_shared_borrow_joins
 
-/-- [core::option::{impl core::ops::try_trait::Try for core::option::Option<T>}::branch]:
-    Source: '/rustc/library/core/src/option.rs', lines 2875:4-2875:64
-    Name pattern: [core::option::{core::ops::try_trait::Try<core::option::Option<@T>>}::branch]
-    Visibility: public -/
-@[rust_fun
-  "core::option::{core::ops::try_trait::Try<core::option::Option<@T>>}::branch"]
-axiom core.option.Option.Insts.CoreOpsTry_traitTry.branch
-  {T : Type _} :
-  Option T → Result (core.ops.control_flow.ControlFlow (Option Never) T)
-
-/-- [core::option::{impl core::ops::try_trait::FromResidual<core::option::Option<!>> for core::option::Option<T>}::from_residual]:
-    Source: '/rustc/library/core/src/option.rs', lines 2889:4-2889:49
-    Name pattern: [core::option::{core::ops::try_trait::FromResidual<core::option::Option<@T>, core::option::Option<!>>}::from_residual]
-    Visibility: public -/
-@[rust_fun
-  "core::option::{core::ops::try_trait::FromResidual<core::option::Option<@T>, core::option::Option<!>>}::from_residual"]
-axiom
-  core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
-  (T : Type _) : Option Never → Result (Option T)
-
 /-- [core::str::traits::{impl core::cmp::PartialEq<str> for str}::eq]:
     Source: '/rustc/library/core/src/str/traits.rs', lines 29:4-29:37
     Name pattern: [core::str::traits::{core::cmp::PartialEq<str, str>}::eq]
@@ -232,9 +212,8 @@ def Env.get (self : Env) (i : Std.Usize) : Result (Option Decl) := do
 def frame_kept_by_branches
   (env : Env) (k : Str) (c : Bool) : Result (Option Std.U32) := do
   let o ← Env.get env 0#usize
-  let cf ← core.option.Option.Insts.CoreOpsTry_traitTry.branch o
-  match cf with
-  | core.ops.control_flow.ControlFlow.Continue val =>
+  match o with
+  | some val =>
     match val.kind with
     | Kind.Ind ctors =>
       let b ← Str.Insts.CoreCmpPartialEqStr.eq k (toStr "a")
@@ -258,9 +237,7 @@ def frame_kept_by_branches
       let i3 ← i + i2
       ok (some i3)
     | Kind.Other => ok none
-  | core.ops.control_flow.ControlFlow.Break residual =>
-    core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
-      Std.U32 residual
+  | none => ok none
 
 /-- [nested_shared_borrow_joins::join_different_referents]:
     Source: 'tests/src/nested-shared-borrow-joins.rs', lines 152:0-157:1

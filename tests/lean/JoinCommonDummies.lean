@@ -55,15 +55,10 @@ def verify
     then
       do
       let (r, ck, infer_back) ← infer { t }
-      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-      match cf with
-      | core.ops.control_flow.ControlFlow.Continue _ =>
-        ok (Sum.inl (ck, fun c => (infer_back c).t))
-      | core.ops.control_flow.ControlFlow.Break residual =>
-        let r1 ←
-          core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-            Unit (core.convert.FromSame Unit) residual
-        ok (Sum.inr (r1, ck, fun c => (infer_back c).t))
+      match r with
+      | core.result.Result.Ok _ => ok (Sum.inl (ck, fun c => (infer_back c).t))
+      | core.result.Result.Err _ =>
+        ok (Sum.inr (r, ck, fun c => (infer_back c).t))
     else ok (Sum.inl (({ t } : Checker), fun (c : Checker) => c.t))
   let s1 : _root_.Sum ((core.result.Result Unit Unit) × Checker × (Checker →
     Std.U32)) ((core.result.Result Unit Unit) × Std.U32) ←
@@ -72,16 +67,12 @@ def verify
       do
       let (ck, back) := p
       let (r, ck1, infer_back) ← infer ck
-      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-      match cf with
-      | core.ops.control_flow.ControlFlow.Continue _ =>
+      match r with
+      | core.result.Result.Ok _ =>
         let t1 := back (infer_back ck1)
         ok (Sum.inr (core.result.Result.Ok (), t1))
-      | core.ops.control_flow.ControlFlow.Break residual =>
-        let r1 ←
-          core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-            Unit (core.convert.FromSame Unit) residual
-        ok (Sum.inl (r1, ck1, fun c => back (infer_back c)))
+      | core.result.Result.Err _ =>
+        ok (Sum.inl (r, ck1, fun c => back (infer_back c)))
     | Sum.inr t1 => ok (Sum.inl t1)
   match s1 with
   | Sum.inl t1 => let (r, ck, back) := t1

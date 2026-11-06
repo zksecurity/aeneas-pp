@@ -52,23 +52,18 @@ def Engine.eval_nonzero_loop.body
     Std.U32))))
   := do
   let (r, self1, eval_back) ← Engine.eval self e
-  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
   let s : _root_.Sum (Std.U32 × Engine) (_root_.Sum ((Engine → (Std.U32 ×
     Std.U32)) × Engine × Std.U32) ((core.result.Result Std.U32 Unit) × Engine ×
     (Engine → (Std.U32 × Std.U32)))) ←
-    match cf with
-    | core.ops.control_flow.ControlFlow.Continue val =>
+    match r with
+    | core.result.Result.Ok val =>
       if val = 0#u32
       then
         ok (Sum.inr (Sum.inl (fun e1 => let e2 := eval_back e1
                                         back e2, self1, 1#u32)))
       else ok (Sum.inl (val, self1))
-    | core.ops.control_flow.ControlFlow.Break residual =>
-      do
-      let r1 ←
-        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-          Std.U32 (core.convert.FromSame Unit) residual
-      ok (Sum.inr (Sum.inr (r1, self1,
+    | core.result.Result.Err _ =>
+      ok (Sum.inr (Sum.inr (r, self1,
         fun e1 => let e2 := eval_back e1
                   back e2)))
   match s with
@@ -122,12 +117,11 @@ def Engine.run_loop.body
     Std.U32))))
   := do
   let (r, self, eval_back) ← Engine.eval e n
-  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
   let s : _root_.Sum (Std.U32 × Engine) (_root_.Sum ((Std.U32 → Std.U32 →
     (Std.U32 × Std.U32)) × Engine × Std.U32) ((core.result.Result Std.U32 Unit)
     × Engine × (Engine → (Std.U32 × Std.U32)))) ←
-    match cf with
-    | core.ops.control_flow.ControlFlow.Continue val =>
+    match r with
+    | core.result.Result.Ok val =>
       do
       let i ← self.s + val
       if n = 0#u32
@@ -137,12 +131,8 @@ def Engine.run_loop.body
         ok (Sum.inr (Sum.inl
           (fun i1 i2 => let e1 := eval_back { t := i1, s := i2 }
                         back e1.t e1.s, { self with s := i }, n1)))
-    | core.ops.control_flow.ControlFlow.Break residual =>
-      do
-      let r1 ←
-        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-          Std.U32 (core.convert.FromSame Unit) residual
-      ok (Sum.inr (Sum.inr (r1, self,
+    | core.result.Result.Err _ =>
+      ok (Sum.inr (Sum.inr (r, self,
         fun e1 => let e2 := eval_back e1
                   back e2.t e2.s)))
   match s with
@@ -194,12 +184,11 @@ def run_swap_loop.body
     Engine) ((core.result.Result Std.U32 Unit) × Std.U32 × Std.U32))
   := do
   let (r, e1, eval_back) ← Engine.eval e n
-  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
   let s : _root_.Sum (Std.U32 × Engine × (Std.U32 → Std.U32 → (Std.U32 ×
     Std.U32))) (_root_.Sum ((Std.U32 → Std.U32 → (Std.U32 × Std.U32)) × Std.U32
     × Engine) ((core.result.Result Std.U32 Unit) × Std.U32 × Std.U32)) ←
-    match cf with
-    | core.ops.control_flow.ControlFlow.Continue val =>
+    match r with
+    | core.result.Result.Ok val =>
       do
       let i ← e1.s + 10#u32
       if n = 0#u32
@@ -212,14 +201,10 @@ def run_swap_loop.body
         ok (Sum.inr (Sum.inl
           (fun i1 i2 => let e2 := eval_back { t := i2, s := i1 }
                         back e2.t e2.s, n1, ({ t := i, s := e1.t } : Engine))))
-    | core.ops.control_flow.ControlFlow.Break residual =>
-      do
-      let r1 ←
-        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-          Std.U32 (core.convert.FromSame Unit) residual
+    | core.result.Result.Err _ =>
       let e2 := eval_back e1
       let (a, b) := back e2.t e2.s
-      ok (Sum.inr (Sum.inr (r1, a, b)))
+      ok (Sum.inr (Sum.inr (r, a, b)))
   match s with
   | Sum.inl t =>
     let (i, e2, back1) := t

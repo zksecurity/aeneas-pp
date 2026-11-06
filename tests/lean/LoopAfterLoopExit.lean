@@ -61,16 +61,12 @@ def steps_loop0_loop0.body
   | none => ok (done (Sum.inl (e, x, fun i => back { e with total := i })))
   | some _ =>
     let (r, e1, step_back) ← step e x
-    let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-    match cf with
-    | core.ops.control_flow.ControlFlow.Continue val =>
+    match r with
+    | core.result.Result.Ok val =>
       ok (cont (iter1, fun e2 => back { e with total := (step_back e2).total },
         e1, val))
-    | core.ops.control_flow.ControlFlow.Break residual =>
-      let r1 ←
-        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-          Std.U32 (core.convert.FromSame Unit) residual
-      ok (done (Sum.inr (r1, e1,
+    | core.result.Result.Err _ =>
+      ok (done (Sum.inr (r, e1,
         fun e2 => back { e with total := (step_back e2).total })))
 
 /-- [loop_after_loop_exit::steps]: loop 1:
@@ -119,17 +115,13 @@ def steps_loop0.body
     | some _ =>
       do
       let (r, e1, step_back) ← step e x
-      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-      match cf with
-      | core.ops.control_flow.ControlFlow.Continue val =>
+      match r with
+      | core.result.Result.Ok val =>
         ok (Sum.inr (Sum.inl
           (fun e2 => back { e with total := (step_back e2).total }, e1, k, i,
           val, iter1, i1)))
-      | core.ops.control_flow.ControlFlow.Break residual =>
-        let r1 ←
-          core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-            Std.U32 (core.convert.FromSame Unit) residual
-        ok (Sum.inl (r1, e1, fun e2 => (step_back e2).total))
+      | core.result.Result.Err _ =>
+        ok (Sum.inl (r, e1, fun e2 => (step_back e2).total))
   let s1 : _root_.Sum (Std.U32 × Engine × (Std.U32 → Std.U32)) (_root_.Sum
     ((Engine → Std.U32) × Engine × Std.U32 × Std.U32 × Std.U32 ×
     (core.ops.range.Range Std.U32) × Std.U32) ((core.result.Result Std.U32

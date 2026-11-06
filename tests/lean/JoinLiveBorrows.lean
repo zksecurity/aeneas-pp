@@ -152,12 +152,9 @@ def number (v : Value) : Result (core.result.Result Std.U64 Std.U32) := do
 def field_number
   (v : Value) (k : Std.U32) : Result (core.result.Result Std.U64 Std.U32) := do
   let r ← field v k
-  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-  match cf with
-  | core.ops.control_flow.ControlFlow.Continue val => number val
-  | core.ops.control_flow.ControlFlow.Break residual =>
-    core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-      Std.U64 (core.convert.FromSame Std.U32) residual
+  match r with
+  | core.result.Result.Ok val => number val
+  | core.result.Result.Err e => ok (core.result.Result.Err e)
 
 /-- [join_live_borrows::field_at_number]:
     Source: 'tests/src/join-live-borrows.rs', lines 59:0-61:1
@@ -165,12 +162,9 @@ def field_number
 def field_at_number
   (v : Value) (k : Std.U32) : Result (core.result.Result Std.U64 Std.U32) := do
   let r ← field_at v k
-  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-  match cf with
-  | core.ops.control_flow.ControlFlow.Continue val => number val
-  | core.ops.control_flow.ControlFlow.Break residual =>
-    core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-      Std.U64 (core.convert.FromSame Std.U32) residual
+  match r with
+  | core.result.Result.Ok val => number val
+  | core.result.Result.Err e => ok (core.result.Result.Err e)
 
 /-- [join_live_borrows::test_field_at_number]:
     Source: 'tests/src/join-live-borrows.rs', lines 64:0-72:1

@@ -18,30 +18,7 @@ set_option maxHeartbeats 1000000
 /- You can set the `maxRecDepth` value with the `-max-recdepth` CLI option -/
 set_option maxRecDepth 2048
 
-/- You can remove the following line by using the CLI option `-all-computable`: -/
-noncomputable section
-
 namespace forward_scopes
-
-/-- [core::option::{impl core::ops::try_trait::Try for core::option::Option<T>}::branch]:
-    Source: '/rustc/library/core/src/option.rs', lines 2875:4-2875:64
-    Name pattern: [core::option::{core::ops::try_trait::Try<core::option::Option<@T>>}::branch]
-    Visibility: public -/
-@[rust_fun
-  "core::option::{core::ops::try_trait::Try<core::option::Option<@T>>}::branch"]
-axiom core.option.Option.Insts.CoreOpsTry_traitTry.branch
-  {T : Type _} :
-  Option T → Result (core.ops.control_flow.ControlFlow (Option Never) T)
-
-/-- [core::option::{impl core::ops::try_trait::FromResidual<core::option::Option<!>> for core::option::Option<T>}::from_residual]:
-    Source: '/rustc/library/core/src/option.rs', lines 2889:4-2889:49
-    Name pattern: [core::option::{core::ops::try_trait::FromResidual<core::option::Option<@T>, core::option::Option<!>>}::from_residual]
-    Visibility: public -/
-@[rust_fun
-  "core::option::{core::ops::try_trait::FromResidual<core::option::Option<@T>, core::option::Option<!>>}::from_residual"]
-axiom
-  core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
-  (T : Type _) : Option Never → Result (Option T)
 
 /-- [forward_scopes::Class]
     Source: 'tests/src/forward-scopes.rs', lines 9:0-13:1
@@ -154,11 +131,10 @@ def let_else_chain
       | Class.Ctor =>
         let acc2 ← acc1 + 1#u32
         let r ← check c
-        let cf ← core.result.Result.Insts.CoreOpsTry.branch r
         let s : _root_.Sum (core.result.Result (Option Std.U32) Std.U32)
           ((core.result.Result (Option Std.U32) Std.U32) × Std.U32) ←
-          match cf with
-          | core.ops.control_flow.ControlFlow.Continue val =>
+          match r with
+          | core.result.Result.Ok val =>
             do
             let s1 : _root_.Sum Std.U32 (core.result.Result (Option Std.U32)
               Std.U32) ←
@@ -170,15 +146,10 @@ def let_else_chain
               | Val.Nat n =>
                 do
                 let r1 ← check n
-                let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
-                match cf1 with
-                | core.ops.control_flow.ControlFlow.Continue val1 =>
-                  ok (Sum.inl val1)
-                | core.ops.control_flow.ControlFlow.Break residual =>
-                  let r2 ←
-                    core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-                      (Option Std.U32) (core.convert.FromSame Std.U32) residual
-                  ok (Sum.inr r2)
+                match r1 with
+                | core.result.Result.Ok val1 => ok (Sum.inl val1)
+                | core.result.Result.Err e =>
+                  ok (Sum.inr (core.result.Result.Err e))
               | Val.Sort => ok (Sum.inr (core.result.Result.Ok (some 0#u32)))
             match s1 with
             | Sum.inl y =>
@@ -188,12 +159,7 @@ def let_else_chain
               let i2 ← i1 + c
               ok (Sum.inr (core.result.Result.Ok (some i2), acc3))
             | Sum.inr r1 => ok (Sum.inl r1)
-          | core.ops.control_flow.ControlFlow.Break residual =>
-            do
-            let r1 ←
-              core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-                (Option Std.U32) (core.convert.FromSame Std.U32) residual
-            ok (Sum.inl r1)
+          | core.result.Result.Err e => ok (Sum.inl (core.result.Result.Err e))
         match s with
         | Sum.inl r1 => ok (r1, acc2)
         | Sum.inr p => ok p
@@ -644,32 +610,20 @@ def call_then_maybe_call
   Result ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec Std.U32))
   := do
   let (r, v1) ← push_checked v 0#u32
-  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
   let s : _root_.Sum ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec
     Std.U32)) ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec Std.U32))
     ←
-    match cf with
-    | core.ops.control_flow.ControlFlow.Continue val =>
+    match r with
+    | core.result.Result.Ok val =>
       if b
       then
         do
         let (r1, v2) ← push_checked v1 val
-        let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
-        match cf1 with
-        | core.ops.control_flow.ControlFlow.Continue val1 =>
-          ok (Sum.inr (core.result.Result.Ok val1, v2))
-        | core.ops.control_flow.ControlFlow.Break residual =>
-          let r2 ←
-            core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-              Std.U32 (core.convert.FromSame Std.U32) residual
-          ok (Sum.inl (r2, v2))
-      else ok (Sum.inr (core.result.Result.Ok val, v1))
-    | core.ops.control_flow.ControlFlow.Break residual =>
-      do
-      let r1 ←
-        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-          Std.U32 (core.convert.FromSame Std.U32) residual
-      ok (Sum.inl (r1, v1))
+        match r1 with
+        | core.result.Result.Ok _ => ok (Sum.inr (r1, v2))
+        | core.result.Result.Err _ => ok (Sum.inl (r1, v2))
+      else ok (Sum.inr (r, v1))
+    | core.result.Result.Err _ => ok (Sum.inl (r, v1))
   match s with
   | Sum.inl p => ok p
   | Sum.inr p => ok p
@@ -734,17 +688,14 @@ def first_plus (v : Slice Std.U32) (c : Bool) : Result (Option Std.U32) := do
   let o ←
     core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice Std.U32) v
       0#usize
-  let cf ← core.option.Option.Insts.CoreOpsTry_traitTry.branch o
-  match cf with
-  | core.ops.control_flow.ControlFlow.Continue val =>
+  match o with
+  | some val =>
     let r ← if c
             then ok 1#u32
             else ok 2#u32
     let i ← val + r
     ok (some i)
-  | core.ops.control_flow.ControlFlow.Break residual =>
-    core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
-      Std.U32 residual
+  | none => ok none
 
 /-- [forward_scopes::test_let_else_chain]:
     Source: 'tests/src/forward-scopes.rs', lines 311:0-322:1

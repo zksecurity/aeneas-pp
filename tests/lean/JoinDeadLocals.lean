@@ -222,27 +222,21 @@ def unicode_escape
     let r ←
       core.option.Option.ok_or_else
         unicode_escape.closure.Insts.CoreOpsFunctionFnOnceTupleError o1 ()
-    let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-    match cf with
-    | core.ops.control_flow.ControlFlow.Continue val =>
+    match r with
+    | core.result.Result.Ok val =>
       let r1 ← core.str.converts.from_utf8 val
       let r2 ←
         core.result.Result.map_err
           unicode_escape.closure_1.Insts.CoreOpsFunctionFnOnceTupleUtf8ErrorError
           r1 ()
-      let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r2
-      match cf1 with
-      | core.ops.control_flow.ControlFlow.Continue val1 =>
+      match r2 with
+      | core.result.Result.Ok val1 =>
         let r3 ← core.num.U32.from_str_radix val1 16#u32
         core.result.Result.map_err
           unicode_escape.closure_2.Insts.CoreOpsFunctionFnOnceTupleParseIntErrorError
           r3 ()
-      | core.ops.control_flow.ControlFlow.Break residual =>
-        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-          Std.U32 (core.convert.FromSame Error) residual
-    | core.ops.control_flow.ControlFlow.Break residual =>
-      core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-        Std.U32 (core.convert.FromSame Error) residual
+      | core.result.Result.Err e => ok (core.result.Result.Err e)
+    | core.result.Result.Err e => ok (core.result.Result.Err e)
 
 /-- [join_dead_locals::pick]:
     Source: 'tests/src/join-dead-locals.rs', lines 23:0-25:1 -/
@@ -262,23 +256,17 @@ def two_borrowers
       bytes { start := «at», «end» := i }
   let o ← pick s
   let r ← core.option.Option.ok_or o ()
-  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-  match cf with
-  | core.ops.control_flow.ControlFlow.Continue val =>
+  match r with
+  | core.result.Result.Ok val =>
     let r1 ← core.option.Option.ok_or o ()
-    let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
-    match cf1 with
-    | core.ops.control_flow.ControlFlow.Continue val1 =>
+    match r1 with
+    | core.result.Result.Ok val1 =>
       let i1 ← Slice.index_usize val 0#usize
       let i2 ← Slice.index_usize val1 1#usize
       let i3 ← i1 + i2
       ok (core.result.Result.Ok i3)
-    | core.ops.control_flow.ControlFlow.Break residual =>
-      core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-        Std.U8 (core.convert.FromSame Unit) residual
-  | core.ops.control_flow.ControlFlow.Break residual =>
-    core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-      Std.U8 (core.convert.FromSame Unit) residual
+    | core.result.Result.Err e => ok (core.result.Result.Err e)
+  | core.result.Result.Err e => ok (core.result.Result.Err e)
 
 /-- [join_dead_locals::maybe_owned]:
     Source: 'tests/src/join-dead-locals.rs', lines 36:0-45:1
