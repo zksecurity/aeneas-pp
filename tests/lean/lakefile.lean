@@ -130,6 +130,7 @@ package «tests» {}
 @[default_target] lean_lib NestedSharedCallJoins
 @[default_target] lean_lib NestedSharedObservationLive
 @[default_target] lean_lib NoNestedBorrows
+@[default_target] lean_lib OpaqueDefaultMethods
 @[default_target] lean_lib OpaqueMutRegion
 @[default_target] lean_lib Options
 @[default_target] lean_lib Order
