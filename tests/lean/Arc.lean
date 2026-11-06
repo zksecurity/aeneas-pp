@@ -49,6 +49,27 @@ def alloc.alloc.Global.Insts.CoreAllocAllocatorClone :
   cloneCloneInst := core.clone.CloneGlobal
 }
 
+/-- [alloc::sync::{impl core::convert::AsRef<T> for alloc::sync::Arc<T>}::{impl core::ops::function::FnOnce<(&'_0 alloc::sync::Arc<T>,), &'_0 T> for for<'_0_1> alloc::sync::{impl core::convert::AsRef<T> for alloc::sync::Arc<T>}::as_ref<'_0_1, T, A>}::call_once]:
+    Source: '/rustc/library/alloc/src/sync.rs', lines 4383:4-4383:26
+    Name pattern: [alloc::sync::{core::convert::AsRef<alloc::sync::Arc<@T>, @T>}::{core::ops::function::FnOnce<@, (&'0 alloc::sync::Arc<@T>), &'0 @T>}::call_once]
+    Visibility: public -/
+@[rust_fun
+  "alloc::sync::{core::convert::AsRef<alloc::sync::Arc<@T>, @T>}::{core::ops::function::FnOnce<@, (&'0 alloc::sync::Arc<@T>), &'0 @T>}::call_once"]
+axiom P.Insts.CoreOpsFunctionFnOnceTupleShared0ArcShared0T.call_once
+  {T : Type _} (A : Type _) :
+  (alloc.sync.Arc T → T) → alloc.sync.Arc T → Result T
+
+/-- Trait implementation: [alloc::sync::{impl core::convert::AsRef<T> for alloc::sync::Arc<T>}::{impl core::ops::function::FnOnce<(&'_0 alloc::sync::Arc<T>,), &'_0 T> for for<'_0_1> alloc::sync::{impl core::convert::AsRef<T> for alloc::sync::Arc<T>}::as_ref<'_0_1, T, A>}]
+    Source: '/rustc/library/alloc/src/sync.rs', lines 4383:4-4383:26
+    Name pattern: [core::ops::function::FnOnce<@, (&'0 alloc::sync::Arc<@T>), &'0 @T>] -/
+@[reducible, rust_trait_impl
+  "core::ops::function::FnOnce<@, (&'0 alloc::sync::Arc<@T>), &'0 @T>"]
+def P.Insts.CoreOpsFunctionFnOnceTupleShared0ArcShared0T (T : Type _) (A :
+  Type _) : core.ops.function.FnOnce (alloc.sync.Arc T → T) (alloc.sync.Arc T)
+  T := {
+  call_once := P.Insts.CoreOpsFunctionFnOnceTupleShared0ArcShared0T.call_once A
+}
+
 /-- [arc::Bucket]
     Source: 'tests/src/arc.rs', lines 8:0-11:1
     Visibility: public -/
@@ -102,8 +123,15 @@ def same
   (a : alloc.sync.Arc Std.U32) (b : alloc.sync.Arc Std.U32) : Result Bool := do
   alloc.sync.Arc.eq core.cmp.PartialEqU32 a b
 
+/-- [arc::get]:
+    Source: 'tests/src/arc.rs', lines 35:0-37:1
+    Visibility: public -/
+def get (o : Option (alloc.sync.Arc Std.U32)) : Result (Option Std.U32) := do
+  core.option.Option.map (P.Insts.CoreOpsFunctionFnOnceTupleShared0ArcShared0T
+    Std.U32 alloc.alloc.Global) o (alloc.sync.Arc.as_ref)
+
 /-- [arc::test_arc]:
-    Source: 'tests/src/arc.rs', lines 35:0-41:1
+    Source: 'tests/src/arc.rs', lines 40:0-46:1
     Visibility: public -/
 def test_arc : Result Unit := do
   let a ← lift (alloc.sync.Arc.new (Bucket.mk 1#u32 none))

@@ -20,6 +20,7 @@ package «tests» {}
 @[default_target] lean_lib Bitwise
 @[default_target] lean_lib BlanketImpl
 @[default_target] lean_lib BoolCmp
+@[default_target] lean_lib BoolComparisons
 @[default_target] lean_lib Bst
 @[default_target] lean_lib Builtin
 @[default_target] lean_lib BuiltinAuto
@@ -27,6 +28,7 @@ package «tests» {}
 @[default_target] lean_lib CastSigned
 @[default_target] lean_lib CharCasts
 @[default_target] lean_lib ChunksExact
+@[default_target] lean_lib ClosureMutArgMono
 @[default_target] lean_lib ClosureRecursion
 @[default_target] lean_lib ClosureRecursionOpaque
 @[default_target] lean_lib ClosureRegionRequirements
@@ -130,6 +132,7 @@ package «tests» {}
 @[default_target] lean_lib NestedSharedCallJoins
 @[default_target] lean_lib NestedSharedObservationLive
 @[default_target] lean_lib NoNestedBorrows
+@[default_target] lean_lib OpaqueDefaultMethods
 @[default_target] lean_lib OpaqueMutRegion
 @[default_target] lean_lib Options
 @[default_target] lean_lib Order

@@ -105,6 +105,6 @@ def count_until.closure.Insts.CoreOpsFunctionFnMutTupleShared0U32Bool.call_mut
   let i2 ← i + 1#u32
   let back := fun (c1 : count_until.closure) => let (i3, _) := c1
                                                 (i3, i1)
-  ok (tupled_args = i1, (i2, i1), back)
+  ok (decide (tupled_args = i1), (i2, i1), back)
 
 end closures_mut_captures_names

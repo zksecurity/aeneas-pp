@@ -1875,16 +1875,8 @@ and translate_intro_symbolic (ectx : C.eval_ctx) (p : S.mplace option)
                   (lookup_fn_ptr_sig ctx kind)
                   "Internal error, please file an issue"
               in
-              (* Check that the function lives in the expected effect - otherwise we
-                 have to lift it *)
-              [%cassert] ctx.span sg.sg.fwd_info.effect_info.can_fail
-                "Unimplemented";
-              [%cassert] ctx.span
-                (RegionGroupId.Map.for_all
-                   (fun _ (e : fun_effect_info) -> not e.can_fail)
-                   sg.sg.back_effect_info)
-                "Unimplemented";
-              (* Substitute *)
+              (* The function item is the function, with its type (see the
+                 translation of [TFnDef]) *)
               let subst = make_subst_from_generics sg.sg.generics generics in
               ty_substitute subst sg.ty
           | T.TraitMethod _ -> [%craise] ctx.span "Unimplemented"
