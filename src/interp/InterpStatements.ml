@@ -1170,7 +1170,7 @@ and eval_switch_with_join (config : config) (span : Meta.span)
      align them to synthesize at the end of their branches *)
   let ctxl_wraps = InterpJoin.align_fixed_abs_expansions span common_aids ctxl in
   let ctxl_wraps =
-    InterpJoin.fold_frozen_abs_expansions config span
+    InterpJoin.restore_frozen_abs config span
       ~recoverable:!Config.recover_joins ctx0 ctxl_wraps
   in
   let ctxl = List.map fst ctxl_wraps in

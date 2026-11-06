@@ -151,6 +151,7 @@ package «tests» {}
 @[default_target] lean_lib SharedBorrowsInSharedValues
 @[default_target] lean_lib SharedBorrowsReborrowedAtJoins
 @[default_target] lean_lib SharedEnumJoins
+@[default_target] lean_lib SharedEnumLoopJoins
 @[default_target] lean_lib Slices
 @[default_target] lean_lib Static
 @[default_target] lean_lib StepBy

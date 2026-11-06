@@ -1217,105 +1217,6 @@ let drop_locals_uninit_in_some_ctx (ctxl : eval_ctx list) : eval_ctx list =
   in
   if Expressions.LocalId.Set.is_empty uninit then ctxl else List.map drop ctxl
 
-(** Values under shared loans are immutable: after a branching (or an
-    iteration of a loop) started in [ctx0], the frozen abstractions of [ctx0]
-    can only have been refined, by expanding the symbolic values without
-    borrows of their shared values (for instance through frozen borrows, see
-    {!Values.VFrozenMutBorrow}) and by sharing parts of those values. When no
-    borrow observes the shared parts anymore in any of the contexts [ctxl] to
-    join, we restore the abstractions of [ctx0], so that joining the contexts
-    doesn't have to join their shared values. If one of the contexts still
-    observes them, we leave the abstraction unchanged in all the contexts. *)
-let restore_frozen_abs (span : Meta.span) (ctx0 : eval_ctx)
-    (ctxl : eval_ctx list) : eval_ctx list =
-  (* Check that the abstraction [abs] of [ctx] refines [abs0] *)
-  let refines_abs (abs0 : abs) (ctx : eval_ctx) (abs : abs) : bool =
-    let dead (lid : loan_id) : bool =
-      InterpBorrowsCore.lookup_shared_reserved_borrows lid ctx = []
-    in
-    let value_has_live_loans (v : tvalue) : bool =
-      let visitor =
-        object
-          inherit [_] iter_tvalue as super
-
-          method! visit_VSharedLoan env lid sv =
-            if not (dead lid) then raise Utils.Found;
-            super#visit_VSharedLoan env lid sv
-
-          method! visit_VMutLoan _ _ = raise Utils.Found
-        end
-      in
-      try
-        visitor#visit_tvalue () v;
-        false
-      with Utils.Found -> true
-    in
-    (* Check that [v] refines [v0] *)
-    let rec refines (v0 : tvalue) (v : tvalue) : bool =
-      match (v0.value, v.value) with
-      | VLoan (VSharedLoan (lid0, v0')), VLoan (VSharedLoan (lid, v'))
-        when lid0 = lid ->
-          refines v0' v'
-      | _, VLoan (VSharedLoan (lid, v')) -> dead lid && refines v0 v'
-      | VSymbolic sv, _ when v0 <> v ->
-          (not (ty_has_borrows (Some span) ctx.type_ctx.type_infos sv.sv_ty))
-          && not (value_has_live_loans v)
-      | VAdt adt0, VAdt adt
-        when adt0.variant_id = adt.variant_id
-             && List.length adt0.fields = List.length adt.fields ->
-          List.for_all2 refines adt0.fields adt.fields
-      | VBorrow (VMutBorrow (bid0, v0')), VBorrow (VMutBorrow (bid, v')) ->
-          bid0 = bid && refines v0' v'
-      | _ -> v0 = v
-    in
-    (* The shared values of an abstraction, and the abstraction without them *)
-    let split_shared_values (abs : abs) : tvalue list * abs =
-      let values = ref [] in
-      let visitor =
-        object
-          inherit [_] map_abs as super
-
-          method! visit_ASharedLoan env pm lid sv child =
-            values := sv :: !values;
-            ASharedLoan
-              ( pm,
-                lid,
-                { sv with value = VBottom },
-                super#visit_tavalue env child )
-        end
-      in
-      let abs = visitor#visit_abs () abs in
-      (List.rev !values, { abs with cont = None; parents = AbsId.Set.empty })
-    in
-    abs0.avalues = abs.avalues
-    ||
-    let values0, skeleton0 = split_shared_values abs0 in
-    let values, skeleton = split_shared_values abs in
-    skeleton0 = skeleton
-    && List.length values0 = List.length values
-    && List.for_all2 refines values0 values
-  in
-  let restored =
-    List.filter
-      (fun (abs0 : abs) ->
-        (not abs0.can_end)
-        && List.for_all
-             (fun ctx ->
-               match ctx_lookup_abs_opt ctx abs0.abs_id with
-               | Some abs -> (not abs.can_end) && refines_abs abs0 ctx abs
-               | None -> false)
-             ctxl)
-      (AbsId.Map.values (ctx_get_abs ctx0))
-  in
-  let restore (abs : abs) : abs =
-    match
-      List.find_opt (fun (abs0 : abs) -> abs0.abs_id = abs.abs_id) restored
-    with
-    | Some abs0 -> { abs with avalues = abs0.avalues }
-    | None -> abs
-  in
-  List.map (ctx_map_abs restore) ctxl
-
 (** In the contexts reaching a join, align the abstractions which exist before
     the branching ([fixed_aids]): a branch may have expanded a struct (or tuple)
     value shared by one of them, which another branch left symbolic. We expand
@@ -1511,39 +1412,64 @@ let align_fixed_abs_expansions (span : Meta.span) (fixed_aids : AbsId.Set.t)
   in
   align (List.map (fun ctx -> (ctx, fun e -> e)) ctxl)
 
-(** In the contexts reaching a join, fold the expansions of the values shared
-    by the frozen abstractions which exist before the branching: branches which
-    match on such a value (e.g., on the variant of a shared enumeration) expand
-    it differently, while the frozen abstractions must be the same in all the
-    contexts we join. Values under shared loans are immutable: the expansions
-    are branch refinements of the values of [ctx0]. Comparing the frozen
-    abstractions of a branch with the ones of [ctx0] gives a witness of the
-    expansions: the expanded symbolic values with the values they were expanded
-    to, and the projectors over them with their expansions. We put back the
-    symbolic values and the projectors everywhere in the branch (the frozen
-    abstractions, but also the copies of the shared values in the abstractions
-    introduced since [ctx0]).
+(** Values under shared loans are immutable: after a branching (or an
+    iteration of a loop) started in [ctx0], the contexts can only have refined
+    the frozen abstractions of [ctx0], by expanding their shared values and
+    their loan projectors (e.g., by matching on the variant of a shared
+    enumeration, or by reading a struct through a frozen borrow, see
+    {!Values.VFrozenMutBorrow}) and by sharing parts of their shared values.
+    The frozen abstractions must be the same in all the contexts we join: when
+    the versions of a frozen abstraction differ between the contexts [ctxl]
+    ([ctx0] may be one of them), we undo the refinements of the contexts.
 
-    This folds the borrow graph of the expansions with the values: we require
-    the borrows, loans and symbolic values the expansions introduced not to
-    appear anywhere else in the folded context (a branch may for instance
-    return a borrow of a field of the expanded variant). Each branch keeps its
-    synthesis: the folded symbolic values are bound before the branching. *)
-let fold_frozen_abs_expansions (config : config) (span : Meta.span)
+    Comparing the frozen abstraction of a context with the one of [ctx0] gives
+    a witness of the refinements: the refined values with the values they were
+    refined to, and the projectors with their expansions. Undoing the
+    refinements puts back the values and the projectors of [ctx0] everywhere in
+    the context (the frozen abstraction, but also the copies of the shared
+    values in the abstractions introduced since [ctx0]).
+
+    This folds the borrow graph of the refinements with the values: a
+    refinement can be undone if the borrows, loans and symbolic values with
+    borrows it introduced don't appear anywhere else in the folded context, that
+    is, if no borrow observes a part it shared and no part of an expansion
+    escapes (a branch may for instance return a borrow of a field of the
+    expanded variant). Otherwise we fail. Each context keeps its synthesis: the
+    folded symbolic values are bound before the branching. *)
+let restore_frozen_abs (config : config) (span : Meta.span)
     ~(recoverable : bool) (ctx0 : eval_ctx)
     (ctxl : (eval_ctx * (SymbolicAst.expr -> SymbolicAst.expr)) list) :
     (eval_ctx * (SymbolicAst.expr -> SymbolicAst.expr)) list =
   let strip (abs : abs) = { abs with cont = None; parents = AbsId.Set.empty } in
-  let frozen =
+  (* The frozen abstractions whose versions differ between the contexts *)
+  let differing =
     List.filter
-      (fun (abs : abs) -> not abs.can_end)
-      (List.map snd (AbsId.Map.bindings (ctx_get_abs ctx0)))
+      (fun (abs0 : abs) ->
+        (not abs0.can_end)
+        &&
+        let versions =
+          List.filter_map
+            (fun (ctx, _) ->
+              Option.map strip (ctx_lookup_abs_opt ctx abs0.abs_id))
+            ctxl
+        in
+        List.exists (fun abs -> not (equal_abs abs (List.hd versions))) versions)
+      (AbsId.Map.values (ctx_get_abs ctx0))
+  in
+  (* The ones a context refined *)
+  let refined (ctx : eval_ctx) : abs list =
+    List.filter
+      (fun (abs0 : abs) ->
+        match ctx_lookup_abs_opt ctx abs0.abs_id with
+        | Some abs -> not (equal_abs (strip abs) (strip abs0))
+        | None -> false)
+      differing
   in
   let fail () =
     [%craise_recover] recoverable span
-      "Could not fold the expansion of a value shared by a frozen abstraction"
+      "Could not undo the refinement of a value shared by a frozen abstraction"
   in
-  (* Collect the expansions of the symbolic values of [x0] in [x1] *)
+  (* Collect the refinements of the values of [x0] in [x1] *)
   let rec walk_value values (x0 : tvalue) (x1 : tvalue) : unit =
     if x0 <> x1 then (
       if x0.ty <> x1.ty then fail ();
@@ -1559,6 +1485,10 @@ let fold_frozen_abs_expansions (config : config) (span : Meta.span)
       | VLoan (VSharedLoan (l0, y0)), VLoan (VSharedLoan (l1, y1)) when l0 = l1
         ->
           walk_value values y0 y1
+      | _, VLoan (VSharedLoan (_, y1)) ->
+          (* A shared part *)
+          values := (x0, x1) :: !values;
+          walk_value values x0 y1
       | _ -> fail ())
   in
   let rec walk_avalue values projs (x0 : tavalue) (x1 : tavalue) : unit =
@@ -1600,123 +1530,107 @@ let fold_frozen_abs_expansions (config : config) (span : Meta.span)
           walk_value values m0 m1
       | _ -> fail ())
   in
-  let fold (ctx : eval_ctx) : eval_ctx =
+  let undo (ctx : eval_ctx) : eval_ctx =
     let values = ref [] and projs = ref [] in
     List.iter
       (fun (abs0 : abs) ->
-        match ctx_lookup_abs_opt ctx abs0.abs_id with
-        | Some abs when not (equal_abs (strip abs) (strip abs0)) ->
-            if
-              not
-                (equal_abs
-                   { (strip abs) with avalues = [] }
-                   { (strip abs0) with avalues = [] }
-                && List.length abs.avalues = List.length abs0.avalues)
-            then fail ();
-            List.iter2 (walk_avalue values projs) abs0.avalues abs.avalues
-        | _ -> ())
-      frozen;
-    if !values = [] && !projs = [] then ctx
-    else
-      let values =
-        List.map (fun (v0, v) -> (v0, value_erase_shared_borrow_ids v)) !values
-      in
-      let projs = !projs in
-      let visitor =
-        object
-          inherit [_] map_env as super
+        let abs = Option.get (ctx_lookup_abs_opt ctx abs0.abs_id) in
+        if
+          not
+            (equal_abs
+               { (strip abs) with avalues = [] }
+               { (strip abs0) with avalues = [] }
+            && List.length abs.avalues = List.length abs0.avalues)
+        then fail ();
+        List.iter2 (walk_avalue values projs) abs0.avalues abs.avalues)
+      (refined ctx);
+    let values =
+      List.map (fun (v0, v) -> (v0, value_erase_shared_borrow_ids v)) !values
+    in
+    let projs = !projs in
+    let visitor =
+      object
+        inherit [_] map_env as super
 
-          method! visit_tvalue env v =
-            match
-              List.find_opt
-                (fun ((v0 : tvalue), v') ->
-                  v0.ty = v.ty && value_erase_shared_borrow_ids v = v')
-                values
-            with
-            | Some (v0, _) -> v0
-            | None -> super#visit_tvalue env v
+        method! visit_tvalue env v =
+          match
+            List.find_opt
+              (fun ((v0 : tvalue), v') ->
+                v0.ty = v.ty && value_erase_shared_borrow_ids v = v')
+              values
+          with
+          | Some (v0, _) -> v0
+          | None -> super#visit_tvalue env v
 
-          method! visit_tavalue env v =
-            match List.find_opt (fun (_, p) -> p = v) projs with
-            | Some (p0, _) -> p0
-            | None -> super#visit_tavalue env v
-        end
-      in
-      let env = visitor#visit_env () ctx.env in
-      [%ltrace
-        "- values:\n"
-        ^ String.concat "\n"
-            (List.map
-               (fun (v0, v) ->
-                 tvalue_to_string ctx v0 ^ " -> " ^ tvalue_to_string ctx v)
-               values)
-        ^ "\n- projs:\n"
-        ^ String.concat "\n"
-            (List.map
-               (fun (p0, p1) ->
-                 tavalue_to_string ctx p0 ^ " -> " ^ tavalue_to_string ctx p1)
-               projs)
-        ^ "\n- ctx:\n"
-        ^ eval_ctx_to_string ~span:(Some span) ctx
-        ^ "\n- folded ctx:\n"
-        ^ eval_ctx_to_string ~span:(Some span) { ctx with env }];
-      (* The borrows, loans and symbolic values with borrows the expansions
-         introduced must not appear anymore. The other symbolic values are
-         plain values the branch may have copied (they are bound by its
-         synthesis). *)
-      let obj, get_ids, get_ids_to_values = compute_ids () in
-      List.iter (fun (_, v) -> obj#visit_tvalue () v) values;
-      List.iter (fun (_, p) -> obj#visit_tavalue () p) projs;
-      let ids = get_ids () in
-      let ids0 = fst (compute_env_ids ctx0.env) in
-      let fids = fst (compute_env_ids env) in
-      let fresh_blids = BorrowId.Set.diff ids.blids ids0.blids in
-      let fresh_sids =
-        SymbolicValueId.Map.filter
-          (fun sid (sv : symbolic_value) ->
-            (not (SymbolicValueId.Set.mem sid ids0.sids))
-            && ty_has_borrows (Some span) ctx.type_ctx.type_infos sv.sv_ty)
-          (get_ids_to_values ()).sids_to_values
-      in
-      [%cassert_recover] recoverable span
-        (BorrowId.Set.disjoint fresh_blids fids.blids
-        && SymbolicValueId.Map.for_all
-             (fun sid _ -> not (SymbolicValueId.Set.mem sid fids.sids))
-             fresh_sids)
-        "Could not fold the expansion of a value shared by a frozen \
-         abstraction: a part of the expansion escapes";
-      let ctx = { ctx with env } in
-      [%cassert_recover] recoverable span
-        (List.for_all
-           (fun (abs0 : abs) ->
-             match ctx_lookup_abs_opt ctx abs0.abs_id with
-             | Some abs -> equal_abs (strip abs) (strip abs0)
-             | None -> true)
-           frozen)
-        "Could not fold the expansion of a value shared by a frozen \
-         abstraction";
-      ctx
+        method! visit_tavalue env v =
+          match List.find_opt (fun (_, p) -> p = v) projs with
+          | Some (p0, _) -> p0
+          | None -> super#visit_tavalue env v
+      end
+    in
+    let env = visitor#visit_env () ctx.env in
+    [%ltrace
+      "- values:\n"
+      ^ String.concat "\n"
+          (List.map
+             (fun (v0, v) ->
+               tvalue_to_string ctx v0 ^ " -> " ^ tvalue_to_string ctx v)
+             values)
+      ^ "\n- projs:\n"
+      ^ String.concat "\n"
+          (List.map
+             (fun (p0, p1) ->
+               tavalue_to_string ctx p0 ^ " -> " ^ tavalue_to_string ctx p1)
+             projs)
+      ^ "\n- ctx:\n"
+      ^ eval_ctx_to_string ~span:(Some span) ctx
+      ^ "\n- restored ctx:\n"
+      ^ eval_ctx_to_string ~span:(Some span) { ctx with env }];
+    (* The borrows, loans and symbolic values with borrows the refinements
+       introduced must not appear anymore. The other symbolic values are plain
+       values the context may have copied (they are bound by its synthesis). *)
+    let obj, get_ids, get_ids_to_values = compute_ids () in
+    List.iter (fun (_, v) -> obj#visit_tvalue () v) values;
+    List.iter (fun (_, p) -> obj#visit_tavalue () p) projs;
+    let ids = get_ids () in
+    let ids0 = fst (compute_env_ids ctx0.env) in
+    let fids = fst (compute_env_ids env) in
+    let fresh_blids = BorrowId.Set.diff ids.blids ids0.blids in
+    let fresh_sids =
+      SymbolicValueId.Map.filter
+        (fun sid (sv : symbolic_value) ->
+          (not (SymbolicValueId.Set.mem sid ids0.sids))
+          && ty_has_borrows (Some span) ctx.type_ctx.type_infos sv.sv_ty)
+        (get_ids_to_values ()).sids_to_values
+    in
+    [%cassert_recover] recoverable span
+      (BorrowId.Set.disjoint fresh_blids fids.blids
+      && SymbolicValueId.Map.for_all
+           (fun sid _ -> not (SymbolicValueId.Set.mem sid fids.sids))
+           fresh_sids)
+      "Could not undo the refinement of a value shared by a frozen \
+       abstraction: a part of the refinement is observed or escapes";
+    let ctx = { ctx with env } in
+    [%cassert_recover] recoverable span
+      (List.for_all
+         (fun (abs0 : abs) ->
+           match ctx_lookup_abs_opt ctx abs0.abs_id with
+           | Some abs -> equal_abs (strip abs) (strip abs0)
+           | None -> true)
+         differing)
+      "Could not undo the refinement of a value shared by a frozen \
+       abstraction";
+    ctx
   in
-  (* We only fold if the frozen abstractions differ between the contexts *)
-  let differ =
-    List.exists
-      (fun (abs0 : abs) ->
-        let versions =
-          List.filter_map
-            (fun ctx ->
-              Option.map strip (ctx_lookup_abs_opt (fst ctx) abs0.abs_id))
-            ctxl
-        in
-        List.exists (fun abs -> not (equal_abs abs (List.hd versions))) versions)
-      frozen
-  in
-  (* The dead values may borrow parts of the expansions: we first eliminate
+  (* The dead values may borrow parts of the refinements: we first eliminate
      them (as {!join_ctxs_list} does) *)
-  let simplify_fold (ctx, wrap) =
-    let ctx, cc = simplify_dummy_values_useless_abs config span ctx in
-    (fold ctx, fun e -> wrap (cc e))
+  let restore (ctx, wrap) =
+    if refined ctx = [] then (ctx, wrap)
+    else
+      let ctx, cc = simplify_dummy_values_useless_abs config span ctx in
+      (undo ctx, fun e -> wrap (cc e))
   in
-  if differ then List.map simplify_fold ctxl else ctxl
+  List.map restore ctxl
 
 let join_ctxs_list (config : config) (span : Meta.span)
     (fresh_abs_kind : abs_kind) ?(preprocess_first_ctx : bool = true)
@@ -1886,9 +1800,15 @@ let loop_join_origin_with_continue_ctxs (config : config) (span : Meta.span)
     ctx
   in
 
+  (* [ctx0] is one of the contexts we join *)
   let ctxl =
     List.map simplify
-      (restore_frozen_abs span ctx0 (List.map simplify_dummy_values ctxl))
+      (List.tl
+         (List.map fst
+            (restore_frozen_abs config span ~recoverable:false ctx0
+               (List.map
+                  (fun ctx -> (ctx, fun e -> e))
+                  (ctx0 :: List.map simplify_dummy_values ctxl)))))
   in
 
   let ctxl', joined_ctx =
@@ -1938,7 +1858,11 @@ let loop_join_break_ctxs (config : config) (span : Meta.span)
   in
   let ctxl =
     List.map prepare_ctx
-      (restore_frozen_abs span fp_ctx (List.map simplify_dummy_values ctxl))
+      (List.map fst
+         (restore_frozen_abs config span ~recoverable:false fp_ctx
+            (List.map
+               (fun ctx -> (simplify_dummy_values ctx, fun e -> e))
+               ctxl)))
   in
 
   match ctxl with
@@ -2274,9 +2198,12 @@ and match_ctx_with_target_aux (config : config) (span : Meta.span)
     "- tgt_ctx after simplify_dummy_values_useless_abs (ii):\n"
     ^ eval_ctx_to_string tgt_ctx];
   (* The frozen abstractions of [src_ctx] are the ones before the branching *)
-  let tgt_ctx =
-    match restore_frozen_abs span src_ctx [ tgt_ctx ] with
-    | [ tgt_ctx ] -> tgt_ctx
+  let tgt_ctx, cc =
+    match
+      restore_frozen_abs config span ~recoverable src_ctx
+        [ (src_ctx, fun e -> e); (tgt_ctx, cc) ]
+    with
+    | [ _; tgt ] -> tgt
     | _ -> [%internal_error] span
   in
 
