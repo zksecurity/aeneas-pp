@@ -37,6 +37,7 @@ axiom_closure_mono apply
 @[reducible]
 def sum_to.closure := Unit
 
+set_option maxHeartbeats 4000000 in
 mutual
 
 /-- [closure_recursion_opaque::sum_to]:

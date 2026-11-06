@@ -175,6 +175,15 @@ let start_fun_decl_group (ctx : extraction_ctx) (fmt : F.formatter)
   | FStar | Coq -> ()
   | Lean ->
       if is_rec && List.length dg > 1 then (
+        (* The [maxHeartbeats] budget is per definition, but Lean elaborates a
+           group of mutually recursive definitions as a single command, whose
+           cost grows faster than the number of definitions (the
+           [partial_fixpoint] elaboration of every recursive call involves the
+           whole group) *)
+        F.pp_print_space fmt ();
+        F.pp_print_string fmt
+          (Printf.sprintf "set_option maxHeartbeats %d in"
+             (List.length dg * !Config.max_heartbeats));
         F.pp_print_space fmt ();
         F.pp_print_string fmt "mutual";
         F.pp_print_break fmt 0 0)

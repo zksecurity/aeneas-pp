@@ -230,6 +230,7 @@ inductive Tree where
 | Leaf : Std.U32 → Tree
 | Node : Tree → Tree → Tree
 
+set_option maxHeartbeats 3000000 in
 mutual
 
 /-- [fn_items_late_bound::sum]:
