@@ -32,16 +32,16 @@ def Struct.constructor (i : Std.U32) : Result Struct := do
 
 /-- [issue_767_adt_constructor::{impl core::ops::function::FnOnce<(u32,), issue_767_adt_constructor::Struct> for issue_767_adt_constructor::Struct}::call_once]:
     Source: 'tests/src/issue-767-adt-constructor.rs', lines 5:0-5:19 -/
-def P.Insts.CoreOpsFunctionFnOnceTupleU32Struct.call_once
-  (state : Std.U32 → Result Struct) (args : Std.U32) : Result Struct := do
+def Struct.Insts.CoreOpsFunctionFnOnceTupleU32Struct.call_once
+  (_ : _root_.Unit) (args : Std.U32) : Result Struct := do
   Struct.constructor args
 
 /-- Trait implementation: [issue_767_adt_constructor::{impl core::ops::function::FnOnce<(u32,), issue_767_adt_constructor::Struct> for issue_767_adt_constructor::Struct}]
     Source: 'tests/src/issue-767-adt-constructor.rs', lines 5:0-5:19 -/
 @[reducible]
-def P.Insts.CoreOpsFunctionFnOnceTupleU32Struct : core.ops.function.FnOnce
-  (Std.U32 → Result Struct) Std.U32 Struct := {
-  call_once := P.Insts.CoreOpsFunctionFnOnceTupleU32Struct.call_once
+def Struct.Insts.CoreOpsFunctionFnOnceTupleU32Struct : core.ops.function.FnOnce
+  _root_.Unit Std.U32 Struct := {
+  call_once := Struct.Insts.CoreOpsFunctionFnOnceTupleU32Struct.call_once
 }
 
 /-- [issue_767_adt_constructor::Enum]
@@ -58,43 +58,47 @@ def Enum.Tuple.constructor (i : Std.U32) : Result Enum := do
 
 /-- [issue_767_adt_constructor::Enum::{impl core::ops::function::FnOnce<(u32,), issue_767_adt_constructor::Enum> for issue_767_adt_constructor::Enum::Tuple}::call_once]:
     Source: 'tests/src/issue-767-adt-constructor.rs', lines 9:4-9:14 -/
-def P.Insts.CoreOpsFunctionFnOnceTupleU32Enum.call_once
-  (state : Std.U32 → Result Enum) (args : Std.U32) : Result Enum := do
+def Enum.Tuple.Insts.CoreOpsFunctionFnOnceTupleU32Enum.call_once
+  (_ : _root_.Unit) (args : Std.U32) : Result Enum := do
   Enum.Tuple.constructor args
 
 /-- Trait implementation: [issue_767_adt_constructor::Enum::{impl core::ops::function::FnOnce<(u32,), issue_767_adt_constructor::Enum> for issue_767_adt_constructor::Enum::Tuple}]
     Source: 'tests/src/issue-767-adt-constructor.rs', lines 9:4-9:14 -/
 @[reducible]
-def P.Insts.CoreOpsFunctionFnOnceTupleU32Enum : core.ops.function.FnOnce
-  (Std.U32 → Result Enum) Std.U32 Enum := {
-  call_once := P.Insts.CoreOpsFunctionFnOnceTupleU32Enum.call_once
+def Enum.Tuple.Insts.CoreOpsFunctionFnOnceTupleU32Enum :
+  core.ops.function.FnOnce _root_.Unit Std.U32 Enum := {
+  call_once := Enum.Tuple.Insts.CoreOpsFunctionFnOnceTupleU32Enum.call_once
 }
 
+/-- [issue_767_adt_constructor::{issue_767_adt_constructor::Enum}::check]:
+    Source: 'tests/src/issue-767-adt-constructor.rs', lines 14:4-14:22 -/
+def Enum.check (self : Enum) : Result _root_.Unit := do
+  ok ()
+
 /-- [issue_767_adt_constructor::make_tuple_struct_with_constructor]:
-    Source: 'tests/src/issue-767-adt-constructor.rs', lines 12:0-14:1 -/
+    Source: 'tests/src/issue-767-adt-constructor.rs', lines 17:0-19:1 -/
 def make_tuple_struct_with_constructor
   (T : Type _) (x : Option Std.U32) : Result (Option Struct) := do
-  core.option.Option.map P.Insts.CoreOpsFunctionFnOnceTupleU32Struct x
-    (Struct.constructor)
+  core.option.Option.map Struct.Insts.CoreOpsFunctionFnOnceTupleU32Struct x ()
 
 /-- [issue_767_adt_constructor::make_enum_with_constructor]:
-    Source: 'tests/src/issue-767-adt-constructor.rs', lines 16:0-18:1 -/
+    Source: 'tests/src/issue-767-adt-constructor.rs', lines 21:0-23:1 -/
 def make_enum_with_constructor
   (x : Option Std.U32) : Result (Option Enum) := do
-  core.option.Option.map P.Insts.CoreOpsFunctionFnOnceTupleU32Enum x
-    (Enum.Tuple.constructor)
+  core.option.Option.map Enum.Tuple.Insts.CoreOpsFunctionFnOnceTupleU32Enum x
+    ()
 
 /-- [issue_767_adt_constructor::test_tuple_struct_constructor]:
-    Source: 'tests/src/issue-767-adt-constructor.rs', lines 21:0-23:1 -/
-def test_tuple_struct_constructor : Result Unit := do
+    Source: 'tests/src/issue-767-adt-constructor.rs', lines 26:0-28:1 -/
+def test_tuple_struct_constructor : Result _root_.Unit := do
   ok ()
 
 /- Unit test for [issue_767_adt_constructor::test_tuple_struct_constructor] -/
 #guard (test_tuple_struct_constructor).reducesTo ()
 
 /-- [issue_767_adt_constructor::test_enum_constructor]:
-    Source: 'tests/src/issue-767-adt-constructor.rs', lines 26:0-28:1 -/
-def test_enum_constructor : Result Unit := do
+    Source: 'tests/src/issue-767-adt-constructor.rs', lines 31:0-33:1 -/
+def test_enum_constructor : Result _root_.Unit := do
   ok ()
 
 /- Unit test for [issue_767_adt_constructor::test_enum_constructor] -/

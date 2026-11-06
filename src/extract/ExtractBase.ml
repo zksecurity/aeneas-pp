@@ -223,6 +223,10 @@ type names_map = {
           a variable named like one of them shadows the qualified names (if [x]
           is a variable, [x.Kind.A] is a projection of [x]), so variables must
           avoid them. *)
+  leaves : StringSet.t;
+      (** The last components of the qualified names of [names_set]: in Lean, a
+          qualified name [A.x] shadows the global [x] in the definitions of the
+          namespace [A] (and its sub-namespaces). *)
 }
 
 let empty_names_map : names_map =
@@ -231,6 +235,7 @@ let empty_names_map : names_map =
     name_to_id = StringMap.empty;
     names_set = StringSet.empty;
     roots = StringSet.empty;
+    leaves = StringSet.empty;
   }
 
 (** Small helper to update an LLBC name by using a rename attribute *)
@@ -312,7 +317,15 @@ let names_map_add_unchecked ((id, span) : id * Meta.span option) (name : string)
     | Some i -> StringSet.add (String.sub name 0 i) nm.roots
     | None -> nm.roots
   in
-  { id_to_name; name_to_id; names_set; roots }
+  let leaves =
+    match String.rindex_opt name '.' with
+    | Some i ->
+        StringSet.add
+          (String.sub name (i + 1) (String.length name - i - 1))
+          nm.leaves
+    | None -> nm.leaves
+  in
+  { id_to_name; name_to_id; names_set; roots; leaves }
 
 let names_map_add (id_to_string : id -> string) ((id, span) : id * span option)
     (name : string) (nm : names_map) : names_map =
@@ -1356,7 +1369,13 @@ let initialize_names_maps () : names_maps =
    * to check collisions. *)
   let id_to_name = IdMap.empty in
   let names_map =
-    { id_to_name; name_to_id; names_set; roots = StringSet.empty }
+    {
+      id_to_name;
+      name_to_id;
+      names_set;
+      roots = StringSet.empty;
+      leaves = StringSet.empty;
+    }
   in
   let unsafe_names_map = empty_unsafe_names_map in
   let strict_names_map = empty_names_map in
@@ -1877,6 +1896,24 @@ let ctx_compute_trait_impl_name_raw (ctx : extraction_ctx)
                         "Missing type declaration, probably because of an \
                          error which happened before";
                       "__UNKNOWN__" ^ TypeDeclId.to_string id
+                  | Some decl ->
+                      let name =
+                        opt_ctx_prepare_name decl.item_meta ctx
+                          decl.item_meta.name
+                      in
+                      name_with_generics_to_simple_name ctx.trans_ctx name
+                        params generics
+                      |> flatten_name)
+              | TFnDef { binder_value = { kind = Fun fid; generics }; _ } -> (
+                  (* A function item: we use the name of its function (the
+                     function items of functions with the same signature have
+                     the same type pattern) *)
+                  match FunDeclId.Map.find_opt fid ctx.crate.fun_decls with
+                  | None ->
+                      [%save_error] span
+                        "Missing function declaration, probably because of an \
+                         error which happened before";
+                      "__UNKNOWN__" ^ FunDeclId.to_string fid
                   | Some decl ->
                       let name =
                         opt_ctx_prepare_name decl.item_meta ctx

@@ -55,19 +55,22 @@ def alloc.alloc.Global.Insts.CoreAllocAllocatorClone :
     Visibility: public -/
 @[rust_fun
   "alloc::sync::{core::convert::AsRef<alloc::sync::Arc<@T>, @T>}::{core::ops::function::FnOnce<@, (&'0 alloc::sync::Arc<@T>), &'0 @T>}::call_once"]
-axiom P.Insts.CoreOpsFunctionFnOnceTupleShared0ArcShared0T.call_once
-  {T : Type _} (A : Type _) :
-  (alloc.sync.Arc T → T) → alloc.sync.Arc T → Result T
+axiom
+  alloc.sync.AsRefArcT.as_ref.Insts.CoreOpsFunctionFnOnceTupleShared0ArcShared0T.call_once
+  {T : Type _} (A : Type _) : Unit → alloc.sync.Arc T → Result T
 
 /-- Trait implementation: [alloc::sync::{impl core::convert::AsRef<T> for alloc::sync::Arc<T>}::{impl core::ops::function::FnOnce<(&'_0 alloc::sync::Arc<T>,), &'_0 T> for for<'_0_1> alloc::sync::{impl core::convert::AsRef<T> for alloc::sync::Arc<T>}::as_ref<'_0_1, T, A>}]
     Source: '/rustc/library/alloc/src/sync.rs', lines 4383:4-4383:26
     Name pattern: [core::ops::function::FnOnce<@, (&'0 alloc::sync::Arc<@T>), &'0 @T>] -/
 @[reducible, rust_trait_impl
   "core::ops::function::FnOnce<@, (&'0 alloc::sync::Arc<@T>), &'0 @T>"]
-def P.Insts.CoreOpsFunctionFnOnceTupleShared0ArcShared0T (T : Type _) (A :
-  Type _) : core.ops.function.FnOnce (alloc.sync.Arc T → T) (alloc.sync.Arc T)
+def
+  alloc.sync.AsRefArcT.as_ref.Insts.CoreOpsFunctionFnOnceTupleShared0ArcShared0T
+  (T : Type _) (A : Type _) : core.ops.function.FnOnce Unit (alloc.sync.Arc T)
   T := {
-  call_once := P.Insts.CoreOpsFunctionFnOnceTupleShared0ArcShared0T.call_once A
+  call_once :=
+    alloc.sync.AsRefArcT.as_ref.Insts.CoreOpsFunctionFnOnceTupleShared0ArcShared0T.call_once
+    A
 }
 
 /-- [arc::Bucket]
@@ -127,8 +130,9 @@ def same
     Source: 'tests/src/arc.rs', lines 36:0-38:1
     Visibility: public -/
 def get (o : Option (alloc.sync.Arc Std.U32)) : Result (Option Std.U32) := do
-  core.option.Option.map (P.Insts.CoreOpsFunctionFnOnceTupleShared0ArcShared0T
-    Std.U32 alloc.alloc.Global) o (alloc.sync.Arc.as_ref)
+  core.option.Option.map
+    (alloc.sync.AsRefArcT.as_ref.Insts.CoreOpsFunctionFnOnceTupleShared0ArcShared0T
+    Std.U32 alloc.alloc.Global) o ()
 
 /-- [arc::via_borrow]:
     Source: 'tests/src/arc.rs', lines 41:0-43:1

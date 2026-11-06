@@ -47,6 +47,22 @@ pub fn first_inner(w: Option<&W>) -> Option<&u32> {
     w.map(inner)
 }
 
+pub enum Tree {
+    Leaf(u32),
+    Node(Box<Tree>, Box<Tree>),
+}
+
+/// Recursive through its own function item
+pub fn sum(t: &Tree) -> u32 {
+    match t {
+        Tree::Leaf(x) => *x,
+        Tree::Node(l, r) => {
+            let [a, b] = [l.as_ref(), r.as_ref()].map(sum);
+            a + b
+        }
+    }
+}
+
 #[verify::test]
 pub fn test_fn_items() {
     assert!(via_apply(0));

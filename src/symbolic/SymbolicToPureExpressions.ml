@@ -1862,26 +1862,10 @@ and translate_intro_symbolic (ectx : C.eval_ctx) (p : S.mplace option)
         let qualif : texpr = { e = Qualif qualif; ty = mk_arrow v.ty dyn_ty } in
         let e = [%add_loc] mk_app ctx.span qualif v in
         (e, false)
-    | VaFnDef { kind; generics } ->
-        let id = translate_fn_ptr_kind ctx kind in
-        let generics = ctx_translate_fwd_generic_args ctx generics in
-        let func = Fun (FromLlbc (id, None)) in
-        let qualif = Qualif { id = FunOrOp func; generics } in
-        let ty =
-          match kind with
-          | T.Fun _ ->
-              let sg =
-                [%unwrap_with_span] ctx.span
-                  (lookup_fn_ptr_sig ctx kind)
-                  "Internal error, please file an issue"
-              in
-              (* The function item is the function, with its type (see the
-                 translation of [TFnDef]) *)
-              let subst = make_subst_from_generics sg.sg.generics generics in
-              ty_substitute subst sg.ty
-          | T.TraitMethod _ -> [%craise] ctx.span "Unimplemented"
-        in
-        ({ e = qualif; ty }, false)
+    | VaFnDef _ ->
+        (* A function item doesn't hold any value (see the translation of
+           [TFnDef]) *)
+        (mk_unit_texpr, false)
   in
 
   (* Make the let-binding *)
