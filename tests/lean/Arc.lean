@@ -55,23 +55,26 @@ def alloc.alloc.Global.Insts.CoreAllocAllocatorClone :
     Visibility: public -/
 @[rust_fun
   "alloc::sync::{core::convert::AsRef<alloc::sync::Arc<@T>, @T>}::{core::ops::function::FnOnce<@, (&'0 alloc::sync::Arc<@T>), &'0 @T>}::call_once"]
-axiom P.Insts.CoreOpsFunctionFnOnceTupleShared0ArcShared0T.call_once
-  {T : Type _} (A : Type _) :
-  (alloc.sync.Arc T → T) → alloc.sync.Arc T → Result T
+axiom
+  alloc.sync.AsRefArcT.as_ref.Insts.CoreOpsFunctionFnOnceTupleShared0ArcShared0T.call_once
+  {T : Type _} (A : Type _) : Unit → alloc.sync.Arc T → Result T
 
 /-- Trait implementation: [alloc::sync::{impl core::convert::AsRef<T> for alloc::sync::Arc<T>}::{impl core::ops::function::FnOnce<(&'_0 alloc::sync::Arc<T>,), &'_0 T> for for<'_0_1> alloc::sync::{impl core::convert::AsRef<T> for alloc::sync::Arc<T>}::as_ref<'_0_1, T, A>}]
     Source: '/rustc/library/alloc/src/sync.rs', lines 4383:4-4383:26
     Name pattern: [core::ops::function::FnOnce<@, (&'0 alloc::sync::Arc<@T>), &'0 @T>] -/
 @[reducible, rust_trait_impl
   "core::ops::function::FnOnce<@, (&'0 alloc::sync::Arc<@T>), &'0 @T>"]
-def P.Insts.CoreOpsFunctionFnOnceTupleShared0ArcShared0T (T : Type _) (A :
-  Type _) : core.ops.function.FnOnce (alloc.sync.Arc T → T) (alloc.sync.Arc T)
+def
+  alloc.sync.AsRefArcT.as_ref.Insts.CoreOpsFunctionFnOnceTupleShared0ArcShared0T
+  (T : Type _) (A : Type _) : core.ops.function.FnOnce Unit (alloc.sync.Arc T)
   T := {
-  call_once := P.Insts.CoreOpsFunctionFnOnceTupleShared0ArcShared0T.call_once A
+  call_once :=
+    alloc.sync.AsRefArcT.as_ref.Insts.CoreOpsFunctionFnOnceTupleShared0ArcShared0T.call_once
+    A
 }
 
 /-- [arc::Bucket]
-    Source: 'tests/src/arc.rs', lines 8:0-11:1
+    Source: 'tests/src/arc.rs', lines 9:0-12:1
     Visibility: public -/
 inductive Bucket where
 | mk : Std.U32 → Option (alloc.sync.Arc Bucket) → Bucket
@@ -89,7 +92,7 @@ theorem Bucket.rest._simpLemma_ (id : Std.U32) (rest : Option (alloc.sync.Arc
   Bucket)) : (Bucket.mk id rest).rest = rest := by rfl
 
 /-- [arc::push]:
-    Source: 'tests/src/arc.rs', lines 13:0-15:1
+    Source: 'tests/src/arc.rs', lines 14:0-16:1
     Visibility: public -/
 def push
   (b : alloc.sync.Arc Bucket) (id : Std.U32) :
@@ -98,7 +101,7 @@ def push
   ok (alloc.sync.Arc.new (Bucket.mk id (some b)))
 
 /-- [arc::second]:
-    Source: 'tests/src/arc.rs', lines 17:0-22:1
+    Source: 'tests/src/arc.rs', lines 18:0-23:1
     Visibility: public -/
 def second (b : alloc.sync.Arc Bucket) : Result (Option Std.U32) := do
   let b1 ← lift (alloc.sync.Arc.deref b)
@@ -108,7 +111,7 @@ def second (b : alloc.sync.Arc Bucket) : Result (Option Std.U32) := do
               ok (some b2.id)
 
 /-- [arc::shared_len]:
-    Source: 'tests/src/arc.rs', lines 24:0-28:1
+    Source: 'tests/src/arc.rs', lines 25:0-29:1
     Visibility: public -/
 def shared_len (v : alloc.vec.Vec Std.U32) : Result Std.Usize := do
   let s ← lift (alloc.sync.Arc.from_vec v)
@@ -117,21 +120,62 @@ def shared_len (v : alloc.vec.Vec Std.U32) : Result Std.Usize := do
   ok (Slice.len s1)
 
 /-- [arc::same]:
-    Source: 'tests/src/arc.rs', lines 30:0-32:1
+    Source: 'tests/src/arc.rs', lines 31:0-33:1
     Visibility: public -/
 def same
   (a : alloc.sync.Arc Std.U32) (b : alloc.sync.Arc Std.U32) : Result Bool := do
   alloc.sync.Arc.eq core.cmp.PartialEqU32 a b
 
 /-- [arc::get]:
-    Source: 'tests/src/arc.rs', lines 35:0-37:1
+    Source: 'tests/src/arc.rs', lines 36:0-38:1
     Visibility: public -/
 def get (o : Option (alloc.sync.Arc Std.U32)) : Result (Option Std.U32) := do
-  core.option.Option.map (P.Insts.CoreOpsFunctionFnOnceTupleShared0ArcShared0T
-    Std.U32 alloc.alloc.Global) o (alloc.sync.Arc.as_ref)
+  core.option.Option.map
+    (alloc.sync.AsRefArcT.as_ref.Insts.CoreOpsFunctionFnOnceTupleShared0ArcShared0T
+    Std.U32 alloc.alloc.Global) o ()
+
+/-- [arc::via_borrow]:
+    Source: 'tests/src/arc.rs', lines 41:0-43:1
+    Visibility: public -/
+def via_borrow
+  {B : Type _} (coreborrowBorrowBU32Inst : core.borrow.Borrow B Std.U32)
+  (b : B) :
+  Result Std.U32
+  := do
+  coreborrowBorrowBU32Inst.borrow b
+
+/-- [arc::borrowed]:
+    Source: 'tests/src/arc.rs', lines 45:0-47:1
+    Visibility: public -/
+def borrowed (a : alloc.sync.Arc Std.U32) : Result Std.U32 := do
+  via_borrow (core.borrow.BorrowArc Std.U32) a
+
+/-- [arc::via_from]:
+    Source: 'tests/src/arc.rs', lines 50:0-52:1
+    Visibility: public -/
+def via_from
+  {S : Type _} (coreconvertFromSVecU32Inst : core.convert.From S (alloc.vec.Vec
+  Std.U32)) (v : alloc.vec.Vec Std.U32) :
+  Result S
+  := do
+  coreconvertFromSVecU32Inst.«from» v
+
+/-- [arc::first]:
+    Source: 'tests/src/arc.rs', lines 54:0-57:1
+    Visibility: public -/
+def first (v : alloc.vec.Vec Std.U32) : Result (Option Std.U32) := do
+  let s ← via_from (core.convert.FromArcSliceVec Std.U32) v
+  let s1 ← lift (alloc.sync.Arc.deref s)
+  let i := Slice.len s1
+  if i = 0#usize
+  then ok none
+  else
+    let s2 ← lift (alloc.sync.Arc.deref s)
+    let i1 ← Slice.index_usize s2 0#usize
+    ok (some i1)
 
 /-- [arc::test_arc]:
-    Source: 'tests/src/arc.rs', lines 40:0-46:1
+    Source: 'tests/src/arc.rs', lines 60:0-69:1
     Visibility: public -/
 def test_arc : Result Unit := do
   let a ← lift (alloc.sync.Arc.new (Bucket.mk 1#u32 none))
@@ -156,6 +200,26 @@ def test_arc : Result Unit := do
   let a2 ← lift (alloc.sync.Arc.new 3#u32)
   let b3 ← same a1 a2
   massert b3
+  let a3 ← lift (alloc.sync.Arc.new 5#u32)
+  let i1 ← borrowed a3
+  massert (i1 = 5#u32)
+  let y1 ←
+    lift (Std.Array.to_slice (Array.make 2#usize [ 7#u32, 8#u32 ] : Array
+      Std.U32 2#usize))
+  let ret1 := alloc.slice.Slice.into_vec y1
+  let o1 ← first ret1
+  let b4 ←
+    match o1 with
+    | none => ok false
+    | some i2 => match i2 with
+                 | 7#uscalar => ok true
+                 | _ => ok false
+  massert b4
+  let o2 ← first (alloc.vec.Vec.new Std.U32)
+  let b5 ← match o2 with
+           | none => ok true
+           | some _ => ok false
+  massert b5
 
 /- Unit test for [arc::test_arc] -/
 #guard (test_arc).reducesTo ()

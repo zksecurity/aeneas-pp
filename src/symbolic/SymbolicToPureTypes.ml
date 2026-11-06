@@ -216,8 +216,10 @@ let rec translate_sty (span : Meta.span option) (decls_ctx : C.decls_ctx)
         (generics = TypesUtils.empty_generic_args)
         "Unimplemented";
       TTraitType (trait_ref, type_name)
-  | TFnDef _ | TFnPtr _ ->
-      [%craise_opt_span] span "Arrow types are not supported yet"
+  | TFnDef _ ->
+      (* A function item doesn't hold any value (see [translate_fwd_ty]) *)
+      mk_unit_ty
+  | TFnPtr _ -> [%craise_opt_span] span "Arrow types are not supported yet"
   | TDynTrait _ ->
       [%craise_opt_span] span "Dynamic trait types are not supported yet"
   | TError _ ->
@@ -436,26 +438,12 @@ let rec translate_fwd_ty (span : Meta.span option) (decls_ctx : C.decls_ctx)
         "Unimplemented";
       let trait_ref = translate_fwd_trait_ref span decls_ctx trait_ref in
       TTraitType (trait_ref, type_name)
-  | TFnDef { binder_value = { kind; generics }; _ } -> (
-      (* The regions bound by the binder are the late-bound regions of the
-         function: they are regions of its signature, which we translate below *)
-      let generics = translate_fwd_generic_args span decls_ctx generics in
-      match kind with
-      | T.Fun fid ->
-          let fdecl =
-            [%unwrap_opt_span] span
-              (FunDeclId.Map.find_opt fid decls_ctx.fun_ctx.fun_decls)
-              "Could not lookup a function declaration"
-          in
-          let sigs = translate_fun_sigs_from_decl decls_ctx fdecl in
-          let sg = sigs.sg in
-          (* A function item is its function: its type is the type of the
-             function, with its effects (the function items are only called
-             directly, by the methods of their [Fn*] implementations) *)
-          (* Substitute *)
-          let subst = make_subst_from_generics sg.generics generics in
-          ty_substitute subst sigs.ty
-      | T.TraitMethod _ -> [%craise_opt_span] span "Unimplemented")
+  | TFnDef _ ->
+      (* A function item doesn't hold any value: the methods of its [Fn*]
+         implementations call its function directly. Translating it to the
+         function itself would make the function a value, which in particular
+         [partial_fixpoint] can't handle in a recursive group. *)
+      mk_unit_ty
   | TFnPtr _ -> [%craise_opt_span] span "Arrow types are not supported yet"
   | TDynTrait { binder } ->
       let params, _predicates =

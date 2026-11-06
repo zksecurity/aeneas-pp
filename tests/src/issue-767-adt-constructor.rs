@@ -9,6 +9,11 @@ enum Enum {
     Tuple(u32),
 }
 
+impl Enum {
+    /// Mentions the unit type in the namespace of [Enum], which has a variant [Unit]
+    fn check(&self) {}
+}
+
 fn make_tuple_struct_with_constructor<T>(x: Option<u32>) -> Option<Struct> {
     x.map(Struct)
 }

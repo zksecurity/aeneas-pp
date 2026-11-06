@@ -175,6 +175,15 @@ let start_fun_decl_group (ctx : extraction_ctx) (fmt : F.formatter)
   | FStar | Coq -> ()
   | Lean ->
       if is_rec && List.length dg > 1 then (
+        (* The [maxHeartbeats] budget is per definition, but Lean elaborates a
+           group of mutually recursive definitions as a single command, whose
+           cost grows faster than the number of definitions (the
+           [partial_fixpoint] elaboration of every recursive call involves the
+           whole group) *)
+        F.pp_print_space fmt ();
+        F.pp_print_string fmt
+          (Printf.sprintf "set_option maxHeartbeats %d in"
+             (List.length dg * !Config.max_heartbeats));
         F.pp_print_space fmt ();
         F.pp_print_string fmt "mutual";
         F.pp_print_break fmt 0 0)
@@ -296,9 +305,13 @@ let end_type_decl_group (fmt : F.formatter) (is_rec : bool)
         (* Add breaks to insert new lines between definitions *)
         F.pp_print_break fmt 0 0)
 
-let unit_name () =
+let unit_name (ctx : extraction_ctx) =
   match backend () with
-  | Lean -> "Unit"
+  | Lean ->
+      (* A declaration named [A.Unit] (for instance the variant [Unit] of an
+         enumeration [A]) shadows [Unit] in the namespace [A] *)
+      if StringSet.mem "Unit" ctx.names_maps.names_map.leaves then "_root_.Unit"
+      else "Unit"
   | Coq | FStar | HOL4 -> "unit"
 
 (** Small helper *)
@@ -380,7 +393,7 @@ let rec extract_ty (span : Meta.span) (ctx : extraction_ctx) (fmt : F.formatter)
           [%ldebug "Tuple case"];
           (* This is a bit annoying, but in F*/Coq/HOL4 [()] is not the unit type:
              we have to write [unit]... *)
-          if generics.types = [] then F.pp_print_string fmt (unit_name ())
+          if generics.types = [] then F.pp_print_string fmt (unit_name ctx)
           else (
             F.pp_print_string fmt "(";
             Collections.List.iter_link
@@ -1082,7 +1095,7 @@ let extract_type_decl_tuple_struct_body (span : Meta.span)
   (* If the type is empty, we need to have a special treatment *)
   if fields = [] then (
     F.pp_print_space fmt ();
-    F.pp_print_string fmt (unit_name ()))
+    F.pp_print_string fmt (unit_name ctx))
   else (
     (* Open additional boxes *)
     F.pp_print_break fmt 1 2;
@@ -1168,7 +1181,7 @@ let extract_type_decl_struct_body (ctx : extraction_ctx) (fmt : F.formatter)
   let _ =
     if backend () = FStar && fields = [] then (
       F.pp_print_space fmt ();
-      F.pp_print_string fmt (unit_name ()))
+      F.pp_print_string fmt (unit_name ctx))
     else if backend () = Lean && fields = [] then ()
       (* If the definition is recursive, we may need to extract it as an inductive
          (instead of a record). We start with the "normal" case: we extract it

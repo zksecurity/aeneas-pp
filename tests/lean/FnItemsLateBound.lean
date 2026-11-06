@@ -18,7 +18,30 @@ set_option maxHeartbeats 1000000
 /- You can set the `maxRecDepth` value with the `-max-recdepth` CLI option -/
 set_option maxRecDepth 2048
 
+/- You can remove the following line by using the CLI option `-all-computable`: -/
+noncomputable section
+
 namespace fn_items_late_bound
+
+/-- [core::array::{[T; N]}::map]:
+    Source: '/rustc/library/core/src/array/mod.rs', lines 609:4-613:28
+    Name pattern: [core::array::{[@T; @N]}::map]
+    Visibility: public -/
+@[rust_fun "core::array::{[@T; @N]}::map"]
+axiom core.array.Array.map
+  {T : Type _} {F : Type _} {U : Type _} {N : Std.Usize}
+  (opsfunctionFnMutFTupleTUInst : core.ops.function.FnMut F T U) :
+  Array T N → F → Result (Array U N)
+axiom_closure_mono core.array.Array.map
+
+
+/-- [alloc::boxed::{impl core::convert::AsRef<T> for alloc::boxed::Box<T>}::as_ref]:
+    Source: '/rustc/library/alloc/src/boxed.rs', lines 2429:4-2429:26
+    Name pattern: [alloc::boxed::{core::convert::AsRef<Box<@T>, @T>}::as_ref]
+    Visibility: public -/
+@[rust_fun "alloc::boxed::{core::convert::AsRef<Box<@T>, @T>}::as_ref"]
+axiom Box.Insts.CoreConvertAsRef.as_ref
+  {T : Type _} (A : Type _) : T → Result T
 
 /-- [fn_items_late_bound::is_zero]:
     Source: 'tests/src/fn-items-late-bound.rs', lines 7:0-9:1 -/
@@ -27,49 +50,47 @@ def is_zero (x : Std.U32) : Result Bool := do
 
 /-- [fn_items_late_bound::{impl core::ops::function::Fn<(&'_0 u32,), bool> for for<'_0_1> fn_items_late_bound::is_zero<'_0_1>}::call]:
     Source: 'tests/src/fn-items-late-bound.rs', lines 7:0-9:1 -/
-def P.Insts.CoreOpsFunctionFnTupleShared0U32Bool.call
-  (state : Std.U32 → Result Bool) (args : Std.U32) : Result Bool := do
+def is_zero.Insts.CoreOpsFunctionFnTupleShared0U32Bool.call
+  (_ : Unit) (args : Std.U32) : Result Bool := do
   is_zero args
 
 /-- [fn_items_late_bound::{impl core::ops::function::FnMut<(&'_0 u32,), bool> for for<'_0_1> fn_items_late_bound::is_zero<'_0_1>}::call_mut]:
     Source: 'tests/src/fn-items-late-bound.rs', lines 7:0-9:1 -/
-def P.Insts.CoreOpsFunctionFnMutTupleShared0U32Bool.call_mut
-  (state : Std.U32 → Result Bool) (args : Std.U32) :
-  Result (Bool × (Std.U32 → Result Bool))
-  := do
+def is_zero.Insts.CoreOpsFunctionFnMutTupleShared0U32Bool.call_mut
+  (_ : Unit) (args : Std.U32) : Result (Bool × Unit) := do
   let b ← is_zero args
-  ok (b, state)
+  ok (b, ())
 
 /-- [fn_items_late_bound::{impl core::ops::function::FnOnce<(&'_0 u32,), bool> for for<'_0_1> fn_items_late_bound::is_zero<'_0_1>}::call_once]:
     Source: 'tests/src/fn-items-late-bound.rs', lines 7:0-9:1 -/
-def P.Insts.CoreOpsFunctionFnOnceTupleShared0U32Bool.call_once
-  (state : Std.U32 → Result Bool) (args : Std.U32) : Result Bool := do
+def is_zero.Insts.CoreOpsFunctionFnOnceTupleShared0U32Bool.call_once
+  (_ : Unit) (args : Std.U32) : Result Bool := do
   is_zero args
 
 /-- Trait implementation: [fn_items_late_bound::{impl core::ops::function::FnOnce<(&'_0 u32,), bool> for for<'_0_1> fn_items_late_bound::is_zero<'_0_1>}]
     Source: 'tests/src/fn-items-late-bound.rs', lines 7:0-9:1 -/
 @[reducible]
-def P.Insts.CoreOpsFunctionFnOnceTupleShared0U32Bool : core.ops.function.FnOnce
-  (Std.U32 → Result Bool) Std.U32 Bool := {
-  call_once := P.Insts.CoreOpsFunctionFnOnceTupleShared0U32Bool.call_once
+def is_zero.Insts.CoreOpsFunctionFnOnceTupleShared0U32Bool :
+  core.ops.function.FnOnce Unit Std.U32 Bool := {
+  call_once := is_zero.Insts.CoreOpsFunctionFnOnceTupleShared0U32Bool.call_once
 }
 
 /-- Trait implementation: [fn_items_late_bound::{impl core::ops::function::FnMut<(&'_0 u32,), bool> for for<'_0_1> fn_items_late_bound::is_zero<'_0_1>}]
     Source: 'tests/src/fn-items-late-bound.rs', lines 7:0-9:1 -/
 @[reducible]
-def P.Insts.CoreOpsFunctionFnMutTupleShared0U32Bool : core.ops.function.FnMut
-  (Std.U32 → Result Bool) Std.U32 Bool := {
-  FnOnceInst := P.Insts.CoreOpsFunctionFnOnceTupleShared0U32Bool
-  call_mut := P.Insts.CoreOpsFunctionFnMutTupleShared0U32Bool.call_mut
+def is_zero.Insts.CoreOpsFunctionFnMutTupleShared0U32Bool :
+  core.ops.function.FnMut Unit Std.U32 Bool := {
+  FnOnceInst := is_zero.Insts.CoreOpsFunctionFnOnceTupleShared0U32Bool
+  call_mut := is_zero.Insts.CoreOpsFunctionFnMutTupleShared0U32Bool.call_mut
 }
 
 /-- Trait implementation: [fn_items_late_bound::{impl core::ops::function::Fn<(&'_0 u32,), bool> for for<'_0_1> fn_items_late_bound::is_zero<'_0_1>}]
     Source: 'tests/src/fn-items-late-bound.rs', lines 7:0-9:1 -/
 @[reducible]
-def P.Insts.CoreOpsFunctionFnTupleShared0U32Bool : core.ops.function.Fn
-  (Std.U32 → Result Bool) Std.U32 Bool := {
-  FnMutInst := P.Insts.CoreOpsFunctionFnMutTupleShared0U32Bool
-  call := P.Insts.CoreOpsFunctionFnTupleShared0U32Bool.call
+def is_zero.Insts.CoreOpsFunctionFnTupleShared0U32Bool : core.ops.function.Fn
+  Unit Std.U32 Bool := {
+  FnMutInst := is_zero.Insts.CoreOpsFunctionFnMutTupleShared0U32Bool
+  call := is_zero.Insts.CoreOpsFunctionFnTupleShared0U32Bool.call
 }
 
 /-- [fn_items_late_bound::W]
@@ -85,16 +106,17 @@ def inner (w : W) : Result Std.U32 := do
 
 /-- [fn_items_late_bound::{impl core::ops::function::FnOnce<(&'_0 fn_items_late_bound::W,), &'_0 u32> for for<'_0_1> fn_items_late_bound::inner<'_0_1>}::call_once]:
     Source: 'tests/src/fn-items-late-bound.rs', lines 15:0-17:1 -/
-def P.Insts.CoreOpsFunctionFnOnceTupleShared0WShared0U32.call_once
-  (state : W → Result Std.U32) (args : W) : Result Std.U32 := do
+def inner.Insts.CoreOpsFunctionFnOnceTupleShared0WShared0U32.call_once
+  (_ : Unit) (args : W) : Result Std.U32 := do
   inner args
 
 /-- Trait implementation: [fn_items_late_bound::{impl core::ops::function::FnOnce<(&'_0 fn_items_late_bound::W,), &'_0 u32> for for<'_0_1> fn_items_late_bound::inner<'_0_1>}]
     Source: 'tests/src/fn-items-late-bound.rs', lines 15:0-17:1 -/
 @[reducible]
-def P.Insts.CoreOpsFunctionFnOnceTupleShared0WShared0U32 :
-  core.ops.function.FnOnce (W → Result Std.U32) W Std.U32 := {
-  call_once := P.Insts.CoreOpsFunctionFnOnceTupleShared0WShared0U32.call_once
+def inner.Insts.CoreOpsFunctionFnOnceTupleShared0WShared0U32 :
+  core.ops.function.FnOnce Unit W Std.U32 := {
+  call_once :=
+    inner.Insts.CoreOpsFunctionFnOnceTupleShared0WShared0U32.call_once
 }
 
 /-- [fn_items_late_bound::apply]:
@@ -124,38 +146,34 @@ def incr (x : Std.U32) : Result Std.U32 := do
 
 /-- [fn_items_late_bound::{impl core::ops::function::FnMut<(&'_0 mut u32,), ()> for for<'_0_1> fn_items_late_bound::incr<'_0_1>}::call_mut]:
     Source: 'tests/src/fn-items-late-bound.rs', lines 30:0-32:1 -/
-def P.Insts.CoreOpsFunctionFnMutTupleMut0U32Tuple.call_mut
-  (state : Std.U32 → Result Std.U32) (args : Std.U32) :
-  Result (Unit × Std.U32 × (Std.U32 → Result Std.U32))
-  := do
+def incr.Insts.CoreOpsFunctionFnMutTupleMut0U32Tuple.call_mut
+  (_ : Unit) (args : Std.U32) : Result (Unit × Std.U32 × Unit) := do
   let args1 ← incr args
-  ok ((), args1, state)
+  ok ((), args1, ())
 
 /-- [fn_items_late_bound::{impl core::ops::function::FnOnce<(&'_0 mut u32,), ()> for for<'_0_1> fn_items_late_bound::incr<'_0_1>}::call_once]:
     Source: 'tests/src/fn-items-late-bound.rs', lines 30:0-32:1 -/
-def P.Insts.CoreOpsFunctionFnOnceTupleMut0U32Tuple.call_once
-  (state : Std.U32 → Result Std.U32) (args : Std.U32) :
-  Result (Unit × Std.U32)
-  := do
+def incr.Insts.CoreOpsFunctionFnOnceTupleMut0U32Tuple.call_once
+  (_ : Unit) (args : Std.U32) : Result (Unit × Std.U32) := do
   let args1 ← incr args
   ok ((), args1)
 
 /-- Trait implementation: [fn_items_late_bound::{impl core::ops::function::FnOnce<(&'_0 mut u32,), ()> for for<'_0_1> fn_items_late_bound::incr<'_0_1>}]
     Source: 'tests/src/fn-items-late-bound.rs', lines 30:0-32:1 -/
 @[reducible]
-def P.Insts.CoreOpsFunctionFnOnceTupleMut0U32Tuple : core.ops.function.FnOnce
-  (Std.U32 → Result Std.U32) Std.U32 (Unit × Std.U32) := {
-  call_once := P.Insts.CoreOpsFunctionFnOnceTupleMut0U32Tuple.call_once
+def incr.Insts.CoreOpsFunctionFnOnceTupleMut0U32Tuple :
+  core.ops.function.FnOnce Unit Std.U32 (Unit × Std.U32) := {
+  call_once := incr.Insts.CoreOpsFunctionFnOnceTupleMut0U32Tuple.call_once
 }
 
 /-- Trait implementation: [fn_items_late_bound::{impl core::ops::function::FnMut<(&'_0 mut u32,), ()> for for<'_0_1> fn_items_late_bound::incr<'_0_1>}]
     Source: 'tests/src/fn-items-late-bound.rs', lines 30:0-32:1 -/
 @[reducible]
-def P.Insts.CoreOpsFunctionFnMutTupleMut0U32Tuple : core.ops.function.FnMut
-  (Std.U32 → Result Std.U32) Std.U32 (Unit × Std.U32) := {
-  FnOnceInst := P.Insts.CoreOpsFunctionFnOnceTupleMut0U32Tuple
+def incr.Insts.CoreOpsFunctionFnMutTupleMut0U32Tuple : core.ops.function.FnMut
+  Unit Std.U32 (Unit × Std.U32) := {
+  FnOnceInst := incr.Insts.CoreOpsFunctionFnOnceTupleMut0U32Tuple
   call_mut :=
-    fun s a => (P.Insts.CoreOpsFunctionFnMutTupleMut0U32Tuple.call_mut s a) >>= fun (x0, x1, x2) => ok ((x0, x1), x2)
+    fun s a => (incr.Insts.CoreOpsFunctionFnMutTupleMut0U32Tuple.call_mut s a) >>= fun (x0, x1, x2) => ok ((x0, x1), x2)
 }
 
 /-- [fn_items_late_bound::zero_first::{closure}]
@@ -189,23 +207,103 @@ def zero_first (v : Option Std.U32) : Result Bool := do
     Source: 'tests/src/fn-items-late-bound.rs', lines 38:0-40:1
     Visibility: public -/
 def via_apply (x : Std.U32) : Result Bool := do
-  apply P.Insts.CoreOpsFunctionFnTupleShared0U32Bool (is_zero) x
+  apply is_zero.Insts.CoreOpsFunctionFnTupleShared0U32Bool () x
 
 /-- [fn_items_late_bound::via_apply_mut]:
     Source: 'tests/src/fn-items-late-bound.rs', lines 42:0-44:1
     Visibility: public -/
 def via_apply_mut (x : Std.U32) : Result Std.U32 := do
-  apply_mut P.Insts.CoreOpsFunctionFnMutTupleMut0U32Tuple (incr) x
+  apply_mut incr.Insts.CoreOpsFunctionFnMutTupleMut0U32Tuple () x
 
 /-- [fn_items_late_bound::first_inner]:
     Source: 'tests/src/fn-items-late-bound.rs', lines 46:0-48:1
     Visibility: public -/
 def first_inner (w : Option W) : Result (Option Std.U32) := do
-  core.option.Option.map P.Insts.CoreOpsFunctionFnOnceTupleShared0WShared0U32 w
-    (inner)
+  core.option.Option.map
+    inner.Insts.CoreOpsFunctionFnOnceTupleShared0WShared0U32 w ()
+
+/-- [fn_items_late_bound::Tree]
+    Source: 'tests/src/fn-items-late-bound.rs', lines 50:0-53:1
+    Visibility: public -/
+@[discriminant isize]
+inductive Tree where
+| Leaf : Std.U32 → Tree
+| Node : Tree → Tree → Tree
+
+set_option maxHeartbeats 3000000 in
+mutual
+
+/-- [fn_items_late_bound::sum]:
+    Source: 'tests/src/fn-items-late-bound.rs', lines 56:0-64:1
+    Visibility: public -/
+def sum (t : Tree) : Result Std.U32 := do
+  match t with
+  | Tree.Leaf x => ok x
+  | Tree.Node l r =>
+    let t1 ← Box.Insts.CoreConvertAsRef.as_ref alloc.alloc.Global l
+    let t2 ← Box.Insts.CoreConvertAsRef.as_ref alloc.alloc.Global r
+    let a ←
+      core.array.Array.map
+        ({
+          FnOnceInst :=
+            ({
+              call_once :=
+                sum.Insts.CoreOpsFunctionFnOnceTupleShared0TreeU32.call_once
+              } :
+              core.ops.function.FnOnce
+              Unit
+              Tree
+              Std.U32)
+          call_mut :=
+            sum.Insts.CoreOpsFunctionFnMutTupleShared0TreeU32.call_mut
+          } :
+          core.ops.function.FnMut
+          Unit
+          Tree
+          Std.U32) (Array.make 2#usize [ t1, t2 ]) ()
+    let a1 ← Array.index_usize a 0#usize
+    let b ← Array.index_usize a 1#usize
+    a1 + b
+partial_fixpoint
+
+/-- [fn_items_late_bound::{impl core::ops::function::FnMut<(&'_0 fn_items_late_bound::Tree,), u32> for for<'_0_1> fn_items_late_bound::sum<'_0_1>}::call_mut]:
+    Source: 'tests/src/fn-items-late-bound.rs', lines 56:0-64:1
+    Visibility: public -/
+def sum.Insts.CoreOpsFunctionFnMutTupleShared0TreeU32.call_mut
+  (_ : Unit) (args : Tree) : Result (Std.U32 × Unit) := do
+  let i ← sum args
+  ok (i, ())
+partial_fixpoint
+
+/-- [fn_items_late_bound::{impl core::ops::function::FnOnce<(&'_0 fn_items_late_bound::Tree,), u32> for for<'_0_1> fn_items_late_bound::sum<'_0_1>}::call_once]:
+    Source: 'tests/src/fn-items-late-bound.rs', lines 56:0-64:1
+    Visibility: public -/
+def sum.Insts.CoreOpsFunctionFnOnceTupleShared0TreeU32.call_once
+  (_ : Unit) (args : Tree) : Result Std.U32 := do
+  sum args
+partial_fixpoint
+
+end
+
+/-- Trait implementation: [fn_items_late_bound::{impl core::ops::function::FnOnce<(&'_0 fn_items_late_bound::Tree,), u32> for for<'_0_1> fn_items_late_bound::sum<'_0_1>}]
+    Source: 'tests/src/fn-items-late-bound.rs', lines 56:0-64:1 -/
+@[reducible]
+def sum.Insts.CoreOpsFunctionFnOnceTupleShared0TreeU32 :
+  core.ops.function.FnOnce Unit Tree Std.U32 := {
+  call_once := sum.Insts.CoreOpsFunctionFnOnceTupleShared0TreeU32.call_once
+}
+
+/-- Trait implementation: [fn_items_late_bound::{impl core::ops::function::FnMut<(&'_0 fn_items_late_bound::Tree,), u32> for for<'_0_1> fn_items_late_bound::sum<'_0_1>}]
+    Source: 'tests/src/fn-items-late-bound.rs', lines 56:0-64:1 -/
+@[reducible]
+def sum.Insts.CoreOpsFunctionFnMutTupleShared0TreeU32 : core.ops.function.FnMut
+  Unit Tree Std.U32 := {
+  FnOnceInst := sum.Insts.CoreOpsFunctionFnOnceTupleShared0TreeU32
+  call_mut := sum.Insts.CoreOpsFunctionFnMutTupleShared0TreeU32.call_mut
+}
 
 /-- [fn_items_late_bound::test_fn_items]:
-    Source: 'tests/src/fn-items-late-bound.rs', lines 51:0-58:1
+    Source: 'tests/src/fn-items-late-bound.rs', lines 67:0-74:1
     Visibility: public -/
 def test_fn_items : Result Unit := do
   let b ← via_apply 0#u32

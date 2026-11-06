@@ -62,6 +62,7 @@ derive_closure_mono apply_once
 @[reducible]
 def sum_to.closure := Unit
 
+set_option maxHeartbeats 4000000 in
 mutual
 
 /-- [closure_recursion::sum_to]:
@@ -161,6 +162,7 @@ def sum_to.closure.Insts.CoreOpsFunctionFnTupleU32U32 : core.ops.function.Fn
 @[reducible]
 def steps.closure := Std.U32
 
+set_option maxHeartbeats 3000000 in
 mutual
 
 /-- [closure_recursion::steps]:
@@ -244,6 +246,7 @@ def odd.closure := Unit
 @[reducible]
 def even.closure := Unit
 
+set_option maxHeartbeats 4000000 in
 mutual
 
 /-- [closure_recursion::even]:

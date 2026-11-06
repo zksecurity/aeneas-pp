@@ -8,7 +8,7 @@ let lean_builtin_types =
       ~kind:(KEnum [ ("Mk", Some "mk") ]);
     (* file: "Aeneas/Std/Alloc/String.lean", line: 8 *)
     mk_type "alloc::string::String" "String";
-    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 16 *)
+    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 17 *)
     mk_type "alloc::sync::Arc" "alloc.sync.Arc";
     (* file: "Aeneas/Std/Alloc/Vec.lean", line: 30 *)
     mk_type "alloc::vec::Vec" "alloc.vec.Vec"
@@ -222,50 +222,50 @@ let lean_builtin_funs =
       ~can_fail:false ~lift:false;
     (* file: "Aeneas/Std/Alloc/Slice.lean", line: 11 *)
     mk_fun "alloc::slice::{[@T]}::to_vec" "alloc.slice.Slice.to_vec";
-    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 19 *)
+    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 20 *)
     mk_fun "alloc::sync::{alloc::sync::Arc<@T>}::new" "alloc.sync.Arc.new"
       ~can_fail:false;
-    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 34 *)
+    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 35 *)
     mk_fun
       "alloc::sync::{core::borrow::Borrow<alloc::sync::Arc<@T>, @T>}::borrow"
       "alloc.sync.Arc.borrow"
       ~keep_params:(Some [ true; false ])
       ~can_fail:false;
-    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 22 *)
+    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 23 *)
     mk_fun "alloc::sync::{core::clone::Clone<alloc::sync::Arc<@T>>}::clone"
       "alloc.sync.Arc.clone"
       ~keep_params:(Some [ true; false ])
       ~keep_trait_clauses:(Some [ false ]) ~can_fail:false;
-    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 38 *)
+    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 39 *)
     mk_fun
       "alloc::sync::{core::cmp::PartialEq<alloc::sync::Arc<@T>, \
        alloc::sync::Arc<@T>>}::eq"
       "alloc.sync.Arc.eq"
       ~keep_params:(Some [ true; false ]);
-    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 44 *)
+    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 45 *)
     mk_fun
       "alloc::sync::{core::cmp::PartialEq<alloc::sync::Arc<@T>, \
        alloc::sync::Arc<@T>>}::ne"
       "alloc.sync.Arc.ne"
       ~keep_params:(Some [ true; false ]);
-    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 30 *)
+    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 31 *)
     mk_fun
       "alloc::sync::{core::convert::AsRef<alloc::sync::Arc<@T>, @T>}::as_ref"
       "alloc.sync.Arc.as_ref"
       ~keep_params:(Some [ true; false ])
       ~can_fail:false;
-    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 55 *)
+    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 56 *)
     mk_fun
       "alloc::sync::{core::convert::From<alloc::sync::Arc<[@T]>, \
        alloc::vec::Vec<@T>>}::from"
       "alloc.sync.Arc.from_vec"
       ~keep_params:(Some [ true; false ])
       ~keep_trait_clauses:(Some [ false ]) ~can_fail:false;
-    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 50 *)
+    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 51 *)
     mk_fun
       "alloc::sync::{core::default::Default<alloc::sync::Arc<@T>>}::default"
       "alloc.sync.Arc.default";
-    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 26 *)
+    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 27 *)
     mk_fun
       "alloc::sync::{core::ops::deref::Deref<alloc::sync::Arc<@T>, @T>}::deref"
       "alloc.sync.Arc.deref"
@@ -1380,6 +1380,9 @@ let lean_builtin_trait_decls =
     mk_trait_decl "core::alloc::global::GlobalAlloc"
       "core.alloc.global.GlobalAlloc"
       ~methods:[ ("alloc", "alloc"); ("dealloc", "dealloc") ];
+    (* file: "Aeneas/Std/Core/Borrow.lean", line: 7 *)
+    mk_trait_decl "core::borrow::Borrow" "core.borrow.Borrow"
+      ~methods:[ ("borrow", "borrow") ];
     (* file: "Aeneas/Std/Core/Core.lean", line: 22 *)
     mk_trait_decl "core::clone::Clone" "core.clone.Clone"
       ~methods:[ ("clone", "clone"); ("clone_from", "clone_from") ]
@@ -1574,6 +1577,10 @@ let lean_builtin_trait_decls =
 
 let lean_builtin_trait_impls =
   [
+    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 79 *)
+    mk_trait_impl "core::borrow::Borrow<alloc::sync::Arc<@T>, @T>"
+      "core.borrow.BorrowArc"
+      ~keep_params:(Some [ true; false ]);
     (* file: "Aeneas/Std/Alloc/Boxed.lean", line: 48 *)
     mk_trait_impl "core::clone::Clone<Box<@T>>" "core.clone.CloneBox"
       ~keep_params:(Some [ true; false ])
@@ -1583,8 +1590,9 @@ let lean_builtin_trait_impls =
     (* file: "Aeneas/Std/Alloc/Alloc.lean", line: 18 *)
     mk_trait_impl "core::clone::Clone<alloc::alloc::Global>"
       "core.clone.CloneGlobal";
-    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 60 *)
-    mk_trait_impl "core::clone::Clone<alloc::sync::Arc<@T>>" "core.clone.CloneArc"
+    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 61 *)
+    mk_trait_impl "core::clone::Clone<alloc::sync::Arc<@T>>"
+      "core.clone.CloneArc"
       ~keep_params:(Some [ true; false ])
       ~keep_trait_clauses:(Some [ false ]);
     (* file: "Aeneas/Std/Alloc/Vec.lean", line: 595 *)
@@ -1603,7 +1611,7 @@ let lean_builtin_trait_impls =
     mk_trait_impl "core::cmp::PartialEq<Box<@T>, Box<@T>>"
       "core.cmp.PartialEqBox"
       ~keep_params:(Some [ true; false ]);
-    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 78 *)
+    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 85 *)
     mk_trait_impl
       "core::cmp::PartialEq<alloc::sync::Arc<@T>, alloc::sync::Arc<@T>>"
       "core.cmp.PartialEqArc"
@@ -1626,7 +1634,7 @@ let lean_builtin_trait_impls =
     (* file: "Aeneas/Std/Array/ArraySlice.lean", line: 480 *)
     mk_trait_impl "core::convert::AsRef<[@T; @N], [@T]>"
       "Array.Insts.CoreConvertAsRefSlice";
-    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 72 *)
+    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 73 *)
     mk_trait_impl "core::convert::AsRef<alloc::sync::Arc<@T>, @T>"
       "core.convert.AsRefArc"
       ~keep_params:(Some [ true; false ]);
@@ -1636,6 +1644,12 @@ let lean_builtin_trait_impls =
     mk_trait_impl "core::convert::From<Box<[@T]>, alloc::vec::Vec<@T>>"
       "core.convert.FromBoxSliceVec"
       ~keep_params:(Some [ true; false ]);
+    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 99 *)
+    mk_trait_impl
+      "core::convert::From<alloc::sync::Arc<[@T]>, alloc::vec::Vec<@T>>"
+      "core.convert.FromArcSliceVec"
+      ~keep_params:(Some [ true; false ])
+      ~keep_trait_clauses:(Some [ false ]);
     (* file: "Aeneas/Std/Alloc/Vec.lean", line: 495 *)
     mk_trait_impl "core::convert::From<alloc::vec::Vec<@T>, [@T; @N]>"
       "core.convert.FromVecArray";
@@ -1657,7 +1671,7 @@ let lean_builtin_trait_impls =
       "core.default.DefaultArrayEmpty";
     (* file: "Aeneas/Std/Array/Array.lean", line: 461 *)
     mk_trait_impl "core::default::Default<[@T; @N]>" "core.default.DefaultArray";
-    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 86 *)
+    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 93 *)
     mk_trait_impl "core::default::Default<alloc::sync::Arc<@T>>"
       "core.default.DefaultArc";
     (* file: "Aeneas/Std/Core/Fmt.lean", line: 179 *)
@@ -1802,7 +1816,7 @@ let lean_builtin_trait_impls =
     mk_trait_impl "core::ops::deref::Deref<Box<@T>, @T>"
       "core.ops.deref.DerefBoxInst"
       ~keep_params:(Some [ true; false ]);
-    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 66 *)
+    (* file: "Aeneas/Std/Alloc/Sync.lean", line: 67 *)
     mk_trait_impl "core::ops::deref::Deref<alloc::sync::Arc<@T>, @T>"
       "core.ops.deref.DerefArc"
       ~keep_params:(Some [ true; false ]);

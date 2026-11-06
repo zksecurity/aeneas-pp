@@ -133,6 +133,7 @@ def Engine.name (self : Engine) (n : Std.U32) : Result Str := do
     Source: 'tests/src/join-target-shared-borrows.rs', lines 33:18-33:45 -/
 def Engine.show.closure := Engine × Std.U32
 
+set_option maxHeartbeats 2000000 in
 mutual
 
 /-- [join_target_shared_borrows::{join_target_shared_borrows::Engine<'a>}::show]:

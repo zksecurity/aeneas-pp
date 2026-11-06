@@ -132,6 +132,7 @@ def i32_id (i : Std.I32) : Result Std.I32 := do
        i2 + 1#i32
 partial_fixpoint
 
+set_option maxHeartbeats 2000000 in
 mutual
 
 /-- [tutorial::even]:
