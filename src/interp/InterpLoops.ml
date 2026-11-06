@@ -554,7 +554,7 @@ let eval_loop (config : config) (span : span) (eval_loop_body : stl_cm_fun) :
       let ctx, cc =
         comp cc
           (reborrow_ashared_loans_symbolic_borrows span None
-             ~with_abs_conts:true ~all_shared_values:true ctx)
+             ~with_abs_conts:true ctx)
       in
       let ctx_resl, cf = eval_loop_symbolic config span eval_loop_body ctx in
       (ctx_resl, cc_comp cc cf)

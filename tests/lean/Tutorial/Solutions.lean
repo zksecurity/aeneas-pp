@@ -341,7 +341,7 @@ theorem add_no_overflow_loop_spec
   (hLength : x.length = y.length)
   -- No overflow occurs when we add the individual thunks
   (hNoOverflow : ∀ (j : Nat), (_ : i.val ≤ j) → (_ : j < x.length) → x[j].val + y[j].val ≤ U32.max) :
-  add_no_overflow_loop x y i ⦃ x' =>
+  add_no_overflow_loop y x i ⦃ x' =>
     x'.length = x.length ∧
     toInt x' = toInt x + 2 ^ (32 * i.val) * toInt (y.val.drop i.val) ⦄ := by
   unfold add_no_overflow_loop
@@ -380,7 +380,7 @@ theorem add_with_carry_loop_spec
   (hLength : x.length = y.length)
   (hi : i.val ≤ x.length)
   (hCarryLe : c0.val ≤ 1) :
-  add_with_carry_loop x y c0 i ⦃ c1 x' =>
+  add_with_carry_loop y x c0 i ⦃ c1 x' =>
     x'.length = x.length ∧
     c1.val ≤ 1 ∧
     toInt x' + c1.val * 2 ^ (32 * x'.length) =

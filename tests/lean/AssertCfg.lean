@@ -290,7 +290,7 @@ def assert_in_loop_loop.body
     Source: 'tests/src/assert-cfg.rs', lines 162:4-165:5 -/
 @[rust_loop]
 def assert_in_loop_loop
-  (iter : core.ops.range.Range Std.Usize) (a : Array Std.U32 10#usize) :
+  (a : Array Std.U32 10#usize) (iter : core.ops.range.Range Std.Usize) :
   Result Unit
   := do
   loop
@@ -301,7 +301,7 @@ def assert_in_loop_loop
     Source: 'tests/src/assert-cfg.rs', lines 161:0-166:1 -/
 @[reducible]
 def assert_in_loop (a : Array Std.U32 10#usize) : Result Unit := do
-  assert_in_loop_loop { start := 0#usize, «end» := 10#usize } a
+  assert_in_loop_loop a { start := 0#usize, «end» := 10#usize }
 
 /-- [assert_cfg::assert_or_in_loop]: loop body 0:
     Source: 'tests/src/assert-cfg.rs', lines 173:4-185:5 -/

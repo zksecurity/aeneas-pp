@@ -56,15 +56,9 @@ open InterpJoinCore
 
     The shared values which never change (the values of arrays, slices, strings
     and opaque types, which the symbolic execution never expands) don't need to
-    be reborrowed: we reborrow them only if [all_shared_values]. The joins after
-    a switch don't need them, but the fixed points of the loops do (matching
-    the fixed point of a nested loop fails otherwise). *)
+    be reborrowed. *)
 val reborrow_ashared_loans_symbolic_borrows :
-  Meta.span ->
-  loop_id option ->
-  with_abs_conts:bool ->
-  all_shared_values:bool ->
-  Cps.cm_fun
+  Meta.span -> loop_id option -> with_abs_conts:bool -> Cps.cm_fun
 
 val reborrow_ashared_loans_symbolic_borrows_no_synth :
   Meta.span -> loop_id -> with_abs_conts:bool -> eval_ctx -> eval_ctx

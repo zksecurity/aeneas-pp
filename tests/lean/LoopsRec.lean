@@ -817,8 +817,9 @@ def issue400_1
     Source: 'tests/src/loops-rec.rs', lines 457:4-466:5 -/
 @[rust_loop]
 def issue400_2_loop
-  (back : Std.I32 → Std.I32 → (Std.I32 × Std.I32 × Std.I32))
-  (conds : Slice Bool) (y : Std.I32) (z : Std.I32) (i : Std.Usize) :
+  (conds : Slice Bool)
+  (back : Std.I32 → Std.I32 → (Std.I32 × Std.I32 × Std.I32)) (y : Std.I32)
+  (z : Std.I32) (i : Std.Usize) :
   Result (Std.I32 × Std.I32 × (Std.I32 → Std.I32 → (Std.I32 × Std.I32 ×
     Std.I32)))
   := do
@@ -833,7 +834,7 @@ def issue400_2_loop
       else let (a, b1, c) := back y z
            ok (b1, c, fun i2 i3 => (a, i2, i3))
     let i2 ← i + 1#usize
-    issue400_2_loop back1 conds y1 z1 i2
+    issue400_2_loop conds back1 y1 z1 i2
   else ok (y, z, back)
 partial_fixpoint
 
@@ -843,7 +844,7 @@ def issue400_2
   (a : Std.I32) (b : Std.I32) (c : Std.I32) (conds : Slice Bool) :
   Result (Std.I32 × Std.I32 × Std.I32)
   := do
-  let (y, z, back) ← issue400_2_loop (fun i i1 => (i, i1, c)) conds a b 0#usize
+  let (y, z, back) ← issue400_2_loop conds (fun i i1 => (i, i1, c)) a b 0#usize
   let y1 ← y + 3#i32
   let z1 ← z + 5#i32
   ok (back y1 z1)

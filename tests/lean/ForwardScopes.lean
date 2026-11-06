@@ -217,17 +217,16 @@ def skip_to_outer
 @[rust_loop_body]
 def scopes_in_loop_loop.body
   (a : Slice Val) (n : Std.U32) (i : Std.Usize) :
-  Result (ControlFlow ((Slice Val) × Std.U32 × Std.Usize) Std.U32)
+  Result (ControlFlow (Std.U32 × Std.Usize) Std.U32)
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum Unit ((Slice Val) × Std.U32 × Std.Usize) ←
+  let s : _root_.Sum Unit (Std.U32 × Std.Usize) ←
     if i < i1
     then
       do
       let v ← Slice.index_usize a i
       let i2 ← i + 1#usize
-      let s1 : _root_.Sum Std.Usize (_root_.Sum ((Slice Val) × Std.U32 ×
-        Std.Usize) Unit) ←
+      let s1 : _root_.Sum Std.Usize (_root_.Sum (Std.U32 × Std.Usize) Unit) ←
         match v with
         | Val.Neutral h _ =>
           match h with
@@ -247,25 +246,24 @@ def scopes_in_loop_loop.body
                               ok (Sum.inl n1)
               | Class.Other => ok (Sum.inr (Sum.inr i2))
             match s2 with
-            | Sum.inl n1 =>
-              let n2 ← n1 + 1#u32
-              ok (Sum.inr (Sum.inl (a, n2, i2)))
+            | Sum.inl n1 => let n2 ← n1 + 1#u32
+                            ok (Sum.inr (Sum.inl (n2, i2)))
             | Sum.inr s3 =>
               match s3 with
               | Sum.inl _ => ok (Sum.inr (Sum.inr ()))
               | Sum.inr i3 => ok (Sum.inl i3)
         | _ => ok (Sum.inl i2)
       match s1 with
-      | Sum.inl i3 => ok (Sum.inr (a, n, i3))
+      | Sum.inl i3 => ok (Sum.inr (n, i3))
       | Sum.inr s2 =>
         match s2 with
-        | Sum.inl t => ok (Sum.inr t)
+        | Sum.inl p => ok (Sum.inr p)
         | Sum.inr _ => ok (Sum.inl ())
     else ok (Sum.inl ())
   match s with
   | Sum.inl _ => ok (done n)
-  | Sum.inr t => let (s1, i2, i3) := t
-                 ok (cont (s1, i2, i3))
+  | Sum.inr p => let (i2, i3) := p
+                 ok (cont (i2, i3))
 
 /-- [forward_scopes::scopes_in_loop]: loop 0:
     Source: 'tests/src/forward-scopes.rs', lines 1:0-118:5
@@ -274,8 +272,8 @@ def scopes_in_loop_loop.body
 def scopes_in_loop_loop
   (a : Slice Val) (n : Std.U32) (i : Std.Usize) : Result Std.U32 := do
   loop
-    (fun (a1, n1, i1) => scopes_in_loop_loop.body a1 n1 i1)
-    (a, n, i)
+    (fun (n1, i1) => scopes_in_loop_loop.body a n1 i1)
+    (n, i)
 
 /-- [forward_scopes::scopes_in_loop]:
     Source: 'tests/src/forward-scopes.rs', lines 98:0-120:1
@@ -538,11 +536,10 @@ def conditional_referent
 @[rust_loop_body]
 def loop_live_borrow_loop.body
   (vs : Slice Val) (r : Std.U32) (i : Std.Usize) :
-  Result (ControlFlow ((Slice Val) × Std.U32 × Std.Usize) (Std.U32 ×
-    Std.Usize))
+  Result (ControlFlow (Std.U32 × Std.Usize) (Std.U32 × Std.Usize))
   := do
   let i1 := Slice.len vs
-  let s : _root_.Sum Std.Usize ((Slice Val) × Std.U32 × Std.Usize) ←
+  let s : _root_.Sum Std.Usize (Std.U32 × Std.Usize) ←
     if i < i1
     then
       do
@@ -552,15 +549,15 @@ def loop_live_borrow_loop.body
       | Val.Neutral _ _ =>
         let r1 ← r + 1#u32
         let r2 ← r1 + 10#u32
-        ok (Sum.inr (vs, r2, i2))
+        ok (Sum.inr (r2, i2))
       | Val.Nat n => let r1 ← r + n
-                     ok (Sum.inr (vs, r1, i2))
+                     ok (Sum.inr (r1, i2))
       | Val.Sort => ok (Sum.inl i2)
     else ok (Sum.inl i)
   match s with
   | Sum.inl i2 => ok (done (r, i2))
-  | Sum.inr t => let (s1, i2, i3) := t
-                 ok (cont (s1, i2, i3))
+  | Sum.inr p => let (i2, i3) := p
+                 ok (cont (i2, i3))
 
 /-- [forward_scopes::loop_live_borrow]: loop 0:
     Source: 'tests/src/forward-scopes.rs', lines 1:0-261:5
@@ -571,8 +568,8 @@ def loop_live_borrow_loop
   Result (Std.U32 × Std.Usize)
   := do
   loop
-    (fun (vs1, r1, i1) => loop_live_borrow_loop.body vs1 r1 i1)
-    (vs, r, i)
+    (fun (r1, i1) => loop_live_borrow_loop.body vs r1 i1)
+    (r, i)
 
 /-- [forward_scopes::loop_live_borrow]:
     Source: 'tests/src/forward-scopes.rs', lines 246:0-264:1
@@ -643,24 +640,22 @@ def get_or_zero (v : Slice Std.U32) (i : Std.Usize) : Result Std.U32 := do
     Visibility: public -/
 @[rust_loop_body]
 def contains_zero_loop.body
-  (a : Slice Std.U32) (iter : core.slice.iter.Iter Std.U32) :
-  Result (ControlFlow ((Slice Std.U32) × (core.slice.iter.Iter Std.U32)) Bool)
+  (iter : core.slice.iter.Iter Std.U32) :
+  Result (ControlFlow (core.slice.iter.Iter Std.U32) Bool)
   := do
   let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
-  let s : _root_.Sum Unit (_root_.Sum ((Slice Std.U32) × (core.slice.iter.Iter
-    Std.U32)) Bool) ←
+  let s : _root_.Sum Unit (_root_.Sum (core.slice.iter.Iter Std.U32) Bool) ←
     match o with
     | none => ok (Sum.inr (Sum.inr false))
     | some x =>
       if x = 0#u32
       then ok (Sum.inl ())
-      else ok (Sum.inr (Sum.inl (a, iter1)))
+      else ok (Sum.inr (Sum.inl iter1))
   match s with
   | Sum.inl _ => ok (done true)
   | Sum.inr s1 =>
     match s1 with
-    | Sum.inl p => let (s2, i) := p
-                   ok (cont (s2, i))
+    | Sum.inl i => ok (cont i)
     | Sum.inr b => ok (done b)
 
 /-- [forward_scopes::contains_zero]: loop 0:
@@ -668,10 +663,10 @@ def contains_zero_loop.body
     Visibility: public -/
 @[rust_loop]
 def contains_zero_loop
-  (a : Slice Std.U32) (iter : core.slice.iter.Iter Std.U32) : Result Bool := do
+  (iter : core.slice.iter.Iter Std.U32) : Result Bool := do
   loop
-    (fun (a1, iter1) => contains_zero_loop.body a1 iter1)
-    (a, iter)
+    (fun iter1 => contains_zero_loop.body iter1)
+    iter
 
 /-- [forward_scopes::contains_zero]:
     Source: 'tests/src/forward-scopes.rs', lines 294:0-301:1
@@ -679,7 +674,7 @@ def contains_zero_loop
 def contains_zero (a : Slice Std.U32) : Result Bool := do
   let iter ←
     SharedSlice.Insts.CoreIterTraitsCollectIntoIteratorSharedIter.into_iter a
-  contains_zero_loop a iter
+  contains_zero_loop iter
 
 /-- [forward_scopes::first_plus]:
     Source: 'tests/src/forward-scopes.rs', lines 304:0-308:1

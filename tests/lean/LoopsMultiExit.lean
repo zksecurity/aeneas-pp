@@ -26,12 +26,11 @@ namespace loops_multi_exit
 @[rust_loop_body]
 def find_loop.body
   (a : Slice Std.U32) (x : Std.U32) (i : Std.Usize) :
-  Result (ControlFlow ((Slice Std.U32) × Std.U32 × Std.Usize) (Option
-    Std.Usize))
+  Result (ControlFlow (Std.U32 × Std.Usize) (Option Std.Usize))
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum Std.Usize (_root_.Sum ((Slice Std.U32) × Std.U32 ×
-    Std.Usize) (Option Std.Usize)) ←
+  let s : _root_.Sum Std.Usize (_root_.Sum (Std.U32 × Std.Usize) (Option
+    Std.Usize)) ←
     if i < i1
     then
       do
@@ -39,14 +38,14 @@ def find_loop.body
       if i2 = x
       then ok (Sum.inl i)
       else let i3 ← i + 1#usize
-           ok (Sum.inr (Sum.inl (a, x, i3)))
+           ok (Sum.inr (Sum.inl (x, i3)))
     else ok (Sum.inr (Sum.inr none))
   match s with
   | Sum.inl i2 => ok (done (some i2))
   | Sum.inr s1 =>
     match s1 with
-    | Sum.inl t => let (s2, i2, i3) := t
-                   ok (cont (s2, i2, i3))
+    | Sum.inl p => let (i2, i3) := p
+                   ok (cont (i2, i3))
     | Sum.inr o => ok (done o)
 
 /-- [loops_multi_exit::find]: loop 0:
@@ -58,8 +57,8 @@ def find_loop
   Result (Option Std.Usize)
   := do
   loop
-    (fun (a1, x1, i1) => find_loop.body a1 x1 i1)
-    (a, x, i)
+    (fun (x1, i1) => find_loop.body a x1 i1)
+    (x, i)
 
 /-- [loops_multi_exit::find]:
     Source: 'tests/src/loops-multi-exit.rs', lines 9:0-18:1
@@ -74,11 +73,10 @@ def find (a : Slice Std.U32) (x : Std.U32) : Result (Option Std.Usize) := do
 @[rust_loop_body]
 def first_above_loop.body
   (a : Slice Std.U32) (x : Std.U32) (i : Std.Usize) :
-  Result (ControlFlow ((Slice Std.U32) × Std.U32 × Std.Usize) Std.U32)
+  Result (ControlFlow (Std.U32 × Std.Usize) Std.U32)
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum Std.U32 (_root_.Sum ((Slice Std.U32) × Std.U32 ×
-    Std.Usize) Std.U32) ←
+  let s : _root_.Sum Std.U32 (_root_.Sum (Std.U32 × Std.Usize) Std.U32) ←
     if i >= i1
     then ok (Sum.inr (Sum.inr 0#u32))
     else
@@ -87,13 +85,13 @@ def first_above_loop.body
       if i2 > x
       then ok (Sum.inl i2)
       else let i3 ← i + 1#usize
-           ok (Sum.inr (Sum.inl (a, x, i3)))
+           ok (Sum.inr (Sum.inl (x, i3)))
   match s with
   | Sum.inl i2 => ok (done i2)
   | Sum.inr s1 =>
     match s1 with
-    | Sum.inl t => let (s2, i2, i3) := t
-                   ok (cont (s2, i2, i3))
+    | Sum.inl p => let (i2, i3) := p
+                   ok (cont (i2, i3))
     | Sum.inr i2 => ok (done i2)
 
 /-- [loops_multi_exit::first_above]: loop 0:
@@ -103,8 +101,8 @@ def first_above_loop.body
 def first_above_loop
   (a : Slice Std.U32) (x : Std.U32) (i : Std.Usize) : Result Std.U32 := do
   loop
-    (fun (a1, x1, i1) => first_above_loop.body a1 x1 i1)
-    (a, x, i)
+    (fun (x1, i1) => first_above_loop.body a x1 i1)
+    (x, i)
 
 /-- [loops_multi_exit::first_above]:
     Source: 'tests/src/loops-multi-exit.rs', lines 21:0-32:1
@@ -445,24 +443,24 @@ def nested_return
 @[rust_loop_body]
 def classify_loop.body
   (a : Slice Std.I32) (i : Std.Usize) (neg : Std.I32) :
-  Result (ControlFlow ((Slice Std.I32) × Std.Usize × Std.I32) Std.I32)
+  Result (ControlFlow (Std.Usize × Std.I32) Std.I32)
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum (Std.Usize × Std.I32) (_root_.Sum ((Slice Std.I32) ×
-    Std.Usize × Std.I32) Std.I32) ←
+  let s : _root_.Sum (Std.Usize × Std.I32) (_root_.Sum (Std.Usize × Std.I32)
+    Std.I32) ←
     if i < i1
     then
       do
       let v ← Slice.index_usize a i
       let i2 ← i + 1#usize
-      let s1 : _root_.Sum (Std.Usize × Std.I32) (_root_.Sum ((Slice Std.I32) ×
-        Std.Usize × Std.I32) Std.I32) ←
+      let s1 : _root_.Sum (Std.Usize × Std.I32) (_root_.Sum (Std.Usize ×
+        Std.I32) Std.I32) ←
         if v = 0#i32
         then ok (Sum.inl (i2, neg))
         else
           do
-          let s2 : _root_.Sum Std.I32 (_root_.Sum ((Slice Std.I32) × Std.Usize
-            × Std.I32) (Std.Usize × Std.I32)) ←
+          let s2 : _root_.Sum Std.I32 (_root_.Sum (Std.Usize × Std.I32)
+            (Std.Usize × Std.I32)) ←
             if v < (-100)#i32
             then ok (Sum.inl (-1)#i32)
             else
@@ -475,20 +473,19 @@ def classify_loop.body
                   let neg1 ← neg + 1#i32
                   if neg1 > 2#i32
                   then ok (Sum.inr (Sum.inr (i2, neg1)))
-                  else ok (Sum.inr (Sum.inl (a, i2, neg1)))
-                else ok (Sum.inr (Sum.inl (a, i2, neg)))
+                  else ok (Sum.inr (Sum.inl (i2, neg1)))
+                else ok (Sum.inr (Sum.inl (i2, neg)))
           match s2 with
           | Sum.inl i3 => ok (Sum.inr (Sum.inr i3))
           | Sum.inr s3 =>
             match s3 with
-            | Sum.inl t => ok (Sum.inr (Sum.inl t))
+            | Sum.inl p => ok (Sum.inr (Sum.inl p))
             | Sum.inr p => ok (Sum.inl p)
       match s1 with
       | Sum.inl _ => ok s1
       | Sum.inr _ => ok s1
     else ok (Sum.inl (i, neg))
-  let s1 : _root_.Sum Std.I32 (_root_.Sum ((Slice Std.I32) × Std.Usize ×
-    Std.I32) Std.I32) ←
+  let s1 : _root_.Sum Std.I32 (_root_.Sum (Std.Usize × Std.I32) Std.I32) ←
     match s with
     | Sum.inl p =>
       do
@@ -505,8 +502,8 @@ def classify_loop.body
   | Sum.inl i2 => ok (done i2)
   | Sum.inr s2 =>
     match s2 with
-    | Sum.inl t => let (s3, i2, i3) := t
-                   ok (cont (s3, i2, i3))
+    | Sum.inl p => let (i2, i3) := p
+                   ok (cont (i2, i3))
     | Sum.inr i2 => ok (done i2)
 
 /-- [loops_multi_exit::classify]: loop 0:
@@ -516,8 +513,8 @@ def classify_loop.body
 def classify_loop
   (a : Slice Std.I32) (i : Std.Usize) (neg : Std.I32) : Result Std.I32 := do
   loop
-    (fun (a1, i1, neg1) => classify_loop.body a1 i1 neg1)
-    (a, i, neg)
+    (fun (i1, neg1) => classify_loop.body a i1 neg1)
+    (i, neg)
 
 /-- [loops_multi_exit::classify]:
     Source: 'tests/src/loops-multi-exit.rs', lines 106:0-129:1
@@ -664,9 +661,9 @@ def nth_mut
 def overlapping_outputs_loop0_loop0.body
   (a : Slice Std.U32) (k : Std.U32) (total : Std.U32) (j : Std.U32)
   (i : Std.Usize) (s : Std.U32) :
-  Result (ControlFlow (Std.Usize × Std.U32) (_root_.Sum ((Slice Std.U32) ×
-    Std.U32 × Std.U32 × Std.U32) (_root_.Sum (Std.U32 × Std.U32) ((Slice
-    Std.U32) × Std.U32 × Std.U32 × Std.U32 × Std.Usize))))
+  Result (ControlFlow (Std.Usize × Std.U32) (_root_.Sum (Std.U32 × Std.U32 ×
+    Std.U32) (_root_.Sum (Std.U32 × Std.U32) (Std.U32 × Std.U32 × Std.U32 ×
+    Std.Usize))))
   := do
   let i1 := Slice.len a
   if i < i1
@@ -675,14 +672,14 @@ def overlapping_outputs_loop0_loop0.body
     let i3 ← k + j
     if i2 = i3
     then let total1 ← total + s
-         ok (done (Sum.inl (a, k, total1, j)))
+         ok (done (Sum.inl (k, total1, j)))
     else
       if i2 > 100#u32
       then ok (done (Sum.inr (Sum.inl (i2, j))))
       else let s1 ← s + i2
            let i4 ← i + 1#usize
            ok (cont (i4, s1))
-  else ok (done (Sum.inr (Sum.inr (a, k, total, j, i))))
+  else ok (done (Sum.inr (Sum.inr (k, total, j, i))))
 
 /-- [loops_multi_exit::overlapping_outputs]: loop 1:
     Source: 'tests/src/loops-multi-exit.rs', lines 1:0-190:5
@@ -691,9 +688,8 @@ def overlapping_outputs_loop0_loop0.body
 def overlapping_outputs_loop0_loop0
   (a : Slice Std.U32) (k : Std.U32) (total : Std.U32) (j : Std.U32)
   (i : Std.Usize) (s : Std.U32) :
-  Result (_root_.Sum ((Slice Std.U32) × Std.U32 × Std.U32 × Std.U32)
-    (_root_.Sum (Std.U32 × Std.U32) ((Slice Std.U32) × Std.U32 × Std.U32 ×
-    Std.U32 × Std.Usize)))
+  Result (_root_.Sum (Std.U32 × Std.U32 × Std.U32) (_root_.Sum (Std.U32 ×
+    Std.U32) (Std.U32 × Std.U32 × Std.U32 × Std.Usize)))
   := do
   loop
     (fun (i1, s1) => overlapping_outputs_loop0_loop0.body a k total j i1 s1)
@@ -705,18 +701,16 @@ def overlapping_outputs_loop0_loop0
 @[rust_loop_body]
 def overlapping_outputs_loop0.body
   (a : Slice Std.U32) (k : Std.U32) (total : Std.U32) (j : Std.U32) :
-  Result (ControlFlow ((Slice Std.U32) × Std.U32 × Std.U32 × Std.U32) (Std.U32
-    × Std.U32 × Std.U32))
+  Result (ControlFlow (Std.U32 × Std.U32 × Std.U32) (Std.U32 × Std.U32 ×
+    Std.U32))
   := do
-  let s : _root_.Sum (Std.U32 × Std.U32) ((Slice Std.U32) × Std.U32 × Std.U32 ×
-    Std.U32) ←
+  let s : _root_.Sum (Std.U32 × Std.U32) (Std.U32 × Std.U32 × Std.U32) ←
     if j < 3#u32
     then
       do
       let j1 ← j + 1#u32
-      let s1 : _root_.Sum ((Slice Std.U32) × Std.U32 × Std.U32 × Std.U32)
-        (_root_.Sum (Std.U32 × Std.U32) ((Slice Std.U32) × Std.U32 × Std.U32 ×
-        Std.U32 × Std.Usize)) ←
+      let s1 : _root_.Sum (Std.U32 × Std.U32 × Std.U32) (_root_.Sum (Std.U32 ×
+        Std.U32) (Std.U32 × Std.U32 × Std.U32 × Std.Usize)) ←
         overlapping_outputs_loop0_loop0 a k total j1 0#usize 0#u32
       match s1 with
       | Sum.inl t => ok (Sum.inr t)
@@ -724,16 +718,16 @@ def overlapping_outputs_loop0.body
         match s2 with
         | Sum.inl p => ok (Sum.inl p)
         | Sum.inr t =>
-          let (a1, k1, total1, j2, i) := t
+          let (k1, total1, j2, i) := t
           let i1 ← lift (UScalar.cast .U32 i)
           let total2 ← total1 + i1
-          ok (Sum.inr (a1, k1, total2, j2))
+          ok (Sum.inr (k1, total2, j2))
     else ok (Sum.inl (0#u32, j))
   match s with
   | Sum.inl p => let (t, j1) := p
                  ok (done (total, t, j1))
-  | Sum.inr t => let (s1, i, i1, i2) := t
-                 ok (cont (s1, i, i1, i2))
+  | Sum.inr t => let (i, i1, i2) := t
+                 ok (cont (i, i1, i2))
 
 /-- [loops_multi_exit::overlapping_outputs]: loop 0:
     Source: 'tests/src/loops-multi-exit.rs', lines 1:0-190:5
@@ -744,9 +738,8 @@ def overlapping_outputs_loop0
   Result (Std.U32 × Std.U32 × Std.U32)
   := do
   loop
-    (fun (a1, k1, total1, j1) => overlapping_outputs_loop0.body a1 k1 total1
-      j1)
-    (a, k, total, j)
+    (fun (k1, total1, j1) => overlapping_outputs_loop0.body a k1 total1 j1)
+    (k, total, j)
 
 /-- [loops_multi_exit::overlapping_outputs]:
     Source: 'tests/src/loops-multi-exit.rs', lines 169:0-192:1
@@ -876,14 +869,14 @@ def bump_rows
     Visibility: public -/
 @[rust_loop_body]
 def push_until_loop.body
-  (v : alloc.vec.Vec Std.U32) (a : Slice Std.U32) (base : Std.U32)
+  (a : Slice Std.U32) (v : alloc.vec.Vec Std.U32) (base : Std.U32)
   (i : Std.Usize) :
-  Result (ControlFlow ((alloc.vec.Vec Std.U32) × (Slice Std.U32) × Std.U32 ×
-    Std.Usize) (Std.U32 × (alloc.vec.Vec Std.U32)))
+  Result (ControlFlow ((alloc.vec.Vec Std.U32) × Std.U32 × Std.Usize) (Std.U32
+    × (alloc.vec.Vec Std.U32)))
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum Unit (_root_.Sum ((alloc.vec.Vec Std.U32) × (Slice
-    Std.U32) × Std.U32 × Std.Usize) Std.U32) ←
+  let s : _root_.Sum Unit (_root_.Sum ((alloc.vec.Vec Std.U32) × Std.U32 ×
+    Std.Usize) Std.U32) ←
     if i < i1
     then
       do
@@ -896,10 +889,10 @@ def push_until_loop.body
         else
           let v1 ← alloc.vec.Vec.push v i2
           let i3 ← i + 1#usize
-          ok (Sum.inr (Sum.inl (v1, a, base, i3)))
+          ok (Sum.inr (Sum.inl (v1, base, i3)))
     else ok (Sum.inl ())
-  let s1 : _root_.Sum Std.U32 (_root_.Sum ((alloc.vec.Vec Std.U32) × (Slice
-    Std.U32) × Std.U32 × Std.Usize) (Std.U32 × (alloc.vec.Vec Std.U32))) ←
+  let s1 : _root_.Sum Std.U32 (_root_.Sum ((alloc.vec.Vec Std.U32) × Std.U32 ×
+    Std.Usize) (Std.U32 × (alloc.vec.Vec Std.U32))) ←
     match s with
     | Sum.inl _ =>
       do
@@ -918,8 +911,8 @@ def push_until_loop.body
   | Sum.inl i2 => ok (done (i2, v))
   | Sum.inr s2 =>
     match s2 with
-    | Sum.inl t => let (v1, s3, i2, i3) := t
-                   ok (cont (v1, s3, i2, i3))
+    | Sum.inl t => let (v1, i2, i3) := t
+                   ok (cont (v1, i2, i3))
     | Sum.inr p => let (i2, v1) := p
                    ok (done (i2, v1))
 
@@ -928,13 +921,13 @@ def push_until_loop.body
     Visibility: public -/
 @[rust_loop]
 def push_until_loop
-  (v : alloc.vec.Vec Std.U32) (a : Slice Std.U32) (base : Std.U32)
+  (a : Slice Std.U32) (v : alloc.vec.Vec Std.U32) (base : Std.U32)
   (i : Std.Usize) :
   Result (Std.U32 × (alloc.vec.Vec Std.U32))
   := do
   loop
-    (fun (v1, a1, base1, i1) => push_until_loop.body v1 a1 base1 i1)
-    (v, a, base, i)
+    (fun (v1, base1, i1) => push_until_loop.body a v1 base1 i1)
+    (v, base, i)
 
 /-- [loops_multi_exit::push_until]:
     Source: 'tests/src/loops-multi-exit.rs', lines 223:0-238:1
@@ -944,7 +937,7 @@ def push_until
   (v : alloc.vec.Vec Std.U32) (a : Slice Std.U32) (base : Std.U32) :
   Result (Std.U32 × (alloc.vec.Vec Std.U32))
   := do
-  push_until_loop v a base 0#usize
+  push_until_loop a v base 0#usize
 
 /-- [loops_multi_exit::return_then_loop]: loop body 0:
     Source: 'tests/src/loops-multi-exit.rs', lines 243:10-255:1
@@ -952,12 +945,12 @@ def push_until
 @[rust_loop_body]
 def return_then_loop_loop0.body
   (a : Slice Std.U32) (x : Std.U32) (i : Std.Usize) :
-  Result (ControlFlow ((Slice Std.U32) × Std.U32 × Std.Usize) (_root_.Sum Unit
-    ((Slice Std.U32) × Std.U32 × Std.Usize)))
+  Result (ControlFlow (Std.U32 × Std.Usize) (_root_.Sum Unit (Std.U32 ×
+    Std.Usize)))
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum Unit (_root_.Sum ((Slice Std.U32) × Std.U32 × Std.Usize)
-    ((Slice Std.U32) × Std.U32 × Std.Usize)) ←
+  let s : _root_.Sum Unit (_root_.Sum (Std.U32 × Std.Usize) (Std.U32 ×
+    Std.Usize)) ←
     if i < i1
     then
       do
@@ -965,15 +958,15 @@ def return_then_loop_loop0.body
       if i2 = x
       then ok (Sum.inl ())
       else let i3 ← i + 1#usize
-           ok (Sum.inr (Sum.inl (a, x, i3)))
-    else ok (Sum.inr (Sum.inr (a, x, i)))
+           ok (Sum.inr (Sum.inl (x, i3)))
+    else ok (Sum.inr (Sum.inr (x, i)))
   match s with
   | Sum.inl _ => ok (done (Sum.inl ()))
   | Sum.inr s1 =>
     match s1 with
-    | Sum.inl t => let (s2, i2, i3) := t
-                   ok (cont (s2, i2, i3))
-    | Sum.inr t => ok (done (Sum.inr t))
+    | Sum.inl p => let (i2, i3) := p
+                   ok (cont (i2, i3))
+    | Sum.inr p => ok (done (Sum.inr p))
 
 /-- [loops_multi_exit::return_then_loop]: loop 0:
     Source: 'tests/src/loops-multi-exit.rs', lines 243:10-255:1
@@ -981,11 +974,11 @@ def return_then_loop_loop0.body
 @[rust_loop]
 def return_then_loop_loop0
   (a : Slice Std.U32) (x : Std.U32) (i : Std.Usize) :
-  Result (_root_.Sum Unit ((Slice Std.U32) × Std.U32 × Std.Usize))
+  Result (_root_.Sum Unit (Std.U32 × Std.Usize))
   := do
   loop
-    (fun (a1, x1, i1) => return_then_loop_loop0.body a1 x1 i1)
-    (a, x, i)
+    (fun (x1, i1) => return_then_loop_loop0.body a x1 i1)
+    (x, i)
 
 /-- [loops_multi_exit::return_then_loop]: loop body 1:
     Source: 'tests/src/loops-multi-exit.rs', lines 250:4-253:5
@@ -1017,12 +1010,12 @@ def return_then_loop_loop1
     Source: 'tests/src/loops-multi-exit.rs', lines 241:0-255:1
     Visibility: public -/
 def return_then_loop (a : Slice Std.U32) (x : Std.U32) : Result Std.U32 := do
-  let s : _root_.Sum Unit ((Slice Std.U32) × Std.U32 × Std.Usize) ←
+  let s : _root_.Sum Unit (Std.U32 × Std.Usize) ←
     return_then_loop_loop0 a x 0#usize
   match s with
   | Sum.inl _ => ok 100#u32
-  | Sum.inr t => let (a1, _, i) := t
-                 return_then_loop_loop1 a1 i 0#u32
+  | Sum.inr p => let (_, i) := p
+                 return_then_loop_loop1 a i 0#u32
 
 /-- [loops_multi_exit::two_searches]: loop body 1:
     Source: 'tests/src/loops-multi-exit.rs', lines 1:0-279:5
@@ -1031,12 +1024,12 @@ def return_then_loop (a : Slice Std.U32) (x : Std.U32) : Result Std.U32 := do
 def two_searches_loop0_loop0.body
   (a : Slice Std.U32) (x : Std.U32) (y : Std.U32) (i : Std.Usize)
   (j : Std.Usize) :
-  Result (ControlFlow ((Slice Std.U32) × Std.U32 × Std.U32 × Std.Usize ×
-    Std.Usize) (_root_.Sum (Std.Usize × Std.Usize) Unit))
+  Result (ControlFlow (Std.U32 × Std.U32 × Std.Usize × Std.Usize) (_root_.Sum
+    (Std.Usize × Std.Usize) Unit))
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum Unit (_root_.Sum ((Slice Std.U32) × Std.U32 × Std.U32 ×
-    Std.Usize × Std.Usize) Unit) ←
+  let s : _root_.Sum Unit (_root_.Sum (Std.U32 × Std.U32 × Std.Usize ×
+    Std.Usize) Unit) ←
     if j < i1
     then
       do
@@ -1047,14 +1040,14 @@ def two_searches_loop0_loop0.body
         if i2 > 60#u32
         then ok (Sum.inl ())
         else let j1 ← j + 1#usize
-             ok (Sum.inr (Sum.inl (a, x, y, i, j1)))
+             ok (Sum.inr (Sum.inl (x, y, i, j1)))
     else ok (Sum.inl ())
   match s with
   | Sum.inl _ => ok (done (Sum.inl (i, j)))
   | Sum.inr s1 =>
     match s1 with
-    | Sum.inl t => let (s2, i2, i3, i4, i5) := t
-                   ok (cont (s2, i2, i3, i4, i5))
+    | Sum.inl t => let (i2, i3, i4, i5) := t
+                   ok (cont (i2, i3, i4, i5))
     | Sum.inr _ => ok (done (Sum.inr ()))
 
 /-- [loops_multi_exit::two_searches]: loop 1:
@@ -1067,8 +1060,8 @@ def two_searches_loop0_loop0
   Result (_root_.Sum (Std.Usize × Std.Usize) Unit)
   := do
   loop
-    (fun (a1, x1, y1, i1, j1) => two_searches_loop0_loop0.body a1 x1 y1 i1 j1)
-    (a, x, y, i, j)
+    (fun (x1, y1, i1, j1) => two_searches_loop0_loop0.body a x1 y1 i1 j1)
+    (x, y, i, j)
 
 /-- [loops_multi_exit::two_searches]: loop body 0:
     Source: 'tests/src/loops-multi-exit.rs', lines 1:0-281:1
@@ -1076,12 +1069,11 @@ def two_searches_loop0_loop0
 @[rust_loop_body]
 def two_searches_loop0.body
   (a : Slice Std.U32) (x : Std.U32) (y : Std.U32) (i : Std.Usize) :
-  Result (ControlFlow ((Slice Std.U32) × Std.U32 × Std.U32 × Std.Usize)
-    Std.U32)
+  Result (ControlFlow (Std.U32 × Std.U32 × Std.Usize) Std.U32)
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum Unit (_root_.Sum ((Slice Std.U32) × Std.U32 × Std.U32 ×
-    Std.Usize) Std.U32) ←
+  let s : _root_.Sum Unit (_root_.Sum (Std.U32 × Std.U32 × Std.Usize) Std.U32)
+    ←
     if i < i1
     then
       do
@@ -1092,10 +1084,10 @@ def two_searches_loop0.body
         if i2 > 50#u32
         then ok (Sum.inl ())
         else let i3 ← i + 1#usize
-             ok (Sum.inr (Sum.inl (a, x, y, i3)))
+             ok (Sum.inr (Sum.inl (x, y, i3)))
     else ok (Sum.inl ())
-  let s1 : _root_.Sum Std.U32 (_root_.Sum ((Slice Std.U32) × Std.U32 × Std.U32
-    × Std.Usize) Std.U32) ←
+  let s1 : _root_.Sum Std.U32 (_root_.Sum (Std.U32 × Std.U32 × Std.Usize)
+    Std.U32) ←
     match s with
     | Sum.inl _ =>
       do
@@ -1112,8 +1104,8 @@ def two_searches_loop0.body
       match s2 with
       | Sum.inl _ => ok (Sum.inr s2)
       | Sum.inr i2 => ok (Sum.inl i2)
-  let s2 : _root_.Sum Std.U32 (_root_.Sum ((Slice Std.U32) × Std.U32 × Std.U32
-    × Std.Usize) Std.U32) ←
+  let s2 : _root_.Sum Std.U32 (_root_.Sum (Std.U32 × Std.U32 × Std.Usize)
+    Std.U32) ←
     match s1 with
     | Sum.inl i2 => ok (Sum.inr (Sum.inr i2))
     | Sum.inr s3 =>
@@ -1124,8 +1116,8 @@ def two_searches_loop0.body
   | Sum.inl i2 => ok (done i2)
   | Sum.inr s3 =>
     match s3 with
-    | Sum.inl t => let (s4, i2, i3, i4) := t
-                   ok (cont (s4, i2, i3, i4))
+    | Sum.inl t => let (i2, i3, i4) := t
+                   ok (cont (i2, i3, i4))
     | Sum.inr i2 => ok (done i2)
 
 /-- [loops_multi_exit::two_searches]: loop 0:
@@ -1137,8 +1129,8 @@ def two_searches_loop0
   Result Std.U32
   := do
   loop
-    (fun (a1, x1, y1, i1) => two_searches_loop0.body a1 x1 y1 i1)
-    (a, x, y, i)
+    (fun (x1, y1, i1) => two_searches_loop0.body a x1 y1 i1)
+    (x, y, i)
 
 /-- [loops_multi_exit::two_searches]:
     Source: 'tests/src/loops-multi-exit.rs', lines 259:0-281:1

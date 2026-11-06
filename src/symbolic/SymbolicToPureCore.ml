@@ -345,10 +345,10 @@ and exit_outputs = {
 (** An output value of a join or of a loop exit *)
 and exit_output =
   | OutValue of int  (** The symbolic value of the given index *)
-  | OutStruct of texpr * int FVarId.Map.t
-      (** A structure whose leaves are symbolic values: the structure where
-          every leaf is a variable, and the index of the symbolic value of each
-          variable *)
+  | OutStruct of fvar * texpr * int FVarId.Map.t
+      (** A structure whose leaves are symbolic values: the variable binding
+          the structure, the structure where every leaf is a variable, and the
+          index of the symbolic value of each variable *)
 [@@deriving show]
 
 (* TODO: move *)

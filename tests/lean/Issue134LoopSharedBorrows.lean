@@ -40,18 +40,17 @@ structure AVLTreeSet where
     Source: 'tests/src/issue-134-loop-shared-borrows.rs', lines 15:8-17:9
     Visibility: public -/
 @[rust_loop]
-def AVLNode.find_loop
-  (a : AVLNode) (current_tree : Option AVLNode) : Result Unit := do
+def AVLNode.find_loop (current_tree : Option AVLNode) : Result Unit := do
   match current_tree with
   | none => ok ()
-  | some current_node => AVLNode.find_loop a current_node.child
+  | some current_node => AVLNode.find_loop current_node.child
 partial_fixpoint
 
 /-- [issue_134_loop_shared_borrows::{issue_134_loop_shared_borrows::AVLNode}::find]:
     Source: 'tests/src/issue-134-loop-shared-borrows.rs', lines 12:4-20:5
     Visibility: public -/
 def AVLNode.find (self : AVLNode) : Result Bool := do
-  AVLNode.find_loop self self.child
+  AVLNode.find_loop self.child
   ok false
 
 end issue_134_loop_shared_borrows

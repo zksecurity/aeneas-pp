@@ -44,7 +44,7 @@ def first_nonzero_loop.body
     Visibility: public -/
 @[rust_loop]
 def first_nonzero_loop
-  (iter : core.ops.range.Range Std.Usize) (xs : Slice Std.U8) (idx : Std.Usize)
+  (xs : Slice Std.U8) (iter : core.ops.range.Range Std.Usize) (idx : Std.Usize)
   :
   Result Std.Usize
   := do
@@ -58,6 +58,6 @@ def first_nonzero_loop
 def first_nonzero (xs : Slice Std.U8) : Result Std.Usize := do
   let idx := Slice.len xs
   let i := Slice.len xs
-  first_nonzero_loop { start := 0#usize, «end» := i } xs idx
+  first_nonzero_loop xs { start := 0#usize, «end» := i } idx
 
 end issue_1206_loop_break

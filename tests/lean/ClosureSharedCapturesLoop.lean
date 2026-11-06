@@ -226,13 +226,13 @@ def
 def Checker.telescope01generateclosure_loop.body
   (back : Checker → Terms) (back1 : generate.closure → Bool) (self : Checker)
   (e : Std.U32) (next : generate.closure) (values : alloc.vec.Vec Std.U32)
-  (body : Std.U32) (i : Std.Usize) (v : alloc.vec.Vec Std.U32) :
+  (body : Std.U32) (i : Std.Usize) :
   Result (ControlFlow ((Checker → Terms) × (generate.closure → Bool) × Checker
     × Std.U32 × generate.closure × (alloc.vec.Vec Std.U32) × Std.U32 ×
-    Std.Usize × (alloc.vec.Vec Std.U32)) ((core.result.Result ((alloc.vec.Vec
-    Std.U32) × Std.U32) Unit) × Checker × Bool × (Terms → Terms)))
+    Std.Usize) ((core.result.Result ((alloc.vec.Vec Std.U32) × Std.U32) Unit) ×
+    Checker × Bool × (Terms → Terms)))
   := do
-  let (i1, v1, _) := next
+  let (i1, v, _) := next
   let i2 ← lift (UScalar.cast .Usize body)
   let n ←
     alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Node)
@@ -240,9 +240,9 @@ def Checker.telescope01generateclosure_loop.body
   let s : _root_.Sum (Checker × generate.closure × (generate.closure → Bool) ×
     (Checker → Terms)) (_root_.Sum ((Checker → Terms) × (generate.closure →
     Bool) × Checker × Std.U32 × generate.closure × (alloc.vec.Vec Std.U32) ×
-    Std.U32 × Std.Usize × (alloc.vec.Vec Std.U32)) ((core.result.Result
-    ((alloc.vec.Vec Std.U32) × Std.U32) Unit) × Checker × generate.closure ×
-    (generate.closure → Bool) × (Checker → Terms))) ←
+    Std.U32 × Std.Usize) ((core.result.Result ((alloc.vec.Vec Std.U32) ×
+    Std.U32) Unit) × Checker × generate.closure × (generate.closure → Bool) ×
+    (Checker → Terms))) ←
     match n with
     | Node.Pi a b =>
       do
@@ -260,12 +260,12 @@ def Checker.telescope01generateclosure_loop.body
           ok (Sum.inl (self1, next1,
             fun c => let (_, _, b1) := call_mut_back1 c
                      b1, fun c => (call_mut_back c).t))
-        | some v2 =>
-          let values1 ← alloc.vec.Vec.push values v2
+        | some v1 =>
+          let values1 ← alloc.vec.Vec.push values v1
           ok (Sum.inr (Sum.inl
             (fun c => back { self with t := (call_mut_back c).t },
             fun c => let (_, _, b1) := call_mut_back1 c
-                     back1 (i1, v1, b1), self1, e, next1, values1, b, i, v)))
+                     back1 (i1, v, b1), self1, e, next1, values1, b, i)))
       | core.result.Result.Err e1 =>
         ok (Sum.inr (Sum.inr (core.result.Result.Err e1, self1, next1,
           fun c => let (_, _, b1) := call_mut_back1 c
@@ -278,19 +278,18 @@ def Checker.telescope01generateclosure_loop.body
     Unit) × Checker × generate.closure × (generate.closure → Bool) × (Checker →
     Terms)) (_root_.Sum ((Checker → Terms) × (generate.closure → Bool) ×
     Checker × Std.U32 × generate.closure × (alloc.vec.Vec Std.U32) × Std.U32 ×
-    Std.Usize × (alloc.vec.Vec Std.U32)) ((core.result.Result ((alloc.vec.Vec
-    Std.U32) × Std.U32) Unit) × Checker × Bool × (Terms → Terms) × (Bool →
-    Bool))) ←
+    Std.Usize) ((core.result.Result ((alloc.vec.Vec Std.U32) × Std.U32) Unit) ×
+    Checker × Bool × (Terms → Terms) × (Bool → Bool))) ←
     match s with
     | Sum.inl t =>
       let (self1, next1, back2, back3) := t
-      let (i3, v2, b) := next1
+      let (i3, v1, b) := next1
       ok (Sum.inr (Sum.inr (core.result.Result.Ok (values, body), self1, b,
         fun t1 =>
           let t2 := back3 { self1 with t := t1 }
           back { self with t := t2 },
-        fun b1 => let b2 := back2 (i3, v2, b1)
-                  back1 (i1, v1, b2))))
+        fun b1 => let b2 := back2 (i3, v1, b1)
+                  back1 (i1, v, b2))))
     | Sum.inr s2 =>
       match s2 with
       | Sum.inl t => ok (Sum.inr (Sum.inl t))
@@ -299,15 +298,15 @@ def Checker.telescope01generateclosure_loop.body
   | Sum.inl t =>
     let (r, self1, next1, back2, back3) := t
     ok (done (r, self1, let b := back2 next1
-                        back1 (i1, v1, b),
+                        back1 (i1, v, b),
       fun t1 =>
         let t2 := back3 { self1 with t := t1 }
         back { self with t := t2 }))
   | Sum.inr s2 =>
     match s2 with
     | Sum.inl t =>
-      let (f, f1, c, i3, c1, v2, i4, i5, v3) := t
-      ok (cont (f, f1, c, i3, c1, v2, i4, i5, v3))
+      let (f, f1, c, i3, c1, v1, i4, i5) := t
+      ok (cont (f, f1, c, i3, c1, v1, i4, i5))
     | Sum.inr t => let (r, c, b, f, f1) := t
                    ok (done (r, c, f1 b, f))
 
@@ -318,15 +317,15 @@ def Checker.telescope01generateclosure_loop.body
 def Checker.telescope01generateclosure_loop
   (back : Checker → Terms) (back1 : generate.closure → Bool) (self : Checker)
   (e : Std.U32) (next : generate.closure) (values : alloc.vec.Vec Std.U32)
-  (body : Std.U32) (i : Std.Usize) (v : alloc.vec.Vec Std.U32) :
+  (body : Std.U32) (i : Std.Usize) :
   Result ((core.result.Result ((alloc.vec.Vec Std.U32) × Std.U32) Unit) ×
     Checker × Bool × (Terms → Terms))
   := do
   loop
-    (fun (back2, back3, self1, e1, next1, values1, body1, i1, v1) =>
+    (fun (back2, back3, self1, e1, next1, values1, body1, i1) =>
       Checker.telescope01generateclosure_loop.body back2 back3 self1 e1 next1
-      values1 body1 i1 v1)
-    (back, back1, self, e, next, values, body, i, v)
+      values1 body1 i1)
+    (back, back1, self, e, next, values, body, i)
 
 /-- [closure_shared_captures_loop::{closure_shared_captures_loop::Checker<'a>}::telescope::<_, _, closure_shared_captures_loop::generate::{closure}<_, _, _, _>>]:
     Source: 'tests/src/closure-shared-captures-loop.rs', lines 31:4-47:5
@@ -341,7 +340,7 @@ def Checker.telescope01generateclosure
     Checker.telescope01generateclosure_loop (fun (c1 : Checker) => c1.t)
       (fun (c1 : generate.closure) => let (_, _, b) := c1
                                       b) self e next (alloc.vec.Vec.new
-      Std.U32) e i v
+      Std.U32) e i
   let back2 := fun (self1 : Checker) => let t := back1 self1.t
                                         { self with t }
   ok (r, c, back2, (i, v, back))

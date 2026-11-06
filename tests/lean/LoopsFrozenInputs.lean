@@ -36,43 +36,41 @@ structure Table where
     Visibility: public -/
 @[rust_loop_body]
 def Table.get_loop.body
-  (v : alloc.vec.Vec (Std.U64 × Std.U32)) (i : Std.Usize) (key : Std.U64)
-  (mask : Std.Usize) (i1 : Std.Usize) :
-  Result (ControlFlow ((alloc.vec.Vec (Std.U64 × Std.U32)) × Std.Usize ×
-    Std.U64 × Std.Usize × Std.Usize) (Option Std.U32))
+  (t : Table) (key : Std.U64) (mask : Std.Usize) (i : Std.Usize) :
+  Result (ControlFlow (Table × Std.U64 × Std.Usize × Std.Usize) (Option
+    Std.U32))
   := do
-  let (k, v1) ←
+  let (k, v) ←
     alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Std.U64 ×
-      Std.U32)) v i1
-  let s : _root_.Sum (Option Std.U32) ((alloc.vec.Vec (Std.U64 × Std.U32)) ×
-    Std.Usize × Std.U64 × Std.Usize × Std.Usize) ←
+      Std.U32)) t.slots i
+  let s : _root_.Sum (Option Std.U32) (Table × Std.U64 × Std.Usize × Std.Usize)
+    ←
     if k = key
-    then ok (Sum.inl (some v1))
+    then ok (Sum.inl (some v))
     else
       if k = EMPTY
       then ok (Sum.inl none)
       else
         do
-        let i2 ← i1 + 1#usize
-        let i3 ← lift (i2 &&& mask)
-        ok (Sum.inr (v, i, key, mask, i3))
+        let i1 ← i + 1#usize
+        let i2 ← lift (i1 &&& mask)
+        ok (Sum.inr (t, key, mask, i2))
   match s with
   | Sum.inl o => ok (done o)
-  | Sum.inr t => let (v2, i2, i3, i4, i5) := t
-                 ok (cont (v2, i2, i3, i4, i5))
+  | Sum.inr t1 => let (t2, i1, i2, i3) := t1
+                  ok (cont (t2, i1, i2, i3))
 
 /-- [loops_frozen_inputs::{loops_frozen_inputs::Table}::get]: loop 0:
     Source: 'tests/src/loops-frozen-inputs.rs', lines 1:0-26:13
     Visibility: public -/
 @[rust_loop]
 def Table.get_loop
-  (v : alloc.vec.Vec (Std.U64 × Std.U32)) (i : Std.Usize) (key : Std.U64)
-  (mask : Std.Usize) (i1 : Std.Usize) :
+  (t : Table) (key : Std.U64) (mask : Std.Usize) (i : Std.Usize) :
   Result (Option Std.U32)
   := do
   loop
-    (fun (v1, i2, key1, mask1, i3) => Table.get_loop.body v1 i2 key1 mask1 i3)
-    (v, i, key, mask, i1)
+    (fun (t1, key1, mask1, i1) => Table.get_loop.body t1 key1 mask1 i1)
+    (t, key, mask, i)
 
 /-- [loops_frozen_inputs::{loops_frozen_inputs::Table}::get]:
     Source: 'tests/src/loops-frozen-inputs.rs', lines 16:4-32:5
@@ -85,7 +83,7 @@ def Table.get (self : Table) (key : Std.U64) : Result (Option Std.U32) := do
     let mask ← i - 1#usize
     let i1 ← lift (UScalar.cast .Usize key)
     let i2 ← lift (i1 &&& mask)
-    Table.get_loop self.slots self.len key mask i2
+    Table.get_loop self key mask i2
 
 /-- [loops_frozen_inputs::test_get]:
     Source: 'tests/src/loops-frozen-inputs.rs', lines 36:0-46:1

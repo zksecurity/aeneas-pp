@@ -52,8 +52,8 @@ impl_def core.option.Option.Insts.CoreCmpPartialEqOption {T : Type _}
 @[rust_loop_body]
 def first_quote_loop.body
   (bytes : Slice Std.U8) (cursor : Std.Usize) :
-  Result (ControlFlow ((Slice Std.U8) × Std.Usize) ((core.result.Result Std.U32
-    Unit) × Std.Usize))
+  Result (ControlFlow Std.Usize ((core.result.Result Std.U32 Unit) ×
+    Std.Usize))
   := do
   let o ←
     core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice Std.U8) bytes
@@ -62,8 +62,8 @@ def first_quote_loop.body
     core.cmp.PartialEq.ne.trait_default
       (core.option.Option.Insts.CoreCmpPartialEqOption
       (core.cmp.PartialEqShared core.cmp.PartialEqU8)) o (some 34#u8)
-  let s : _root_.Sum Std.Usize (_root_.Sum ((Slice Std.U8) × Std.Usize)
-    ((core.result.Result Std.U32 Unit) × Std.Usize)) ←
+  let s : _root_.Sum Std.Usize (_root_.Sum Std.Usize ((core.result.Result
+    Std.U32 Unit) × Std.Usize)) ←
     if b
     then ok (Sum.inr (Sum.inr (core.result.Result.Err (), cursor)))
     else
@@ -71,13 +71,12 @@ def first_quote_loop.body
       let cursor1 ← cursor + 1#usize
       if cursor1 > 3#usize
       then ok (Sum.inl cursor1)
-      else ok (Sum.inr (Sum.inl (bytes, cursor1)))
+      else ok (Sum.inr (Sum.inl cursor1))
   match s with
   | Sum.inl cursor1 => ok (done (core.result.Result.Ok 0#u32, cursor1))
   | Sum.inr s1 =>
     match s1 with
-    | Sum.inl p => let (s2, i) := p
-                   ok (cont (s2, i))
+    | Sum.inl i => ok (cont i)
     | Sum.inr p => let (r, i) := p
                    ok (done (r, i))
 
@@ -90,8 +89,8 @@ def first_quote_loop
   Result ((core.result.Result Std.U32 Unit) × Std.Usize)
   := do
   loop
-    (fun (bytes1, cursor1) => first_quote_loop.body bytes1 cursor1)
-    (bytes, cursor)
+    (fun cursor1 => first_quote_loop.body bytes cursor1)
+    cursor
 
 /-- [loop_promoted_shared_refs::first_quote]:
     Source: 'tests/src/loop-promoted-shared-refs.rs', lines 8:0-19:1
@@ -109,7 +108,7 @@ def first_quote
 @[rust_loop_body]
 def count_until_loop.body
   (bytes : Slice Std.U8) (c : Std.U8) (i : Std.Usize) :
-  Result (ControlFlow ((Slice Std.U8) × Std.U8 × Std.Usize) Std.Usize)
+  Result (ControlFlow (Std.U8 × Std.Usize) Std.Usize)
   := do
   let o ←
     core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice Std.U8) bytes i
@@ -117,20 +116,20 @@ def count_until_loop.body
     core.cmp.PartialEq.ne.trait_default
       (core.option.Option.Insts.CoreCmpPartialEqOption
       (core.cmp.PartialEqShared core.cmp.PartialEqU8)) o (some c)
-  let s : _root_.Sum Unit ((Slice Std.U8) × Std.U8 × Std.Usize) ←
+  let s : _root_.Sum Unit (Std.U8 × Std.Usize) ←
     if b
     then
       let i1 := Slice.len bytes
       if i < i1
       then do
            let i2 ← i + 1#usize
-           ok (Sum.inr (bytes, c, i2))
+           ok (Sum.inr (c, i2))
       else ok (Sum.inl ())
     else ok (Sum.inl ())
   match s with
   | Sum.inl _ => ok (done i)
-  | Sum.inr t => let (s1, i1, i2) := t
-                 ok (cont (s1, i1, i2))
+  | Sum.inr p => let (i1, i2) := p
+                 ok (cont (i1, i2))
 
 /-- [loop_promoted_shared_refs::count_until]: loop 0:
     Source: 'tests/src/loop-promoted-shared-refs.rs', lines 1:0-23:34
@@ -139,8 +138,8 @@ def count_until_loop.body
 def count_until_loop
   (bytes : Slice Std.U8) (c : Std.U8) (i : Std.Usize) : Result Std.Usize := do
   loop
-    (fun (bytes1, c1, i1) => count_until_loop.body bytes1 c1 i1)
-    (bytes, c, i)
+    (fun (c1, i1) => count_until_loop.body bytes c1 i1)
+    (c, i)
 
 /-- [loop_promoted_shared_refs::count_until]:
     Source: 'tests/src/loop-promoted-shared-refs.rs', lines 21:0-27:1

@@ -294,7 +294,7 @@ def zero (x : alloc.vec.Vec Std.U32) : Result (alloc.vec.Vec Std.U32) := do
     Visibility: public -/
 @[rust_loop]
 def add_no_overflow_loop
-  (x : alloc.vec.Vec Std.U32) (y : alloc.vec.Vec Std.U32) (i : Std.Usize) :
+  (y : alloc.vec.Vec Std.U32) (x : alloc.vec.Vec Std.U32) (i : Std.Usize) :
   Result (alloc.vec.Vec Std.U32)
   := do
   let i1 := alloc.vec.Vec.len x
@@ -308,7 +308,7 @@ def add_no_overflow_loop
     let i4 ← i3 + i2
     let i5 ← i + 1#usize
     let x1 := index_mut_back i4
-    add_no_overflow_loop x1 y i5
+    add_no_overflow_loop y x1 i5
   else ok x
 partial_fixpoint
 
@@ -320,14 +320,14 @@ def add_no_overflow
   (x : alloc.vec.Vec Std.U32) (y : alloc.vec.Vec Std.U32) :
   Result (alloc.vec.Vec Std.U32)
   := do
-  add_no_overflow_loop x y 0#usize
+  add_no_overflow_loop y x 0#usize
 
 /-- [tutorial::add_with_carry]: loop 0:
     Source: 'src/lib.rs', lines 190:4-197:5
     Visibility: public -/
 @[rust_loop]
 def add_with_carry_loop
-  (x : alloc.vec.Vec Std.U32) (y : alloc.vec.Vec Std.U32) (c0 : Std.U8)
+  (y : alloc.vec.Vec Std.U32) (x : alloc.vec.Vec Std.U32) (c0 : Std.U8)
   (i : Std.Usize) :
   Result (Std.U8 × (alloc.vec.Vec Std.U32))
   := do
@@ -349,7 +349,7 @@ def add_with_carry_loop
         i
     let i7 ← i + 1#usize
     let x1 := index_mut_back sum1
-    add_with_carry_loop x1 y c01 i7
+    add_with_carry_loop y x1 c01 i7
   else ok (c0, x)
 partial_fixpoint
 
@@ -361,7 +361,7 @@ def add_with_carry
   (x : alloc.vec.Vec Std.U32) (y : alloc.vec.Vec Std.U32) :
   Result (Std.U8 × (alloc.vec.Vec Std.U32))
   := do
-  add_with_carry_loop x y 0#u8 0#usize
+  add_with_carry_loop y x 0#u8 0#usize
 
 /-- [tutorial::max]:
     Source: 'src/lib.rs', lines 201:0-203:1 -/
@@ -384,7 +384,7 @@ def get_or_zero
     Visibility: public -/
 @[rust_loop]
 def add_loop
-  (x : alloc.vec.Vec Std.U32) (y : alloc.vec.Vec Std.U32) (max1 : Std.Usize)
+  (y : alloc.vec.Vec Std.U32) (x : alloc.vec.Vec Std.U32) (max1 : Std.Usize)
   (c0 : Std.U8) (i : Std.Usize) :
   Result ((alloc.vec.Vec Std.U32) × Std.U8)
   := do
@@ -404,7 +404,7 @@ def add_loop
         i
     let i5 ← i + 1#usize
     let x1 := index_mut_back sum1
-    add_loop x1 y max1 c01 i5
+    add_loop y x1 max1 c01 i5
   else ok (x, c0)
 partial_fixpoint
 
@@ -419,7 +419,7 @@ def add
   let i1 := alloc.vec.Vec.len y
   let max1 ← max i i1
   let x1 ← alloc.vec.Vec.resize core.clone.CloneU32 x max1 0#u32
-  let (x2, c0) ← add_loop x1 y max1 0#u8 0#usize
+  let (x2, c0) ← add_loop y x1 max1 0#u8 0#usize
   if c0 != 0#u8
   then let i2 ← lift (UScalar.cast .U32 c0)
        alloc.vec.Vec.push x2 i2

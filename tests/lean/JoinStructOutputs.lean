@@ -121,16 +121,16 @@ def Eng.odd_node
 @[rust_loop_body]
 def Eng.walk_loop.body
   (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) (e : Eng)
-  (i : Std.U32) (s : Slice Std.U32) :
+  (i : Std.U32) :
   Result (ControlFlow ((alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) × Eng ×
-    Std.U32 × (Slice Std.U32)) ((core.result.Result Std.U32 Std.U32) × Eng ×
-    (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)))
+    Std.U32) ((core.result.Result Std.U32 Std.U32) × Eng × (alloc.vec.Vec
+    Std.U32 → alloc.vec.Vec Std.U32)))
   := do
   let o ← Eng.node e i
-  let s1 : _root_.Sum (Std.U32 × Eng × (alloc.vec.Vec Std.U32 → alloc.vec.Vec
+  let s : _root_.Sum (Std.U32 × Eng × (alloc.vec.Vec Std.U32 → alloc.vec.Vec
     Std.U32)) (_root_.Sum ((alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) ×
-    Eng × Std.U32 × (Slice Std.U32)) ((core.result.Result Std.U32 Std.U32) ×
-    Eng × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32))) ←
+    Eng × Std.U32) ((core.result.Result Std.U32 Std.U32) × Eng × (alloc.vec.Vec
+    Std.U32 → alloc.vec.Vec Std.U32))) ←
     match o with
     | none => ok (Sum.inr (Sum.inr (core.result.Result.Err i, e, back)))
     | some n =>
@@ -142,18 +142,17 @@ def Eng.walk_loop.body
           fun v => (record_back { self with log := v }).log))
       else
         ok (Sum.inr (Sum.inl
-          (fun v => back (record_back { self with log := v }).log, self, n,
-          s)))
-  match s1 with
+          (fun v => back (record_back { self with log := v }).log, self, n)))
+  match s with
   | Sum.inl t =>
     let (i1, e1, back1) := t
     ok (done (core.result.Result.Ok i1, e1,
       fun v => let v1 := back1 v
                back v1))
-  | Sum.inr s2 =>
-    match s2 with
-    | Sum.inl t => let (f, e1, i1, s3) := t
-                   ok (cont (f, e1, i1, s3))
+  | Sum.inr s1 =>
+    match s1 with
+    | Sum.inl t => let (f, e1, i1) := t
+                   ok (cont (f, e1, i1))
     | Sum.inr t => let (r, e1, f) := t
                    ok (done (r, e1, f))
 
@@ -163,13 +162,13 @@ def Eng.walk_loop.body
 @[rust_loop]
 def Eng.walk_loop
   (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) (e : Eng)
-  (i : Std.U32) (s : Slice Std.U32) :
+  (i : Std.U32) :
   Result ((core.result.Result Std.U32 Std.U32) × Eng × (alloc.vec.Vec Std.U32 →
     alloc.vec.Vec Std.U32))
   := do
   loop
-    (fun (back1, e1, i1, s1) => Eng.walk_loop.body back1 e1 i1 s1)
-    (back, e, i, s)
+    (fun (back1, e1, i1) => Eng.walk_loop.body back1 e1 i1)
+    (back, e, i)
 
 /-- [join_struct_outputs::{join_struct_outputs::Eng<'a>}::walk]:
     Source: 'tests/src/join-struct-outputs.rs', lines 67:4-78:5
@@ -178,7 +177,7 @@ def Eng.walk
   (self : Eng) (i : Std.U32) :
   Result ((core.result.Result Std.U32 Std.U32) × Eng × (Eng → Eng))
   := do
-  let (r, e, back) ← Eng.walk_loop (fun v => v) self i self.nodes
+  let (r, e, back) ← Eng.walk_loop (fun v => v) self i
   let back'a :=
     fun (self1 : Eng) => let v := back self1.log
                          { self with log := v }

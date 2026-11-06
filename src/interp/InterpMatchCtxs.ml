@@ -2530,18 +2530,22 @@ let match_ctxs (span : Meta.span) ~(check_equiv : bool)
   in
 
   (* The projectors of an abstraction are ordered by the ids of their symbolic
-     values, which the contexts may have allocated in different orders: we pair
-     the projectors over symbolic values the matching already related (the
-     variables are matched before the abstractions), and the other values in
-     order. The projectors in level wrappers (see
-     {!ValuesUtils.tavalue_split_level_wrappers}) are paired by the projector
-     they wrap. *)
-  let align_projectors (avalues0 : tavalue list) (avalues1 : tavalue list) :
+     values, which the contexts may have allocated in different orders, and the
+     shared borrows of an abstraction are ordered by the abstraction which
+     introduced them (e.g., by the fields of the borrowed structure): we pair
+     the projectors over symbolic values and the shared borrows of loans the
+     matching already related (the variables are matched before the
+     abstractions), and the other values in order. The projectors in level
+     wrappers (see {!ValuesUtils.tavalue_split_level_wrappers}) are paired by
+     the projector they wrap. *)
+  let align_avalues (avalues0 : tavalue list) (avalues1 : tavalue list) :
       tavalue list option =
-    let proj_key (v : tavalue) =
+    let key (v : tavalue) =
       match (tavalue_level_component v).value with
-      | ASymbolic (_, AProjLoans { proj; _ }) -> Some (true, proj.sv_id)
-      | ASymbolic (_, AProjBorrows { proj; _ }) -> Some (false, proj.sv_id)
+      | ASymbolic (_, AProjLoans { proj; _ }) -> Some (`ProjLoans proj.sv_id)
+      | ASymbolic (_, AProjBorrows { proj; _ }) ->
+          Some (`ProjBorrows proj.sv_id)
+      | ABorrow (ASharedBorrow (_, bid, _)) -> Some (`SharedBorrow bid)
       | _ -> None
     in
     let mapped_sid (sid : symbolic_value_id) =
@@ -2552,9 +2556,18 @@ let match_ctxs (span : Meta.span) ~(check_equiv : bool)
           | Some { value = VSymbolic sv1; _ } -> Some sv1.sv_id
           | _ -> None)
     in
+    let mapped_bid (bid : borrow_id) =
+      BorrowId.InjSubst.find_opt bid
+        (if check_equiv then !blid_map else !borrow_id_map)
+    in
     let mapped_key (v : tavalue) =
-      Option.bind (proj_key v) (fun (is_loan, sid) ->
-          Option.map (fun sid1 -> (is_loan, sid1)) (mapped_sid sid))
+      Option.bind (key v) (function
+        | `ProjLoans sid ->
+            Option.map (fun sid1 -> `ProjLoans sid1) (mapped_sid sid)
+        | `ProjBorrows sid ->
+            Option.map (fun sid1 -> `ProjBorrows sid1) (mapped_sid sid)
+        | `SharedBorrow bid ->
+            Option.map (fun bid1 -> `SharedBorrow bid1) (mapped_bid bid))
     in
     let targets = List.filter_map mapped_key avalues0 in
     let rec pick p = function
@@ -2569,11 +2582,11 @@ let match_ctxs (span : Meta.span) ~(check_equiv : bool)
       | v0 :: avalues0 ->
           let p =
             match mapped_key v0 with
-            | Some key -> fun v1 -> proj_key v1 = Some key
+            | Some k -> fun v1 -> key v1 = Some k
             | None -> (
                 fun v1 ->
-                  match proj_key v1 with
-                  | Some key -> not (List.mem key targets)
+                  match key v1 with
+                  | Some k -> not (List.mem k targets)
                   | None -> true)
           in
           Option.bind (pick p avalues1) (fun (v1, avalues1) ->
@@ -2682,7 +2695,7 @@ let match_ctxs (span : Meta.span) ~(check_equiv : bool)
         raise_distinct "Region abstractions with not the same number of values"
       else
         let avalues1 =
-          match align_projectors avalues0 avalues1 with
+          match align_avalues avalues0 avalues1 with
           | Some avalues1 -> avalues1
           | None -> raise_distinct "match_abstractions: projectors"
         in

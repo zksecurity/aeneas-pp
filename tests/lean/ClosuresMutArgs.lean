@@ -270,13 +270,13 @@ def Eng.push_all.closure := Slice Std.U32
 @[rust_loop_body]
 def
   Eng.push_all.closure.Insts.CoreOpsFunctionFnOncePairMut3EngU32ResultUsizeU32.call_once_loop.body
-  (s : Slice Std.U32) (v : Std.U32) (e : Eng) (i : Std.Usize) :
+  (c : Eng.push_all.closure) (v : Std.U32) (e : Eng) (i : Std.Usize) :
   Result (ControlFlow (Eng × Std.Usize) Eng)
   := do
-  let i1 := Slice.len s
+  let i1 := Slice.len c
   if i < i1
   then
-    let i2 ← Slice.index_usize s i
+    let i2 ← Slice.index_usize c i
     let i3 ← i2 + v
     let v1 ← alloc.vec.Vec.push e.t i3
     let i4 ← i + 1#usize
@@ -288,13 +288,13 @@ def
 @[rust_loop]
 def
   Eng.push_all.closure.Insts.CoreOpsFunctionFnOncePairMut3EngU32ResultUsizeU32.call_once_loop
-  (s : Slice Std.U32) (e : Eng) (v : Std.U32) (i : Std.Usize) :
+  (c : Eng.push_all.closure) (e : Eng) (v : Std.U32) (i : Std.Usize) :
   Result Eng
   := do
   loop
     (fun (e1, i1) =>
       Eng.push_all.closure.Insts.CoreOpsFunctionFnOncePairMut3EngU32ResultUsizeU32.call_once_loop.body
-      s v e1 i1)
+      c v e1 i1)
     (e, i)
 
 /-- [closures_mut_args::{closures_mut_args::Eng<'a>}::push_all::{impl core::ops::function::FnOnce<(&'_4 mut closures_mut_args::Eng<'_2>, u32), core::result::Result<usize, u32>> for closures_mut_args::{closures_mut_args::Eng<'a>}::push_all::{closure}<'a, '_1, '_2, '_3>}::call_once]:

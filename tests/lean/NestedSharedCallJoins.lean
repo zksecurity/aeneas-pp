@@ -117,30 +117,32 @@ def Engine.pick
     Visibility: public -/
 @[rust_loop_body]
 def Engine.sum_loop.body
-  (e : Engine) (n : Std.Usize) (s : Std.U32) (i : Std.Usize) :
-  Result (ControlFlow (Std.U32 × Std.Usize) (Engine × Std.U32))
+  (self : Engine) (v : alloc.vec.Vec Std.U32) (n : Std.Usize) (s : Std.U32)
+  (i : Std.Usize) :
+  Result (ControlFlow (Std.U32 × Std.Usize) Std.U32)
   := do
   if i < n
   then
-    let o ← Engine.node e i
+    let o ← Engine.node { self with log := v } i
     match o with
     | none => let i1 ← i + 1#usize
               ok (cont (s, i1))
     | some x => let s1 ← s + x
                 let i1 ← i + 1#usize
                 ok (cont (s1, i1))
-  else ok (done (e, s))
+  else ok (done s)
 
 /-- [nested_shared_call_joins::{nested_shared_call_joins::Engine<'a>}::sum]: loop 0:
     Source: 'tests/src/nested-shared-call-joins.rs', lines 62:8-67:9
     Visibility: public -/
 @[rust_loop]
 def Engine.sum_loop
-  (e : Engine) (n : Std.Usize) (s : Std.U32) (i : Std.Usize) :
-  Result (Engine × Std.U32)
+  (self : Engine) (v : alloc.vec.Vec Std.U32) (n : Std.Usize) (s : Std.U32)
+  (i : Std.Usize) :
+  Result Std.U32
   := do
   loop
-    (fun (s1, i1) => Engine.sum_loop.body e n s1 i1)
+    (fun (s1, i1) => Engine.sum_loop.body self v n s1 i1)
     (s, i)
 
 /-- [nested_shared_call_joins::{nested_shared_call_joins::Engine<'a>}::sum]:
@@ -150,10 +152,10 @@ def Engine.sum
   (self : Engine) (n : Std.Usize) :
   Result (Std.U32 × Engine × (Engine → Engine))
   := do
-  let (e, s) ← Engine.sum_loop self n 0#u32 0#usize
-  let v ← alloc.vec.Vec.push e.log s
+  let s ← Engine.sum_loop self self.log n 0#u32 0#usize
+  let v ← alloc.vec.Vec.push self.log s
   let back'a := fun (self1 : Engine) => { self with log := self1.log }
-  ok (s, { e with log := v }, back'a)
+  ok (s, { self with log := v }, back'a)
 
 /-- [nested_shared_call_joins::test_known]:
     Source: 'tests/src/nested-shared-call-joins.rs', lines 74:0-79:1

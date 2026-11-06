@@ -173,17 +173,17 @@ def Engine.extend
 @[rust_loop_body]
 def Engine.eval_let_loop.body
   (self : Engine) (back : Terms → Store → (Terms × Store)) (e : Engine)
-  (env : Std.U32) (value : Std.U32) (body : Std.U32) (s : Slice Node) :
+  (env : Std.U32) (value : Std.U32) (body : Std.U32) :
   Result (ControlFlow ((Terms → Store → (Terms × Store)) × Engine × Std.U32 ×
-    Std.U32 × Std.U32 × (Slice Node)) ((core.result.Result Std.U32 Unit) ×
-    Engine × (Engine → Engine)))
+    Std.U32 × Std.U32) ((core.result.Result Std.U32 Unit) × Engine × (Engine →
+    Engine)))
   := do
   let (r, self1, eval_back) ← Engine.eval e env value
-  let s1 : _root_.Sum ((core.result.Result Std.U32 Unit) × Engine × (Slice
-    Node) × Std.U32 × (Engine → (Terms × Store)) × (Terms → Store → (Terms ×
-    Store))) (_root_.Sum ((Terms → Store → (Terms × Store)) × Engine × Std.U32
-    × Std.U32 × Std.U32 × (Slice Node)) ((core.result.Result Std.U32 Unit) ×
-    Engine × (Engine → (Terms × Store)))) ←
+  let s : _root_.Sum ((core.result.Result Std.U32 Unit) × Engine × (Slice Node)
+    × Std.U32 × (Engine → (Terms × Store)) × (Terms → Store → (Terms × Store)))
+    (_root_.Sum ((Terms → Store → (Terms × Store)) × Engine × Std.U32 × Std.U32
+    × Std.U32) ((core.result.Result Std.U32 Unit) × Engine × (Engine → (Terms ×
+    Store)))) ←
     match r with
     | core.result.Result.Ok val =>
       do
@@ -193,43 +193,42 @@ def Engine.eval_let_loop.body
       match n with
       | Node.Let v1 b =>
         ok (Sum.inr (Sum.inl
-          (fun t s2 =>
-             let e1 := extend_back { self2 with t, s := s2 }
+          (fun t s1 =>
+             let e1 := extend_back { self2 with t, s := s1 }
              let e2 := eval_back { self1 with t := e1.t, s := e1.s }
-             back e2.t e2.s, self2, env1, v1, b, s)))
+             back e2.t e2.s, self2, env1, v1, b)))
       | _ =>
         let (r1, self3, eval_back1) ← Engine.eval self2 env1 body
         ok (Sum.inl (r1, self3, self1.nodes, self1.d,
           fun e1 => let e2 := eval_back1 e1
                     (e2.t, e2.s),
-          fun t s2 =>
-            let e1 := extend_back { self2 with t, s := s2 }
+          fun t s1 =>
+            let e1 := extend_back { self2 with t, s := s1 }
             (e1.t, e1.s)))
     | core.result.Result.Err _ =>
       ok (Sum.inr (Sum.inr (r, self1,
         fun e1 => let e2 := eval_back e1
                   back e2.t e2.s)))
-  match s1 with
+  match s with
   | Sum.inl t =>
-    let (r1, self2, s2, i, back1, back2) := t
+    let (r1, self2, s1, i, back1, back2) := t
     ok (done (r1, self2,
       fun (self3 : Engine) =>
-        let (t1, s3) := back1 { self2 with t := self3.t, s := self3.s }
-        let (t2, s4) := back2 t1 s3
-        let e1 := eval_back { t := t2, nodes := s2, s := s4, d := i }
-        let (t3, s5) := back e1.t e1.s
-        { self with t := t3, s := s5 }))
-  | Sum.inr s2 =>
-    match s2 with
-    | Sum.inl t =>
-      let (f, e1, i, i1, i2, s3) := t
-      ok (cont (f, e1, i, i1, i2, s3))
+        let (t1, s2) := back1 { self2 with t := self3.t, s := self3.s }
+        let (t2, s3) := back2 t1 s2
+        let e1 := eval_back { t := t2, nodes := s1, s := s3, d := i }
+        let (t3, s4) := back e1.t e1.s
+        { self with t := t3, s := s4 }))
+  | Sum.inr s1 =>
+    match s1 with
+    | Sum.inl t => let (f, e1, i, i1, i2) := t
+                   ok (cont (f, e1, i, i1, i2))
     | Sum.inr t =>
       let (r1, e1, f) := t
       ok (done (r1, e1,
         fun (self2 : Engine) =>
-          let (t1, s3) := f { e1 with t := self2.t, s := self2.s }
-          { self with t := t1, s := s3 }))
+          let (t1, s2) := f { e1 with t := self2.t, s := self2.s }
+          { self with t := t1, s := s2 }))
 
 /-- [loop_return_cont_meta_values::{loop_return_cont_meta_values::Engine<'a>}::eval_let]: loop 0:
     Source: 'tests/src/loop-return-cont-meta-values.rs', lines 72:16-79:5
@@ -237,13 +236,13 @@ def Engine.eval_let_loop.body
 @[rust_loop]
 def Engine.eval_let_loop
   (self : Engine) (back : Terms → Store → (Terms × Store)) (e : Engine)
-  (env : Std.U32) (value : Std.U32) (body : Std.U32) (s : Slice Node) :
+  (env : Std.U32) (value : Std.U32) (body : Std.U32) :
   Result ((core.result.Result Std.U32 Unit) × Engine × (Engine → Engine))
   := do
   loop
-    (fun (back1, e1, env1, value1, body1, s1) => Engine.eval_let_loop.body self
-      back1 e1 env1 value1 body1 s1)
-    (back, e, env, value, body, s)
+    (fun (back1, e1, env1, value1, body1) => Engine.eval_let_loop.body self
+      back1 e1 env1 value1 body1)
+    (back, e, env, value, body)
 
 /-- [loop_return_cont_meta_values::{loop_return_cont_meta_values::Engine<'a>}::eval_let]:
     Source: 'tests/src/loop-return-cont-meta-values.rs', lines 70:4-79:5
@@ -253,7 +252,7 @@ def Engine.eval_let
   (self : Engine) (env : Std.U32) (value : Std.U32) (body : Std.U32) :
   Result ((core.result.Result Std.U32 Unit) × Engine × (Engine → Engine))
   := do
-  Engine.eval_let_loop self (fun t s => (t, s)) self env value body self.nodes
+  Engine.eval_let_loop self (fun t s => (t, s)) self env value body
 
 /-- [loop_return_cont_meta_values::run]:
     Source: 'tests/src/loop-return-cont-meta-values.rs', lines 82:0-96:1

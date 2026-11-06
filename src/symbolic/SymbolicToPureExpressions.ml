@@ -407,6 +407,8 @@ let bind_outputs (ctx : bs_ctx) (joined : C.eval_ctx)
         match v.value with
         | VAdt { fields; _ } -> List.iter find fields
         | VBorrow (VMutBorrow (_, bv)) | VLoan (VSharedLoan (_, bv)) -> find bv
+        | VBorrow (VSharedBorrow (bid, _) | VFrozenMutBorrow (bid, _)) ->
+            find (InterpBorrowsCore.ctx_lookup_shared_value span joined bid)
         | _ -> ())
   in
   List.iter
@@ -448,10 +450,28 @@ let bind_outputs (ctx : bs_ctx) (joined : C.eval_ctx)
             in
             let e = tvalue_to_texpr ctx joined v in
             let ctx, var = fresh_var None e.ty ctx in
-            (ctx, (var, OutStruct (e, indices)) :: bound, i :: bound_structs))
+            ( ctx,
+              (var, OutStruct (var, e, indices)) :: bound,
+              i :: bound_structs ))
       (ctx, [], []) svl
   in
   (ctx, List.rev bound)
+
+(** The value of an output structure (see {!bind_outputs}) given the values of
+    the output symbolic values: the variable binding the structure if the
+    leaves are the variables its destructuring binds (for instance when a loop
+    iteration continues with a structure it doesn't modify) *)
+let out_struct_value (var : fvar) (e : texpr) (indices : int FVarId.Map.t)
+    (values : texpr list) : texpr =
+  if
+    FVarId.Map.for_all
+      (fun fid i ->
+        match (List.nth values i).e with
+        | FVar fid' -> fid' = fid
+        | _ -> false)
+      indices
+  then mk_texpr_from_fvar var
+  else texpr_subst_fvars (FVarId.Map.map (List.nth values) indices) e
 
 (** Destructure the output structures (see {!bind_outputs}) in
     the next expression *)
@@ -469,7 +489,7 @@ let destructure_outputs (ctx : bs_ctx) (outputs : (fvar * exit_output) list)
     (fun ((var : fvar), out) next ->
       match out with
       | OutValue _ -> next
-      | OutStruct (e, _) ->
+      | OutStruct (_, e, _) ->
           [%add_loc] mk_closed_checked_let ctx false (to_pat e)
             (mk_texpr_from_fvar var) next)
     outputs next
@@ -524,7 +544,7 @@ let select_read_outputs (values : (fvar * exit_output) list)
       (fun ((var : fvar), out) ->
         match out with
         | OutValue _ -> FVarId.Set.mem var.id used
-        | OutStruct (_, indices) ->
+        | OutStruct (_, _, indices) ->
             FVarId.Map.exists (fun fid _ -> FVarId.Set.mem fid used) indices)
       values
   in
@@ -541,7 +561,7 @@ let select_read_outputs (values : (fvar * exit_output) list)
          (fun ((var : fvar), out) ->
            match out with
            | OutValue _ -> [ var.id ]
-           | OutStruct (_, indices) ->
+           | OutStruct (_, _, indices) ->
                List.map fst (FVarId.Map.bindings indices))
          unread_values
       @ List.filter_map
@@ -2437,8 +2457,7 @@ and translate_loop (loop : S.loop) (ctx0 : bs_ctx) : texpr =
     List.map
       (function
         | OutValue i -> List.nth values i
-        | OutStruct (e, indices) ->
-            texpr_subst_fvars (FVarId.Map.map (List.nth values) indices) e)
+        | OutStruct (var, e, indices) -> out_struct_value var e indices values)
       body_inputs.values
   in
   let inputs = input_abs @ input_values in
@@ -2780,8 +2799,7 @@ and translate_exit_outputs (ctx : bs_ctx) (target : S.exit_target)
     List.map
       (function
         | OutValue i -> List.nth values i
-        | OutStruct (e, indices) ->
-            texpr_subst_fvars (FVarId.Map.map (List.nth values) indices) e)
+        | OutStruct (var, e, indices) -> out_struct_value var e indices values)
       outputs.values
   in
   (values, conts)

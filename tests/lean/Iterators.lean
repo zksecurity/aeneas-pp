@@ -359,7 +359,7 @@ def slice_chunks_exact_iter_loop0.body
     Source: 'tests/src/iterators.rs', lines 49:4-51:5 -/
 @[rust_loop]
 def slice_chunks_exact_iter_loop0
-  (iter : core.slice.iter.ChunksExact Std.U8) (key : Array Std.U128 128#usize)
+  (key : Array Std.U128 128#usize) (iter : core.slice.iter.ChunksExact Std.U8)
   :
   Result Unit
   := do
@@ -372,7 +372,7 @@ def slice_chunks_exact_iter_loop0
 def slice_chunks_exact_iter
   (key : Array Std.U128 128#usize) (data : Slice Std.U8) : Result Unit := do
   let iter ← core.slice.Slice.chunks_exact data 16#usize
-  slice_chunks_exact_iter_loop0 iter key
+  slice_chunks_exact_iter_loop0 key iter
 
 /-- [iterators::Key]
     Source: 'tests/src/iterators.rs', lines 54:0-54:24 -/
@@ -453,7 +453,7 @@ def copy_arrays_loop.body
     Source: 'tests/src/iterators.rs', lines 63:4-65:5 -/
 @[rust_loop]
 def copy_arrays_loop
-  (iter : core.ops.range.Range Std.Usize) (src : Array Std.U8 256#usize)
+  (src : Array Std.U8 256#usize) (iter : core.ops.range.Range Std.Usize)
   (dst : Array Std.U8 256#usize) :
   Result (Array Std.U8 256#usize)
   := do
@@ -468,7 +468,7 @@ def copy_arrays
   (src : Array Std.U8 256#usize) (dst : Array Std.U8 256#usize) :
   Result (Array Std.U8 256#usize)
   := do
-  copy_arrays_loop { start := 0#usize, «end» := 256#usize } src dst
+  copy_arrays_loop src { start := 0#usize, «end» := 256#usize } dst
 
 /-- [iterators::zip_iter]: loop body 0:
     Source: 'tests/src/iterators.rs', lines 69:4-69:38
