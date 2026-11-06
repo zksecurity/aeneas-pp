@@ -1226,6 +1226,34 @@ and eval_switch_with_join (config : config) (span : Meta.span)
       InterpReduceCollapse.reduce_ctx config span ~with_abs_conts:true Join
         fixed_aids fixed_dids joined_ctx
     in
+    (* An abstraction in which a branch ended an outer borrow holds the value
+       given back to the inner borrows one sub-abstraction level below. The
+       abstractions of the branches are destructured when matched with the
+       joined context (see {!InterpJoin.match_ctx_with_target}), which puts
+       this value in level wrappers (see {!InterpBorrows.destructure_abs}): we
+       do the same in the joined context. *)
+    let joined_ctx =
+      let fixed_aids = InterpJoinCore.compute_fixed_abs_ids ctx0 joined_ctx in
+      let has_ended_ignored_mut_borrow (abs : abs) : bool =
+        List.exists
+          (fun (av : tavalue) ->
+            match av.value with
+            | ABorrow (AEndedIgnoredMutBorrow { child; _ }) ->
+                not (ValuesUtils.is_aignored child.value)
+            | _ -> false)
+          abs.avalues
+      in
+      Contexts.ctx_map_abs
+        (fun abs ->
+          if
+            AbsId.Set.mem abs.abs_id fixed_aids
+            || not (has_ended_ignored_mut_borrow abs)
+          then abs
+          else
+            InterpBorrows.destructure_abs span abs.kind ~can_end:abs.can_end
+              ~destructure_shared_values:true joined_ctx abs)
+        joined_ctx
+    in
     [%ldebug "Joined ctx:\n" ^ eval_ctx_to_string joined_ctx];
     let ctx0_aids = env_get_abs_ids ctx0.env in
     [%ldebug "ctx0_aids:\n" ^ AbsId.Set.to_string None ctx0_aids];

@@ -817,6 +817,16 @@ let tavalue_add_marker (span : Meta.span) (ctx : eval_ctx) (pm : proj_marker)
         | AProjSharedBorrow (pm0, asb) ->
             [%sanity_check] span (pm0 = PNone);
             AProjSharedBorrow (pm, asb)
+        | AEndedIgnoredMutBorrow { child; given_back; given_back_meta } ->
+            (* A level wrapper (see {!ValuesUtils.mk_alevel_wrapper}): the
+               marker applies to the loan or borrow it wraps *)
+            [%sanity_check] span (ValuesUtils.is_aignored child.value);
+            AEndedIgnoredMutBorrow
+              {
+                child;
+                given_back = self#visit_tavalue env given_back;
+                given_back_meta;
+              }
         | _ -> [%internal_error] span
     end
   in

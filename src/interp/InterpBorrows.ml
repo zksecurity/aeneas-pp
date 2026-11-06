@@ -2190,11 +2190,16 @@ let destructure_abs (span : Meta.span) (abs_kind : abs_kind) ~(can_end : bool)
             (* Just explore the child *)
             list_avalues (allow_borrows - 1) push_fail child_av
         | AEndedIgnoredMutBorrow
-            { child = child_av; given_back; given_back_meta = _ } ->
-            (* Just explore the child *)
+            { child = child_av; given_back; given_back_meta } ->
+            (* The child is at the level of the borrow, and the given back
+               value one level below: its loans and borrows keep their level
+               in level wrappers (see {!ValuesUtils.mk_alevel_wrapper}) *)
             let allow_borrows = allow_borrows - 1 in
-            list_avalues allow_borrows push_avalue child_av;
-            list_avalues allow_borrows push_avalue given_back
+            list_avalues allow_borrows push child_av;
+            let r, _, _ = ty_as_ref ty in
+            list_avalues allow_borrows
+              (fun av -> push (mk_alevel_wrapper span r given_back_meta av))
+              given_back
         | AProjSharedBorrow (pm, asb) ->
             (* Every projected borrow gets its own node (with its own
                marker); an empty projection stands for an ignored shared
@@ -2492,7 +2497,7 @@ let eliminate_ended_shared_loans (span : Meta.span) (ctx : eval_ctx) : eval_ctx
   (* Filter the avalues *)
   let update_abs (abs : abs) : abs =
     let keep (v : tavalue) : bool =
-      match v.value with
+      match (tavalue_level_component v).value with
       | ALoan (AEndedSharedLoan (sv, child))
         when (not (value_has_loans_or_borrows (Some span) ctx sv.value))
              && is_aignored child.value -> false

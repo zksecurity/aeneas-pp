@@ -129,6 +129,7 @@ package «tests» {}
 @[default_target] lean_lib Names
 @[default_target] lean_lib NestedBorrows
 @[default_target] lean_lib NestedBorrowsDepth2
+@[default_target] lean_lib NestedBorrowsDepth2Loops
 @[default_target] lean_lib NestedMutBorrowJoins
 @[default_target] lean_lib NestedSharedBorrowJoins
 @[default_target] lean_lib NestedSharedBorrows

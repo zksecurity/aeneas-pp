@@ -202,16 +202,19 @@ let tavalue_to_given_back_ty (ctx : bs_ctx) (abs_regions : T.region_set)
 let abs_to_input_output_tys (ctx : bs_ctx) (abs : V.abs) : ty list * ty list =
   (* TODO: properly handle the sub-abstractions *)
   let abs_level = 0 in
+  (* The continuation is a single function of the inputs at all the levels
+     (see {!InterpAbs.add_abs_cont_to_abs}) *)
+  let avalues = List.map ValuesUtils.tavalue_level_component abs.avalues in
   let inputs =
     List.filter_map
       (tavalue_to_consumed_ty ctx abs.regions.owned abs_level)
-      abs.avalues
+      avalues
   in
 
   let outputs =
     List.filter_map
       (tavalue_to_given_back_ty ctx abs.regions.owned abs_level)
-      abs.avalues
+      avalues
   in
 
   [%ldebug
@@ -943,7 +946,11 @@ let register_inputs (ctx : bs_ctx) (rids : T.region_set) (avl : V.tavalue list)
             (* Nothing to do *)
             [%sanity_check] span (pm = PNone)
         | V.AEndedMutBorrow _ | V.AEndedSharedBorrow -> [%internal_error] span
-        | V.AEndedIgnoredMutBorrow _ -> [%craise] span "Not implemented yet"
+        | V.AEndedIgnoredMutBorrow { child; given_back; given_back_meta = _ } ->
+            (* The continuation is a single function of the inputs at all the
+               levels (see {!InterpAbs.add_abs_cont_to_abs}) *)
+            register child;
+            register given_back
         | V.AProjSharedBorrow _ -> ())
     | V.ASymbolic (pm, proj) -> (
         [%sanity_check] span (pm = PNone);
@@ -1025,7 +1032,11 @@ let register_outputs (ctx : bs_ctx) (bound_outputs : bound_borrows_loans)
             (* Nothing to do *)
             [%sanity_check] span (pm = PNone)
         | V.AEndedMutBorrow _ | V.AEndedSharedBorrow -> [%internal_error] span
-        | V.AEndedIgnoredMutBorrow _ -> [%craise] span "Not implemented yet"
+        | V.AEndedIgnoredMutBorrow { child; given_back; given_back_meta = _ } ->
+            (* The continuation is a single function of the inputs at all the
+               levels (see {!InterpAbs.add_abs_cont_to_abs}) *)
+            register child;
+            register given_back
         | V.AProjSharedBorrow _ -> ())
     | V.ASymbolic (pm, proj) -> (
         [%sanity_check] span (pm = PNone);
@@ -1101,6 +1112,12 @@ let translate_abs_to_cont (ctx : bs_ctx) (ectx : C.eval_ctx) (abs : V.abs) :
   | Some cont -> (
       match (cont.output, cont.input) with
       | Some output, Some input ->
+          (* The values given back to the nested borrows of a function call
+             are inputs of its backward function *)
+          let output, input =
+            InterpAbs.abs_cont_destructure_input_output_levels ctx.span ectx
+              output input
+          in
           let abs = abs_cont_to_texpr_aux ctx ectx abs output input in
           [%ltrace
             "translated abs:\n"

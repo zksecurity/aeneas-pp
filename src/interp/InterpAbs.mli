@@ -273,3 +273,9 @@ val add_abs_cont_to_abs : Meta.span -> eval_ctx -> abs -> abs_fun -> abs
 (** Make a region abstraction own the static region, by merging all the regions
     it owns into the static region. *)
 val ctx_promote_abs_to_static : Meta.span -> eval_ctx -> AbsId.id -> eval_ctx
+
+(** Restructure the continuation of a function call abstraction whose output
+    gives back values to nested borrows: the values given back one level below
+    the output become an input of the backward function. *)
+val abs_cont_destructure_input_output_levels :
+  Meta.span -> eval_ctx -> tevalue -> tevalue -> tevalue * tevalue

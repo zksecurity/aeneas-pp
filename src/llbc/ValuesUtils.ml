@@ -116,6 +116,50 @@ let rec is_eignored_adt (v : tevalue) : bool =
   | EAdt adt -> List.for_all is_eignored_adt adt.fields
   | _ -> false
 
+(** In a destructured region abstraction, a value given back to an ended
+    ignored mutable borrow is one sub-abstraction level below the borrow: each
+    of its loans and borrows is kept in an ended ignored mutable borrow whose
+    child is ignored (one per level), which records its level and the value
+    given back (see {!InterpBorrows.destructure_abs}). *)
+let mk_alevel_wrapper (span : Meta.span) (r : region)
+    (given_back_meta : msymbolic_value) (av : tavalue) : tavalue =
+  {
+    value =
+      ABorrow
+        (AEndedIgnoredMutBorrow
+           {
+             child = mk_aignored span av.ty None;
+             given_back = av;
+             given_back_meta;
+           });
+    ty = TRef (r, av.ty, RMut);
+  }
+
+(** Decompose a value of a destructured region abstraction into its level
+    wrappers (outermost first, see {!mk_alevel_wrapper}) and the loan or borrow
+    they wrap. *)
+let rec tavalue_split_level_wrappers (av : tavalue) :
+    (region * msymbolic_value) list * tavalue =
+  match (av.value, av.ty) with
+  | ( ABorrow
+        (AEndedIgnoredMutBorrow { child; given_back; given_back_meta }),
+      TRef (r, _, RMut) )
+    when is_aignored child.value ->
+      let wrappers, av = tavalue_split_level_wrappers given_back in
+      ((r, given_back_meta) :: wrappers, av)
+  | _ -> ([], av)
+
+(** The loan or borrow wrapped in level wrappers *)
+let tavalue_level_component (av : tavalue) : tavalue =
+  snd (tavalue_split_level_wrappers av)
+
+(** Wrap a value in level wrappers (see {!tavalue_split_level_wrappers}) *)
+let tavalue_wrap_levels (span : Meta.span)
+    (wrappers : (region * msymbolic_value) list) (av : tavalue) : tavalue =
+  List.fold_right
+    (fun (r, given_back_meta) av -> mk_alevel_wrapper span r given_back_meta av)
+    wrappers av
+
 let is_symbolic (v : value) : bool =
   match v with
   | VSymbolic _ -> true

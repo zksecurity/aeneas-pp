@@ -1517,7 +1517,21 @@ and translate_end_abstraction_synth_ret (ectx : C.eval_ctx) (abs : V.abs)
 and translate_end_abstraction_join_or_loop (ectx : C.eval_ctx) (abs : V.abs)
     (abs_level : abs_level) (e : S.expr) (ctx : bs_ctx) : texpr =
   let span = ctx.span in
-  [%cassert] span (abs_level = 0) "Unimplemented";
+  (* The continuation is a single function of the inputs at all the
+     sub-abstraction levels, in the order of the values of the abstraction
+     (see {!InterpAbs.add_abs_cont_to_abs}): a sub-abstraction of a higher
+     level only receives inputs, which we use when the level 0 ends *)
+  if abs_level > 0 then (
+    let ctx, outputs = abs_to_given_back None abs abs_level ctx in
+    [%cassert] span (outputs = []) "Unimplemented";
+    translate_expr e ctx)
+  else
+  let abs =
+    {
+      abs with
+      avalues = List.map ValuesUtils.tavalue_level_component abs.avalues;
+    }
+  in
   (* Compute the input and output values *)
   let back_inputs = abs_to_consumed ctx ectx abs abs_level in
   let ctx, outputs = abs_to_given_back None abs abs_level ctx in

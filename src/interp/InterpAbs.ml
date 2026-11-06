@@ -653,8 +653,17 @@ type merge_duplicates_funcs = {
 
     We assume the value has been destructured (there are no nested loans, adts,
     the children are ignored, etc.). *)
-let tavalue_split_marker (span : Meta.span) (ctx : eval_ctx) (av : tavalue) :
-    tavalue list =
+let rec tavalue_split_marker (span : Meta.span) (ctx : eval_ctx)
+    (av : tavalue) : tavalue list =
+  match tavalue_split_level_wrappers av with
+  | [], _ -> tavalue_split_marker_aux span ctx av
+  | wrappers, av ->
+      List.map
+        (tavalue_wrap_levels span wrappers)
+        (tavalue_split_marker span ctx av)
+
+and tavalue_split_marker_aux (span : Meta.span) (ctx : eval_ctx)
+    (av : tavalue) : tavalue list =
   let mk_split mk_value = [ mk_value PLeft; mk_value PRight ] in
   let mk_opt_split pm mk_value =
     if pm = PNone then mk_split mk_value else [ av ]
@@ -724,6 +733,17 @@ let abs_split_markers (span : Meta.span) (ctx : eval_ctx) (abs : abs) : abs =
     avalues = List.concat (List.map (tavalue_split_marker span ctx) abs.avalues);
   }
 
+(** The projection marker of a loan or borrow of a destructured abstraction *)
+let tavalue_get_marker (av : tavalue) : proj_marker =
+  match (tavalue_level_component av).value with
+  | ALoan (AMutLoan (pm, _, _) | ASharedLoan (pm, _, _, _))
+  | ABorrow
+      ( AMutBorrow (pm, _, _)
+      | ASharedBorrow (pm, _, _)
+      | AProjSharedBorrow (pm, _) )
+  | ASymbolic (pm, _) -> pm
+  | _ -> PNone
+
 (** Auxiliary function for {!merge_abstractions}.
 
     Phase 1 of the merge: we simplify all loan/borrow pairs, if a loan is in the
@@ -775,7 +795,7 @@ let merge_abstractions_merge_loan_borrow_pairs (span : Meta.span)
      Note that we also filter the left avalues to remove ended loans, etc.
   *)
   let keep_avalue (v : tavalue) : bool =
-    match v.value with
+    match (tavalue_level_component v).value with
     | ALoan (AEndedSharedLoan (sv, child))
       when (not (value_has_loans_or_borrows (Some span) ctx sv.value))
            && is_aignored child.value -> false
@@ -797,7 +817,7 @@ let merge_abstractions_merge_loan_borrow_pairs (span : Meta.span)
   let left_norm_proj_loans = ref MarkedNormSymbProjSet.empty in
   List.iter
     (fun (av : tavalue) ->
-      match av.value with
+      match (tavalue_level_component av).value with
       | ASymbolic (pm, aproj) -> (
           match aproj with
           | AProjLoans { proj; consumed; borrows } ->
@@ -814,11 +834,35 @@ let merge_abstractions_merge_loan_borrow_pairs (span : Meta.span)
       | _ -> ())
     abs0.avalues;
 
-  let push_right_avalue (av : tavalue) : unit =
-    right_avalues := av :: !right_avalues
+  (* The loans and borrows of both abstractions are at some sub-abstraction
+     level, given by their level wrappers (see
+     {!ValuesUtils.tavalue_split_level_wrappers}): we collect the right values
+     with their wrappers. A mutable loan of the left abstraction at level [k]
+     consumed by a borrow of the right abstraction at level [j] means that the
+     level [j] of the right abstraction ends with the level [k] of the left
+     abstraction: we record the offset [k - j] between the levels of the two
+     abstractions. When [k > j], the inputs of the right abstraction go [k - j]
+     levels deeper: they must be received when the level [k] ends (receiving
+     an input earlier is always possible). Its outputs keep their level (giving
+     back a value later is always possible). With projection markers, the
+     offset only relates the values of the same side of the join. *)
+  let level_offsets = ref [] in
+  let register_offset (pm : proj_marker) (left : tavalue)
+      (right_wrappers : _ list) : unit =
+    let left_wrappers, _ = tavalue_split_level_wrappers left in
+    level_offsets :=
+      ( pm,
+        List.length left_wrappers - List.length right_wrappers,
+        left_wrappers )
+      :: !level_offsets
   in
-
-  let rec add_avalue (av : tavalue) : unit =
+  let rec add_avalue (wrappers : (region * msymbolic_value) list)
+      (av : tavalue) : unit =
+    let push_right_avalue (av : tavalue) : unit =
+      right_avalues := (wrappers, av) :: !right_avalues
+    in
+    let add_avalue_at_level = add_avalue in
+    let add_avalue = add_avalue wrappers in
     match av.value with
     | ALoan lc -> (
         match lc with
@@ -851,9 +895,11 @@ let merge_abstractions_merge_loan_borrow_pairs (span : Meta.span)
                 match avl with
                 | [] -> ([], true)
                 | av :: avl -> (
-                    match av.value with
+                    match (tavalue_level_component av).value with
                     | ALoan (AMutLoan (pm', bid', _))
-                      when pm = pm' && bid = bid' -> (avl, false)
+                      when pm = pm' && bid = bid' ->
+                        register_offset pm av wrappers;
+                        (avl, false)
                     | _ ->
                         let avl, keep = merge avl in
                         (av :: avl, keep))
@@ -866,7 +912,7 @@ let merge_abstractions_merge_loan_borrow_pairs (span : Meta.span)
                 match avl with
                 | [] -> true
                 | av :: avl -> (
-                    match av.value with
+                    match (tavalue_level_component av).value with
                     | ALoan (ASharedLoan (pm', bid', _, _))
                       when pm = pm' && bid = bid' -> false
                     | _ -> keep avl)
@@ -882,7 +928,7 @@ let merge_abstractions_merge_loan_borrow_pairs (span : Meta.span)
                 | AsbBorrow (bid, _) ->
                     List.exists
                       (fun (av : tavalue) ->
-                        match av.value with
+                        match (tavalue_level_component av).value with
                         | ALoan (ASharedLoan (pm', bid', _, _)) ->
                             pm = pm' && bid = bid'
                         | _ -> false)
@@ -895,9 +941,13 @@ let merge_abstractions_merge_loan_borrow_pairs (span : Meta.span)
               if asb <> [] then
                 push_right_avalue
                   { av with value = ABorrow (AProjSharedBorrow (pm, asb)) }
-          | AEndedIgnoredMutBorrow { child; given_back; given_back_meta = _ } ->
-              add_avalue given_back;
-              add_avalue child
+          | AEndedIgnoredMutBorrow { child; given_back; given_back_meta } ->
+              (* The given back value is one level below the borrow *)
+              let r, _, _ = ty_as_ref av.ty in
+              add_avalue child;
+              add_avalue_at_level
+                (wrappers @ [ (r, given_back_meta) ])
+                given_back
           | AIgnoredMutBorrow _
           | AEndedMutBorrow _
           | AEndedSharedBorrow ->
@@ -925,7 +975,7 @@ let merge_abstractions_merge_loan_borrow_pairs (span : Meta.span)
               left_avalues :=
                 List.filter
                   (fun (av : tavalue) ->
-                    match av.value with
+                    match (tavalue_level_component av).value with
                     | ASymbolic (pm', proj') -> (
                         match proj' with
                         | AProjLoans { proj = proj'; _ } ->
@@ -934,7 +984,9 @@ let merge_abstractions_merge_loan_borrow_pairs (span : Meta.span)
                               && normalize_proj_ty abs0.regions.owned
                                    proj'.proj_ty
                                  = norm_proj_ty
-                            then false
+                            then (
+                              register_offset pm av wrappers;
+                              false)
                             else true
                         | _ -> true)
                     | _ -> true)
@@ -952,10 +1004,114 @@ let merge_abstractions_merge_loan_borrow_pairs (span : Meta.span)
         List.iter add_avalue fields
     | AIgnored _ -> (* Nothing to register *) ()
   in
-  List.iter add_avalue (List.filter keep_avalue abs1.avalues);
+  List.iter (add_avalue []) (List.filter keep_avalue abs1.avalues);
 
-  (* We are done *)
-  !left_avalues @ List.rev !right_avalues
+  (* Put the values of the two abstractions at their levels in the merged
+     abstraction *)
+  let left_avalues =
+    List.map (fun av -> tavalue_split_level_wrappers av) !left_avalues
+  in
+  let right_avalues = List.rev !right_avalues in
+  let shift_right_avalue ((wrappers, av) : _ list * tavalue) =
+    let pm = tavalue_get_marker av in
+    let is_input =
+      match av.value with
+      | ALoan _ | ASymbolic (_, AProjLoans _) -> true
+      | _ -> false
+    in
+    let offsets =
+      List.filter
+        (fun (pm', o, _) -> o > 0 && (pm = PNone || pm' = PNone || pm = pm'))
+        !level_offsets
+    in
+    let offsets =
+      List.sort (fun (_, o0, _) (_, o1, _) -> Int.compare o1 o0) offsets
+    in
+    match offsets with
+    | (_, offset, left_wrappers) :: _ when is_input ->
+        (* The wrappers of the consumed loan of the left abstraction give the
+           levels between the two abstractions *)
+        (List.filteri (fun i _ -> i < offset) left_wrappers @ wrappers, av)
+    | _ -> (wrappers, av)
+  in
+  let right_avalues = List.map shift_right_avalue right_avalues in
+  [%ldebug
+    "- level_offsets: "
+    ^ Print.list_to_string
+        (fun (pm, o, _) -> show_proj_marker pm ^ ": " ^ string_of_int o)
+        !level_offsets];
+  List.map
+    (fun (wrappers, av) -> tavalue_wrap_levels span wrappers av)
+    (left_avalues @ right_avalues)
+
+(** Normalize the sub-abstraction levels of the values of a merged
+    abstraction (see {!ValuesUtils.tavalue_split_level_wrappers}). The levels
+    are relative, and a level only needs to end before the next one when it
+    gives back values: we remove the empty levels, then end every level
+    [k >= 2] which gives back nothing with the level [k - 1]. Level 1 stays
+    distinct from level 0: its inputs are received before the level 0 gives
+    back its values. When only the level 0 gives back values, the
+    abstraction receives all its inputs at level 1 (receiving an input
+    earlier is always possible). *)
+let avalues_normalize_levels (span : Meta.span) (avalues : tavalue list) :
+    tavalue list =
+  let avalues = List.map tavalue_split_level_wrappers avalues in
+  let is_output (av : tavalue) : bool =
+    match av.value with
+    | ABorrow (AMutBorrow _) | ASymbolic (_, AProjBorrows _) -> true
+    | _ -> false
+  in
+  let levels =
+    List.sort_uniq Int.compare
+      (List.map (fun (ws, _) -> List.length ws) avalues)
+  in
+  (* Map each level to its normalized level: we explore the non-empty levels
+     in increasing order *)
+  let has_output level =
+    List.exists
+      (fun (ws, av) -> List.length ws = level && is_output av)
+      avalues
+  in
+  let rec normalize (prev : int option) (levels : int list) :
+      (int * int) list =
+    match levels with
+    | [] -> []
+    | level :: levels ->
+        let nlevel =
+          match prev with
+          | None -> 0
+          | Some nprev ->
+              if nprev >= 1 && not (has_output level) then nprev else nprev + 1
+        in
+        (level, nlevel) :: normalize (Some nlevel) levels
+  in
+  let map = normalize None levels in
+  let deep_wrappers =
+    List.filter_map
+      (fun (ws, _) -> match ws with [] -> None | w :: _ -> Some w)
+      avalues
+  in
+  let flat =
+    List.for_all (fun (ws, av) -> ws = [] || not (is_output av)) avalues
+  in
+  List.map
+    (fun ((wrappers, av) : _ * tavalue) ->
+      let is_input =
+        match av.value with
+        | ALoan _ | ASymbolic (_, AProjLoans _) -> true
+        | _ -> false
+      in
+      match deep_wrappers with
+      | w :: _ when flat && is_input ->
+          let w = match wrappers with [] -> w | w :: _ -> w in
+          tavalue_wrap_levels span [ w ] av
+      | _ ->
+          let level = List.length wrappers in
+          let n = level - List.assoc level map in
+          tavalue_wrap_levels span
+            (List.filteri (fun i _ -> i >= n) wrappers)
+            av)
+    avalues
 
 (** Auxiliary function for {!merge_abstractions}.
 
@@ -1066,13 +1222,33 @@ let merge_abstractions_merge_markers (span : Meta.span)
      Return [Some] with the result of the merge if it occurred, and [None]
      if the two values can't be merged (because they are of two different
      kinds for instance). *)
-  let try_merge_avalues (av0 : tavalue) (av1 : tavalue) : tavalue option =
+  let try_merge_components (av0 : tavalue) (av1 : tavalue) : tavalue option =
     match (av0.value, av1.value) with
     | ALoan c0, ALoan c1 -> try_merge_aloan_contents av0.ty c0 av1.ty c1
     | ABorrow c0, ABorrow c1 -> try_merge_aborrow_contents av0.ty c0 av1.ty c1
     | ASymbolic (pm0, proj0), ASymbolic (pm1, proj1) ->
         try_merge_projs (av0.ty, pm0, proj0) (av1.ty, pm1, proj1)
     | _ -> None
+  in
+  let try_merge_avalues (av0 : tavalue) (av1 : tavalue) : tavalue option =
+    match
+      (tavalue_split_level_wrappers av0, tavalue_split_level_wrappers av1)
+    with
+    | ([], _), ([], _) -> try_merge_components av0 av1
+    | (wrappers0, av0), (wrappers1, av1) ->
+        (* The two sides of a join may put a value at different levels: an
+           input goes to the deeper level (it can be received earlier), an
+           output to the shallower one (it can be given back later) *)
+        let is_input =
+          match av0.value with
+          | ALoan _ | ASymbolic (_, AProjLoans _) -> true
+          | _ -> false
+        in
+        let deeper = List.length wrappers0 >= List.length wrappers1 in
+        let wrappers = if is_input = deeper then wrappers0 else wrappers1 in
+        Option.map
+          (tavalue_wrap_levels span wrappers)
+          (try_merge_components av0 av1)
   in
 
   let merged = ref [] in
@@ -2206,6 +2382,7 @@ let merge_abstractions (span : Meta.span) (abs_kind : abs_kind)
   let avalues =
     (abs_simplify_duplicated_borrows span ctx { abs0 with avalues }).avalues
   in
+  let avalues = avalues_normalize_levels span avalues in
 
   (* Merge the expressions used for the pure translation. *)
   let cont = merge_abs_conts span ctx ~with_abs_conts abs0 abs1 in
@@ -2468,9 +2645,11 @@ let reorder_loans_borrows_in_fresh_abs (span : Meta.span) (allow_markers : bool)
   let type_infos = ctx.type_ctx.type_infos in
   let reorder_in_fresh_abs (abs : abs) : abs =
     [%ltrace "abs:\n" ^ abs_to_string span ctx abs];
-    (* Filter the avalues *)
+    (* Filter the avalues. The loans and borrows in level wrappers (see
+       {!ValuesUtils.mk_alevel_wrapper}) are classified and ordered by the
+       loan or borrow they wrap. *)
     let filter (v : tavalue) : bool =
-      match v.value with
+      match (tavalue_level_component v).value with
       | AAdt _ | ASymbolic _ -> true
       | ALoan lc -> (
           match lc with
@@ -2521,13 +2700,13 @@ let reorder_loans_borrows_in_fresh_abs (span : Meta.span) (allow_markers : bool)
     (* Split between the loans and borrows, and between the concrete
        and symbolic values. *)
     let is_borrow (av : tavalue) : bool =
-      match av.value with
+      match (tavalue_level_component av).value with
       | ABorrow _ | ASymbolic (_, AProjBorrows _) -> true
       | ALoan _ | ASymbolic (_, AProjLoans _) -> false
       | _ -> [%craise] span ("Unexpected avalue: " ^ tavalue_to_string ctx av)
     in
     let is_concrete (av : tavalue) : bool =
-      match av.value with
+      match (tavalue_level_component av).value with
       | ABorrow _ | ALoan _ -> true
       | ASymbolic (_, (AProjBorrows _ | AProjLoans _)) -> false
       | _ -> [%craise] span ("Unexpected avalue: " ^ tavalue_to_string ctx av)
@@ -2551,7 +2730,7 @@ let reorder_loans_borrows_in_fresh_abs (span : Meta.span) (allow_markers : bool)
        (all sorted by increasing id)
     *)
     let get_borrow_id (av : tavalue) : BorrowId.id =
-      match av.value with
+      match (tavalue_level_component av).value with
       | ABorrow
           ( AMutBorrow (pm, bid, _)
           | ASharedBorrow (pm, bid, _)
@@ -2561,7 +2740,7 @@ let reorder_loans_borrows_in_fresh_abs (span : Meta.span) (allow_markers : bool)
       | _ -> [%craise] span ("Unexpected value: " ^ tavalue_to_string ctx av)
     in
     let get_loan_id (av : tavalue) : BorrowId.id =
-      match av.value with
+      match (tavalue_level_component av).value with
       | ALoan (AMutLoan (pm, lid, _)) ->
           [%sanity_check] span (allow_markers || pm = PNone);
           lid
@@ -2571,7 +2750,7 @@ let reorder_loans_borrows_in_fresh_abs (span : Meta.span) (allow_markers : bool)
       | _ -> [%craise] span ("Unexpected value: " ^ tavalue_to_string ctx av)
     in
     let get_symbolic_id (av : tavalue) : SymbolicValueId.id =
-      match av.value with
+      match (tavalue_level_component av).value with
       | ASymbolic (pm, aproj) -> begin
           [%sanity_check] span (allow_markers || pm = PNone);
           match aproj with
@@ -2794,6 +2973,18 @@ let project_context (span : Meta.span) (fixed_aids : AbsId.Set.t)
         | AProjSharedBorrow (pm, asb) ->
             if preserve pm then ABorrow (AProjSharedBorrow (PNone, asb))
             else AIgnored None
+        | AEndedIgnoredMutBorrow { child; given_back; given_back_meta }
+          when is_aignored child.value && not (is_aignored given_back.value)
+          -> (
+            (* A level wrapper (see {!ValuesUtils.mk_alevel_wrapper}): it
+               disappears with the value it wraps *)
+            let given_back = self#visit_tavalue env given_back in
+            match given_back.value with
+            | AIgnored _ -> AIgnored None
+            | _ ->
+                ABorrow
+                  (AEndedIgnoredMutBorrow
+                     { child; given_back; given_back_meta }))
         | AIgnoredMutBorrow _
         | AEndedMutBorrow _
         | AEndedSharedBorrow
@@ -2923,7 +3114,17 @@ let add_abs_cont_to_abs span (ctx : eval_ctx) (abs : abs) (abs_fun : abs_fun) :
   (* Retrieve the *mutable* borrows/loans from the abstraction values *)
   let borrows : tevalue list ref = ref [] in
   let loans : tevalue list ref = ref [] in
+  (* The continuation is a single function of all the inputs of the
+     abstraction, at any level (see {!ValuesUtils.mk_alevel_wrapper}). This is
+     exact when all the outputs are at level 0: the sub-abstractions then have
+     no intermediate outputs. *)
   let get_borrow_loan (x : tavalue) : unit =
+    let wrappers, x = tavalue_split_level_wrappers x in
+    let check_output_level () =
+      [%cassert] span (wrappers = [])
+        "Unimplemented: a sub-abstraction of a region abstraction with \
+         a continuation has intermediate outputs"
+    in
     let ty = x.ty in
     match x.value with
     | ALoan lc -> (
@@ -2946,6 +3147,7 @@ let add_abs_cont_to_abs span (ctx : eval_ctx) (abs : abs) (abs_fun : abs_fun) :
         match bc with
         | AMutBorrow (pm, bid, child) ->
             [%sanity_check] span (is_aignored child.value);
+            check_output_level ();
             let value : evalue =
               EBorrow (EMutBorrow (pm, bid, mk_eignored None child.ty))
             in
@@ -2981,6 +3183,7 @@ let add_abs_cont_to_abs span (ctx : eval_ctx) (abs : abs) (abs_fun : abs_fun) :
                 ctx.type_ctx.type_infos regions proj_ty
             then (
               [%sanity_check] span (loans = []);
+              check_output_level ();
               let value : evalue =
                 ESymbolic
                   (pm, EProjBorrows { proj = { sv_id; proj_ty }; loans = [] })

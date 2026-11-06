@@ -270,12 +270,16 @@ let compute_abs_borrows_loans_maps (span : Meta.span) (explore : abs -> bool)
                       "Unimplemented: projected reborrows of symbolic shared \
                        values")
               asb
-        | AIgnoredMutBorrow (_, child)
-        | AEndedIgnoredMutBorrow { child; given_back = _; given_back_meta = _ }
-          ->
+        | AIgnoredMutBorrow (_, child) ->
             [%sanity_check] span (pm = PNone);
             (* Ignore the id of the borrow, if there is *)
             self#visit_tavalue (abs, pm) child
+        | AEndedIgnoredMutBorrow { child; given_back; given_back_meta = _ } ->
+            [%sanity_check] span (pm = PNone);
+            (* The loans and borrows of the given back value belong to the
+               abstraction, one level below the borrow *)
+            self#visit_tavalue (abs, pm) child;
+            self#visit_tavalue (abs, pm) given_back
         | AEndedMutBorrow _ | AEndedSharedBorrow -> [%craise] span "Unreachable"
 
       method! visit_borrow_id _ _ = [%internal_error] span
@@ -2529,11 +2533,13 @@ let match_ctxs (span : Meta.span) ~(check_equiv : bool)
      values, which the contexts may have allocated in different orders: we pair
      the projectors over symbolic values the matching already related (the
      variables are matched before the abstractions), and the other values in
-     order. *)
+     order. The projectors in level wrappers (see
+     {!ValuesUtils.tavalue_split_level_wrappers}) are paired by the projector
+     they wrap. *)
   let align_projectors (avalues0 : tavalue list) (avalues1 : tavalue list) :
       tavalue list option =
     let proj_key (v : tavalue) =
-      match v.value with
+      match (tavalue_level_component v).value with
       | ASymbolic (_, AProjLoans { proj; _ }) -> Some (true, proj.sv_id)
       | ASymbolic (_, AProjBorrows { proj; _ }) -> Some (false, proj.sv_id)
       | _ -> None
@@ -2645,6 +2651,31 @@ let match_ctxs (span : Meta.span) ~(check_equiv : bool)
       raise_distinct
         "Region abstractions with distinct sets of ended sub-abstractions";
 
+    (* A level wrapper only records the sub-abstraction level of the value it
+       wraps (see {!ValuesUtils.tavalue_split_level_wrappers}): we match the
+       levels and the wrapped values. When matching a context with a target
+       context (rather than checking that they are equivalent), the target may
+       receive an input of an abstraction at a shallower level, and give back
+       an output at a deeper level: the levels of the abstraction of the
+       source context are a staging of those of the target. *)
+    let match_level_tavalues (v0 : tavalue) (v1 : tavalue) : unit =
+      let wrappers0, c0 = tavalue_split_level_wrappers v0 in
+      let wrappers1, c1 = tavalue_split_level_wrappers v1 in
+      let level0 = List.length wrappers0 in
+      let level1 = List.length wrappers1 in
+      let is_input =
+        match c0.value with
+        | ALoan _ | ASymbolic (_, AProjLoans _) -> true
+        | _ -> false
+      in
+      if
+        level0 = level1
+        || (not check_equiv)
+           && ((is_input && level1 < level0)
+              || ((not is_input) && level1 > level0))
+      then ignore (match_tavalues ctx0 ctx1 c0 c1)
+      else raise_distinct "match_abstractions: sub-abstraction levels"
+    in
     [%ldebug "match_abstractions: matching values"];
     let _ =
       if List.length avalues0 <> List.length avalues1 then
@@ -2656,7 +2687,7 @@ let match_ctxs (span : Meta.span) ~(check_equiv : bool)
           | None -> raise_distinct "match_abstractions: projectors"
         in
         List.map
-          (fun (v0, v1) -> match_tavalues ctx0 ctx1 v0 v1)
+          (fun (v0, v1) -> match_level_tavalues v0 v1)
           (List.combine avalues0 avalues1)
     in
     [%ldebug "match_abstractions: values matched OK"];
