@@ -2521,6 +2521,10 @@ let match_ctxs (span : Meta.span) ~(check_equiv : bool)
     && SymbolicValueId.Set.subset sids fixed_ids.sids
   in
 
+  let live_parents ctx =
+    AbsId.Set.filter (fun aid -> ctx_lookup_abs_opt ctx aid <> None)
+  in
+
   (* Rem.: this function raises exceptions of type [Distinct] or [RFailure]
      (in the latter case: if [recover] is true) *)
   let match_abstractions ~(recover : bool) (abs0 : abs) (abs1 : abs) : unit =
@@ -2573,9 +2577,11 @@ let match_ctxs (span : Meta.span) ~(check_equiv : bool)
     if check_can_end && can_end0 <> can_end1 then
       raise_distinct "match_abstractions: can_end";
     (* The parents which have ended (or were projected away by a join) don't
-       constrain the matching *)
-    let live ctx = AbsId.Set.filter (fun aid -> ctx_lookup_abs_opt ctx aid <> None) in
-    let _ = match_aids (live ctx0 parents0) (live ctx1 parents1) in
+       constrain the matching. When computing a mapping to a source context,
+       the parents are checked once all the abstractions are matched (see
+       [check_parents]). *)
+    if check_equiv then
+      ignore (match_aids (live_parents ctx0 parents0) (live_parents ctx1 parents1));
     if region_set_has_static regions0 <> region_set_has_static regions1 then
       raise_distinct "match_abstractions: static region";
     let _ =
@@ -2801,7 +2807,29 @@ let match_ctxs (span : Meta.span) ~(check_equiv : bool)
     | _ -> [%craise] span "Unreachable"
   in
 
+  (* A source context may order the ending of its abstractions more strictly
+     than the target context: the parents of a target abstraction must be the
+     images of parents of the source abstraction it matches. *)
+  let check_parents () =
+    List.iter
+      (fun (e : env_elem) ->
+        match e with
+        | EAbs abs0 ->
+            let abs1 =
+              ctx_lookup_abs ctx1 (AbsId.InjSubst.find abs0.abs_id !aid_map)
+            in
+            let parents0 =
+              AbsId.Set.map
+                (fun aid -> AbsId.InjSubst.find aid !aid_map)
+                (live_parents ctx0 abs0.parents)
+            in
+            if not (AbsId.Set.subset (live_parents ctx1 abs1.parents) parents0)
+            then raise (Distinct "match_abstractions: parents")
+        | _ -> ())
+      env0
+  in
   match_envs env0 env1;
+  if not check_equiv then check_parents ();
   let maps =
     {
       aid_map = !aid_map;
