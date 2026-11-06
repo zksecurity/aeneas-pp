@@ -93,15 +93,14 @@ def Eng.find_loop.body
   Result (ControlFlow (Std.U32 × Std.Usize) (Option Std.Usize))
   := do
   let i1 := alloc.vec.Vec.len self.s.v
-  let s : _root_.Sum Unit (_root_.Sum (Std.U32 × Std.Usize) (Option Std.Usize))
-    ←
+  let s : _root_.Sum _ (_root_.Sum _ (Option Std.Usize)) ←
     if i < i1
     then
       do
       let i2 ←
         alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
           self.s.v i
-      let s1 : _root_.Sum Unit (Std.U32 × Std.Usize) ←
+      let s1 ←
         if i2 = x
         then ok (Sum.inl ())
         else

@@ -29,8 +29,7 @@ def find_loop.body
   Result (ControlFlow (Std.U32 × Std.Usize) (Option Std.Usize))
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum Std.Usize (_root_.Sum (Std.U32 × Std.Usize) (Option
-    Std.Usize)) ←
+  let s : _root_.Sum _ (_root_.Sum _ (Option Std.Usize)) ←
     if i < i1
     then
       do
@@ -76,7 +75,7 @@ def first_above_loop.body
   Result (ControlFlow (Std.U32 × Std.Usize) Std.U32)
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum Std.U32 (_root_.Sum (Std.U32 × Std.Usize) Std.U32) ←
+  let s ←
     if i >= i1
     then ok (Sum.inr (Sum.inr 0#u32))
     else
@@ -121,9 +120,8 @@ def add_until_loop.body
     ((core.result.Result Std.U32 Std.U32) × (Slice Std.U32)))
   := do
   let i1 := Slice.len a
-  let s1 : _root_.Sum (Std.U32 × (Std.U32 → Slice Std.U32)) (_root_.Sum ((Slice
-    Std.U32) × Std.U32 × Std.U32 × Std.Usize) ((core.result.Result Std.U32
-    Std.U32) × (Slice Std.U32))) ←
+  let s1 : _root_.Sum _ (_root_.Sum _ ((core.result.Result Std.U32 Std.U32) ×
+    _)) ←
     if i < i1
     then
       do
@@ -184,8 +182,7 @@ def bump_until_loop.body
   Result (ControlFlow (Std.U32 × Std.U32 × Std.U32) (Std.U32 × (Array Std.U32
     2#usize)))
   := do
-  let s : _root_.Sum (Std.U32 × Std.U32) (_root_.Sum (Std.U32 × Std.U32 ×
-    Std.U32) (Std.U32 × (Array Std.U32 2#usize))) ←
+  let s ←
     if i < n
     then
       do
@@ -378,11 +375,7 @@ def nested_return_loop0.body
     Std.Usize) ((Option (Std.Usize × Std.Usize)) × (Array (Array Std.U32
     3#usize) 3#usize)))
   := do
-  let s : _root_.Sum (Std.Usize × Std.Usize × (Std.U32 → Array Std.U32 3#usize)
-    × (Array Std.U32 3#usize → Array (Array Std.U32 3#usize) 3#usize))
-    (_root_.Sum ((Array (Array Std.U32 3#usize) 3#usize) × Std.U32 × Std.Usize)
-    ((Option (Std.Usize × Std.Usize)) × (Array (Array Std.U32 3#usize)
-    3#usize))) ←
+  let s : _root_.Sum _ (_root_.Sum _ ((Option (Std.Usize × Std.Usize)) × _)) ←
     if i < 3#usize
     then
       do
@@ -453,14 +446,12 @@ def classify_loop.body
       do
       let v ← Slice.index_usize a i
       let i2 ← i + 1#usize
-      let s1 : _root_.Sum (Std.Usize × Std.I32) (_root_.Sum (Std.Usize ×
-        Std.I32) Std.I32) ←
+      let s1 ←
         if v = 0#i32
         then ok (Sum.inl (i2, neg))
         else
           do
-          let s2 : _root_.Sum Std.I32 (_root_.Sum (Std.Usize × Std.I32)
-            (Std.Usize × Std.I32)) ←
+          let s2 ←
             if v < (-100)#i32
             then ok (Sum.inl (-1)#i32)
             else
@@ -485,7 +476,7 @@ def classify_loop.body
       | Sum.inl _ => ok s1
       | Sum.inr _ => ok s1
     else ok (Sum.inl (i, neg))
-  let s1 : _root_.Sum Std.I32 (_root_.Sum (Std.Usize × Std.I32) Std.I32) ←
+  let s1 : _root_.Sum _ (_root_.Sum (Std.Usize × Std.I32) Std.I32) ←
     match s with
     | Sum.inl p =>
       do
@@ -533,8 +524,7 @@ def find_mut_loop.body
     × (Option Std.U32 → Slice Std.U32)))
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum (Std.U32 × (Std.U32 → Std.U32) × (Std.U32 → Slice
-    Std.U32)) (_root_.Sum ((Slice Std.U32) × Std.U32 × Std.Usize) ((Option
+  let s : _root_.Sum (_ × (Std.U32 → Std.U32) × _) (_root_.Sum _ ((Option
     Std.U32) × (Option Std.U32 → Slice Std.U32))) ←
     if i < i1
     then
@@ -603,9 +593,8 @@ def nth_mut_loop.body
   Result (ControlFlow ((List → List) × Std.U32 × List × Std.U32) ((Option
     Std.U32) × (Option Std.U32 → List)))
   := do
-  let s : _root_.Sum (Std.U32 × List × (Std.U32 → Std.U32)) (_root_.Sum ((List
-    → List) × Std.U32 × List × Std.U32) ((Option Std.U32) × (Option Std.U32 →
-    List))) ←
+  let s : _root_.Sum (_ × _ × (Std.U32 → Std.U32)) (_root_.Sum ((List → List) ×
+    _ × _ × _) ((Option Std.U32) × (Option Std.U32 → List))) ←
     match l with
     | List.Cons x tl =>
       if i = n
@@ -704,7 +693,7 @@ def overlapping_outputs_loop0.body
   Result (ControlFlow (Std.U32 × Std.U32 × Std.U32) (Std.U32 × Std.U32 ×
     Std.U32))
   := do
-  let s : _root_.Sum (Std.U32 × Std.U32) (Std.U32 × Std.U32 × Std.U32) ←
+  let s ←
     if j < 3#u32
     then
       do
@@ -763,9 +752,7 @@ def bump_rows_loop0_loop0.body
   if j < 2#usize
   then
     let i1 ← Array.index_usize row j
-    let s : _root_.Sum (Array Std.U32 2#usize) (_root_.Sum (Std.U32 × Std.Usize
-      × (Array Std.U32 2#usize) × Std.Usize) (Std.U32 × Std.Usize × (Array
-      Std.U32 2#usize))) ←
+    let s ←
       if i1 = x
       then do
            let i2 ← i1 + 10#u32
@@ -875,8 +862,7 @@ def push_until_loop.body
     × (alloc.vec.Vec Std.U32)))
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum Unit (_root_.Sum ((alloc.vec.Vec Std.U32) × Std.U32 ×
-    Std.Usize) Std.U32) ←
+  let s ←
     if i < i1
     then
       do
@@ -891,8 +877,7 @@ def push_until_loop.body
           let i3 ← i + 1#usize
           ok (Sum.inr (Sum.inl (v1, base, i3)))
     else ok (Sum.inl ())
-  let s1 : _root_.Sum Std.U32 (_root_.Sum ((alloc.vec.Vec Std.U32) × Std.U32 ×
-    Std.Usize) (Std.U32 × (alloc.vec.Vec Std.U32))) ←
+  let s1 ←
     match s with
     | Sum.inl _ =>
       do
@@ -949,8 +934,7 @@ def return_then_loop_loop0.body
     Std.Usize)))
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum Unit (_root_.Sum (Std.U32 × Std.Usize) (Std.U32 ×
-    Std.Usize)) ←
+  let s ←
     if i < i1
     then
       do
@@ -1028,8 +1012,7 @@ def two_searches_loop0_loop0.body
     (Std.Usize × Std.Usize) Unit))
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum Unit (_root_.Sum (Std.U32 × Std.U32 × Std.Usize ×
-    Std.Usize) Unit) ←
+  let s ←
     if j < i1
     then
       do
@@ -1072,8 +1055,7 @@ def two_searches_loop0.body
   Result (ControlFlow (Std.U32 × Std.U32 × Std.Usize) Std.U32)
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum Unit (_root_.Sum (Std.U32 × Std.U32 × Std.Usize) Std.U32)
-    ←
+  let s ←
     if i < i1
     then
       do
@@ -1086,8 +1068,7 @@ def two_searches_loop0.body
         else let i3 ← i + 1#usize
              ok (Sum.inr (Sum.inl (x, y, i3)))
     else ok (Sum.inl ())
-  let s1 : _root_.Sum Std.U32 (_root_.Sum (Std.U32 × Std.U32 × Std.Usize)
-    Std.U32) ←
+  let s1 : _root_.Sum _ (_root_.Sum (Std.U32 × Std.U32 × Std.Usize) Std.U32) ←
     match s with
     | Sum.inl _ =>
       do

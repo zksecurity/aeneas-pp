@@ -126,13 +126,12 @@ def Eng.iota
   let r ← Eng.decl self n
   let s : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) × Eng ×
     (Eng → alloc.vec.Vec Std.U32)) ((core.result.Result (Option Std.U32)
-    Std.U32) × Eng × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)) ←
+    Std.U32) × _ × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)) ←
     match r with
     | core.result.Result.Ok val =>
       do
-      let s1 : _root_.Sum (Eng × Std.U32 × (Eng → alloc.vec.Vec Std.U32))
-        ((core.result.Result (Option Std.U32) Std.U32) × Eng × (Eng →
-        alloc.vec.Vec Std.U32)) ←
+      let s1 : _root_.Sum (_ × _ × (Eng → alloc.vec.Vec Std.U32)) (_ × _ × (Eng
+        → alloc.vec.Vec Std.U32)) ←
         if k
         then
           do
@@ -269,15 +268,14 @@ def Eval.iota
     | core.result.Result.Ok val =>
       do
       let s : _root_.Sum (Eval × Std.U32 × (Eval → ((alloc.vec.Vec Std.U32) ×
-        Store))) ((core.result.Result (Option Std.U32) Std.U32) × Eval ×
-        (alloc.vec.Vec Std.U32 → Store → ((alloc.vec.Vec Std.U32) × Store))) ←
+        Store))) (_ × _ × (alloc.vec.Vec Std.U32 → Store → ((alloc.vec.Vec
+        Std.U32) × Store))) ←
         if k
         then
           do
           let (r2, self2, kc_back) ← Eval.kc self val
-          let s1 : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) ×
-            Eval × (Eval → ((alloc.vec.Vec Std.U32) × Store))) (Eval × Std.U32
-            × (Eval → ((alloc.vec.Vec Std.U32) × Store))) ←
+          let s1 : _root_.Sum (_ × _ × (Eval → ((alloc.vec.Vec Std.U32) ×
+            Store))) (_ × _ × (Eval → ((alloc.vec.Vec Std.U32) × Store))) ←
             match r2 with
             | core.result.Result.Ok val1 =>
               match val1 with
@@ -302,8 +300,7 @@ def Eval.iota
         else ok (Sum.inl (self, val, fun (e : Eval) => (e.t, e.s)))
       let s1 : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) × Eval
         × (alloc.vec.Vec Std.U32 → Store → ((alloc.vec.Vec Std.U32) × Store)))
-        ((core.result.Result (Option Std.U32) Std.U32) × Eval × (Eval →
-        ((alloc.vec.Vec Std.U32) × Store))) ←
+        _ ←
         match s with
         | Sum.inl t =>
           do
@@ -311,9 +308,9 @@ def Eval.iota
           let b ←
             Eval.iota.closure.Insts.CoreOpsFunctionFnPairShared2EvalU32Bool.call
               () (self2, major)
-          let s2 : _root_.Sum (Eval × Std.U32 × (Eval → ((alloc.vec.Vec
-            Std.U32) × Store))) ((core.result.Result (Option Std.U32) Std.U32)
-            × Eval × (Eval → ((alloc.vec.Vec Std.U32) × Store))) ←
+          let s2 : _root_.Sum (_ × _ × (Eval → ((alloc.vec.Vec Std.U32) ×
+            Store))) ((core.result.Result (Option Std.U32) Std.U32) × _ × (Eval
+            → ((alloc.vec.Vec Std.U32) × Store))) ←
             if b
             then ok (Sum.inl (self2, major, fun (e : Eval) => (e.t, e.s)))
             else
@@ -330,7 +327,7 @@ def Eval.iota
                             (e2.t, e2.s)))
           let s3 : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) ×
             Eval × (Eval → ((alloc.vec.Vec Std.U32) × Store)))
-            ((core.result.Result (Option Std.U32) Std.U32) × Eval × (Eval →
+            ((core.result.Result (Option Std.U32) Std.U32) × _ × (Eval →
             ((alloc.vec.Vec Std.U32) × Store))) ←
             match s2 with
             | Sum.inl t1 =>

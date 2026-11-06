@@ -132,12 +132,12 @@ def let_else_chain
         let acc2 ← acc1 + 1#u32
         let r ← check c
         let s : _root_.Sum (core.result.Result (Option Std.U32) Std.U32)
-          ((core.result.Result (Option Std.U32) Std.U32) × Std.U32) ←
+          ((core.result.Result (Option Std.U32) Std.U32) × _) ←
           match r with
           | core.result.Result.Ok val =>
             do
-            let s1 : _root_.Sum Std.U32 (core.result.Result (Option Std.U32)
-              Std.U32) ←
+            let s1 : _root_.Sum _ (core.result.Result (Option Std.U32) Std.U32)
+              ←
               match w with
               | Val.Neutral h1 _ =>
                 match h1 with
@@ -220,20 +220,20 @@ def scopes_in_loop_loop.body
   Result (ControlFlow (Std.U32 × Std.Usize) Std.U32)
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum Unit (Std.U32 × Std.Usize) ←
+  let s ←
     if i < i1
     then
       do
       let v ← Slice.index_usize a i
       let i2 ← i + 1#usize
-      let s1 : _root_.Sum Std.Usize (_root_.Sum (Std.U32 × Std.Usize) Unit) ←
+      let s1 ←
         match v with
         | Val.Neutral h _ =>
           match h with
           | Head.Var _ => ok (Sum.inl i2)
           | Head.Const c cls =>
             do
-            let s2 : _root_.Sum Std.U32 (_root_.Sum Unit Std.Usize) ←
+            let s2 ←
               match cls with
               | Class.Def =>
                 if c > 50#u32
@@ -346,7 +346,7 @@ def real_loops (n : Std.U32) : Result Std.U32 := do
     Source: 'tests/src/forward-scopes.rs', lines 148:0-160:1
     Visibility: public -/
 def panic_or_return (v : Val) (x : Std.U32) : Result Std.U32 := do
-  let s : _root_.Sum Std.U32 Std.U32 ←
+  let s ←
     match v with
     | Val.Neutral h _ =>
       match h with
@@ -397,7 +397,7 @@ def loop_in_scope_loop
     Source: 'tests/src/forward-scopes.rs', lines 163:0-176:1
     Visibility: public -/
 def loop_in_scope (v : Val) (n : Std.U32) : Result Std.U32 := do
-  let s : _root_.Sum Std.U32 Std.U32 ←
+  let s ←
     match v with
     | Val.Neutral _ _ => ok (Sum.inl 0#u32)
     | Val.Nat m => do
@@ -417,14 +417,12 @@ def live_borrow
   := do
   let (r, index_mut_back) ← Array.index_mut_usize a 0#usize
   let r1 ← r + 1#u32
-  let s : _root_.Sum (Std.U32 × Std.U32 × (Std.U32 → Array Std.U32 2#usize))
-    (Std.U32 × (Array Std.U32 2#usize)) ←
+  let s ←
     match v with
     | Val.Nat n =>
       do
       let r2 ← r1 + n
-      let s1 : _root_.Sum Std.U32 (Std.U32 × Std.U32 × (Std.U32 → Array Std.U32
-        2#usize)) ←
+      let s1 ←
         match w with
         | Val.Neutral _ _ => ok (Sum.inl 1#u32)
         | Val.Nat m => ok (Sum.inl m)
@@ -499,8 +497,7 @@ def shared_from_call
   (a : Array Std.U32 2#usize) (v : Val) (k : Std.U32) :
   Result (Std.U32 × (Array Std.U32 2#usize))
   := do
-  let s : _root_.Sum (Std.U32 × (Array Std.U32 2#usize)) (Std.U32 × (Array
-    Std.U32 2#usize)) ←
+  let s ←
     match v with
     | Val.Neutral _ _ =>
       do
@@ -539,7 +536,7 @@ def loop_live_borrow_loop.body
   Result (ControlFlow (Std.U32 × Std.Usize) (Std.U32 × Std.Usize))
   := do
   let i1 := Slice.len vs
-  let s : _root_.Sum Std.Usize (Std.U32 × Std.Usize) ←
+  let s ←
     if i < i1
     then
       do
@@ -607,9 +604,7 @@ def call_then_maybe_call
   Result ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec Std.U32))
   := do
   let (r, v1) ← push_checked v 0#u32
-  let s : _root_.Sum ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec
-    Std.U32)) ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec Std.U32))
-    ←
+  let s ←
     match r with
     | core.result.Result.Ok val =>
       if b
@@ -644,7 +639,7 @@ def contains_zero_loop.body
   Result (ControlFlow (core.slice.iter.Iter Std.U32) Bool)
   := do
   let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
-  let s : _root_.Sum Unit (_root_.Sum (core.slice.iter.Iter Std.U32) Bool) ←
+  let s ←
     match o with
     | none => ok (Sum.inr (Sum.inr false))
     | some x =>

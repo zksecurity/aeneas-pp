@@ -127,10 +127,9 @@ def Eng.walk_loop.body
     Std.U32 → alloc.vec.Vec Std.U32)))
   := do
   let o ← Eng.node e i
-  let s : _root_.Sum (Std.U32 × Eng × (alloc.vec.Vec Std.U32 → alloc.vec.Vec
-    Std.U32)) (_root_.Sum ((alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) ×
-    Eng × Std.U32) ((core.result.Result Std.U32 Std.U32) × Eng × (alloc.vec.Vec
-    Std.U32 → alloc.vec.Vec Std.U32))) ←
+  let s : _root_.Sum (_ × _ × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32))
+    (_root_.Sum ((alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) × _ × _)
+    ((core.result.Result Std.U32 Std.U32) × _ × _)) ←
     match o with
     | none => ok (Sum.inr (Sum.inr (core.result.Result.Err i, e, back)))
     | some n =>

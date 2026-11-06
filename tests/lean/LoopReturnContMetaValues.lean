@@ -179,11 +179,9 @@ def Engine.eval_let_loop.body
     Engine)))
   := do
   let (r, self1, eval_back) ← Engine.eval e env value
-  let s : _root_.Sum ((core.result.Result Std.U32 Unit) × Engine × (Slice Node)
-    × Std.U32 × (Engine → (Terms × Store)) × (Terms → Store → (Terms × Store)))
-    (_root_.Sum ((Terms → Store → (Terms × Store)) × Engine × Std.U32 × Std.U32
-    × Std.U32) ((core.result.Result Std.U32 Unit) × Engine × (Engine → (Terms ×
-    Store)))) ←
+  let s : _root_.Sum (_ × _ × _ × _ × (Engine → (Terms × Store)) × (Terms →
+    Store → (Terms × Store))) (_root_.Sum ((Terms → Store → (Terms × Store)) ×
+    _ × _ × _ × _) (_ × _ × (Engine → (Terms × Store)))) ←
     match r with
     | core.result.Result.Ok val =>
       do

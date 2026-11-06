@@ -764,6 +764,152 @@ let lean_binder_needs_type (x : tpat) (body : texpr) : bool =
       with Utils.Found -> true)
   | _ -> false
 
+(** The annotation of the type of a sum bound by a let-binding in Lean (see
+    {!extract_lets}): the parts of the type which every value the bound
+    expression delivers there determines are left to Lean ([_]). *)
+type sum_annot =
+  | AnnotInferred
+  | AnnotTy of ty
+  | AnnotSum of sum_annot * sum_annot
+  | AnnotTuple of sum_annot list
+
+(** Whether Lean infers the type of an expression without an expected type *)
+let rec texpr_is_self_typed (e : texpr) : bool =
+  match e.e with
+  | FVar _ | Const _ -> true
+  | StructUpdate { init = Some x; _ } -> texpr_is_self_typed x
+  | Meta (_, e) -> texpr_is_self_typed e
+  | _ -> (
+      match opt_dest_tuple_texpr e with
+      | Some el -> List.for_all texpr_is_self_typed el
+      | None -> (
+          match destruct_apps e with
+          | { e = Qualif { id = Proj _; _ }; _ }, [ x ] -> texpr_is_self_typed x
+          | _ -> false))
+
+(** The values a let-bound expression delivers: [None] for an expression which
+    isn't a value (for instance a function call); the failures deliver
+    nothing *)
+let rec texpr_delivered_values ~(monadic : bool) (e : texpr) :
+    texpr option list =
+  match e.e with
+  | Let (_, _, _, next) -> texpr_delivered_values ~monadic next
+  | Switch (_, If (e0, e1)) ->
+      texpr_delivered_values ~monadic e0 @ texpr_delivered_values ~monadic e1
+  | Switch (_, Match branches) ->
+      List.concat_map
+        (fun (b : match_branch) -> texpr_delivered_values ~monadic b.branch)
+        branches
+  | Meta (_, e) -> texpr_delivered_values ~monadic e
+  | _ when not monadic -> [ Some e ]
+  | _ -> (
+      match opt_destruct_ret e with
+      | Some v -> [ Some v ]
+      | None -> (
+          match destruct_apps e with
+          | ( {
+                e =
+                  Qualif
+                    {
+                      id = AdtCons { adt_id = TBuiltin TResult; variant_id };
+                      _;
+                    };
+                _;
+              },
+              _ )
+            when variant_id = Some result_fail_id -> []
+          | _ -> [ None ]))
+
+(** Compute the annotation of type [ty], at a position where the bound
+    expression delivers the values [values] *)
+let rec compute_sum_annot (ty : ty) (values : texpr option list) : sum_annot =
+  let values' = List.filter_map (fun x -> x) values in
+  if
+    values <> []
+    && List.length values' = List.length values
+    && List.for_all texpr_is_self_typed values'
+  then AnnotInferred
+  else if List.length values' <> List.length values then AnnotTy ty
+  else
+    let annot =
+      match ty with
+      | TAdt (TBuiltin TSum, { types = [ left; right ]; _ }) ->
+          let injected =
+            List.map
+              (fun (v : texpr) ->
+                match destruct_apps v with
+                | ( {
+                      e =
+                        Qualif
+                          {
+                            id =
+                              AdtCons
+                                { adt_id = TBuiltin TSum; variant_id = Some id };
+                            _;
+                          };
+                      _;
+                    },
+                    [ x ] ) -> Some (id, x)
+                | _ -> None)
+              values'
+          in
+          if List.mem None injected then AnnotTy ty
+          else
+            let side id =
+              List.filter_map
+                (function
+                  | Some (id', x) when id' = id -> Some (Some x)
+                  | _ -> None)
+                injected
+            in
+            AnnotSum
+              ( compute_sum_annot left (side sum_left_id),
+                compute_sum_annot right (side sum_right_id) )
+      | TAdt (TTuple, { types; _ }) when List.length types > 1 ->
+          let tuples = List.map opt_dest_tuple_texpr values' in
+          if List.mem None tuples then AnnotTy ty
+          else
+            let tuples = List.map Option.get tuples in
+            AnnotTuple
+              (List.mapi
+                 (fun i ty ->
+                   compute_sum_annot ty
+                     (List.map (fun el -> Some (List.nth el i)) tuples))
+                 types)
+      | _ -> AnnotTy ty
+    in
+    match annot with
+    | AnnotSum (AnnotInferred, AnnotInferred) -> AnnotInferred
+    | AnnotTuple annots when List.for_all (( = ) AnnotInferred) annots ->
+        AnnotInferred
+    | _ -> annot
+
+let rec extract_sum_annot (span : Meta.span) (ctx : extraction_ctx)
+    (fmt : F.formatter) ~(inside : bool) (annot : sum_annot) : unit =
+  match annot with
+  | AnnotInferred -> F.pp_print_string fmt "_"
+  | AnnotTy ty ->
+      extract_ty span ctx fmt TypeDeclId.TreeSet.empty ~inside ty
+  | AnnotSum (left, right) ->
+      if inside then F.pp_print_string fmt "(";
+      F.pp_print_string fmt
+        (ctx_get_type (Some span) (TBuiltin TSum) ctx);
+      F.pp_print_space fmt ();
+      extract_sum_annot span ctx fmt ~inside:true left;
+      F.pp_print_space fmt ();
+      extract_sum_annot span ctx fmt ~inside:true right;
+      if inside then F.pp_print_string fmt ")"
+  | AnnotTuple annots ->
+      F.pp_print_string fmt "(";
+      Collections.List.iter_link
+        (fun () ->
+          F.pp_print_space fmt ();
+          F.pp_print_string fmt "×";
+          F.pp_print_space fmt ())
+        (extract_sum_annot span ctx fmt ~inside:true)
+        annots;
+      F.pp_print_string fmt ")"
+
 (** - [inside_do]: [true] if we are inside a do block. In Lean, controls whether
       we can print let-bindings or if we need to insert a [do] first. *)
 let rec extract_texpr (span : Meta.span) (ctx : extraction_ctx)
@@ -1439,14 +1585,20 @@ and extract_lets (span : Meta.span) (ctx : extraction_ctx) (fmt : F.formatter)
               F.pp_print_space fmt ());
             let ctx = extract_tpat span ctx fmt ~is_let:true ~inside:false lv in
             (* Lean matches on a sum only once its type is fully known, while
-               the expressions building it often leave one side unknown: we
-               annotate the variable ([let x : ty ← ...]) *)
+               the expressions building it often leave parts of it unknown: we
+               annotate the variable with those parts ([let x : ty ← ...]) *)
             (match (backend (), lv.pat, lv.ty) with
-            | Lean, POpen _, TAdt (TBuiltin TSum, _) ->
-                F.pp_print_space fmt ();
-                F.pp_print_string fmt ":";
-                F.pp_print_space fmt ();
-                extract_ty span ctx fmt TypeDeclId.TreeSet.empty ~inside:false lv.ty
+            | Lean, POpen _, TAdt (TBuiltin TSum, _) -> (
+                match
+                  compute_sum_annot lv.ty
+                    (texpr_delivered_values ~monadic re)
+                with
+                | AnnotInferred -> ()
+                | annot ->
+                    F.pp_print_space fmt ();
+                    F.pp_print_string fmt ":";
+                    F.pp_print_space fmt ();
+                    extract_sum_annot span ctx fmt ~inside:false annot)
             | _ -> ());
             F.pp_print_space fmt ();
             let eq =

@@ -40,7 +40,7 @@ inductive Node where
 /-- [join_shared_borrow_instances::node_eq]:
     Source: 'tests/src/join-shared-borrow-instances.rs', lines 24:0-29:1 -/
 def node_eq (a : Node) (b : Node) : Result Bool := do
-  let s : _root_.Sum (Std.U32 × Std.U32) Unit ←
+  let s ←
     match a with
     | Node.Bound a1 =>
       match b with
@@ -55,7 +55,7 @@ def node_eq (a : Node) (b : Node) : Result Bool := do
       | Node.Sort b1 => ok (Sum.inl (a1, b1))
       | _ => ok (Sum.inr ())
     | _ => ok (Sum.inr ())
-  let s1 : _root_.Sum Unit Bool ←
+  let s1 ←
     match s with
     | Sum.inl p =>
       do
@@ -81,8 +81,7 @@ def same
     let i1 ← lift (UScalar.cast .Usize b)
     let right ←
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Node) nodes i1
-    let s : _root_.Sum (Std.U32 × Std.U32 × Std.U32 × Std.U32) (_root_.Sum Bool
-      (Node × Node)) ←
+    let s ←
       match left with
       | Node.App x y =>
         match right with
@@ -129,7 +128,7 @@ def same
           ok (Sum.inr (Sum.inl b2))
         | _ => ok (Sum.inr (Sum.inr (left, right)))
       | _ => ok (Sum.inr (Sum.inr (left, right)))
-    let s1 : _root_.Sum (Node × Node) Bool ←
+    let s1 ←
       match s with
       | Sum.inl t =>
         do

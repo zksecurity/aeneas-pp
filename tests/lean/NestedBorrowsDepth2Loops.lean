@@ -52,9 +52,8 @@ def Engine.eval_nonzero_loop.body
     Std.U32))))
   := do
   let (r, self1, eval_back) ← Engine.eval self e
-  let s : _root_.Sum (Std.U32 × Engine) (_root_.Sum ((Engine → (Std.U32 ×
-    Std.U32)) × Engine × Std.U32) ((core.result.Result Std.U32 Unit) × Engine ×
-    (Engine → (Std.U32 × Std.U32)))) ←
+  let s : _root_.Sum _ (_root_.Sum ((Engine → (Std.U32 × Std.U32)) × _ × _) (_
+    × _ × (Engine → (Std.U32 × Std.U32)))) ←
     match r with
     | core.result.Result.Ok val =>
       if val = 0#u32
@@ -117,9 +116,8 @@ def Engine.run_loop.body
     Std.U32))))
   := do
   let (r, self, eval_back) ← Engine.eval e n
-  let s : _root_.Sum (Std.U32 × Engine) (_root_.Sum ((Std.U32 → Std.U32 →
-    (Std.U32 × Std.U32)) × Engine × Std.U32) ((core.result.Result Std.U32 Unit)
-    × Engine × (Engine → (Std.U32 × Std.U32)))) ←
+  let s : _root_.Sum _ (_root_.Sum ((Std.U32 → Std.U32 → (Std.U32 × Std.U32)) ×
+    _ × _) (_ × _ × (Engine → (Std.U32 × Std.U32)))) ←
     match r with
     | core.result.Result.Ok val =>
       do
@@ -184,9 +182,8 @@ def run_swap_loop.body
     Engine) ((core.result.Result Std.U32 Unit) × Std.U32 × Std.U32))
   := do
   let (r, e1, eval_back) ← Engine.eval e n
-  let s : _root_.Sum (Std.U32 × Engine × (Std.U32 → Std.U32 → (Std.U32 ×
-    Std.U32))) (_root_.Sum ((Std.U32 → Std.U32 → (Std.U32 × Std.U32)) × Std.U32
-    × Engine) ((core.result.Result Std.U32 Unit) × Std.U32 × Std.U32)) ←
+  let s : _root_.Sum (_ × Engine × (Std.U32 → Std.U32 → (Std.U32 × Std.U32)))
+    (_root_.Sum ((Std.U32 → Std.U32 → (Std.U32 × Std.U32)) × _ × Engine) _) ←
     match r with
     | core.result.Result.Ok val =>
       do

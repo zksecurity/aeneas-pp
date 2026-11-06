@@ -44,7 +44,7 @@ def chain
   (v0 : V) (v1 : V) (v2 : V) (v3 : V) (v4 : V) (v5 : V) :
   Result (core.result.Result Std.U32 Std.U32)
   := do
-  let s : _root_.Sum Std.U32 (core.result.Result Std.U32 Std.U32) ←
+  let s ←
     match v0 with
     | V.A x =>
       do
@@ -149,7 +149,7 @@ def chain
     Source: 'tests/src/switch-early-returns.rs', lines 32:0-42:1
     Visibility: public -/
 def early_return_if (x : Std.U32) (b : Bool) (c : Bool) : Result Std.U32 := do
-  let s : _root_.Sum Std.U32 Std.U32 ←
+  let s ←
     if b
     then if c
          then ok (Sum.inr 0#u32)
@@ -167,7 +167,7 @@ def early_return_if (x : Std.U32) (b : Bool) (c : Bool) : Result Std.U32 := do
     Source: 'tests/src/switch-early-returns.rs', lines 45:0-56:1
     Visibility: public -/
 def nested (v : V) (w : V) : Result (core.result.Result Std.U32 Std.U32) := do
-  let s : _root_.Sum Std.U32 (core.result.Result Std.U32 Std.U32) ←
+  let s ←
     match v with
     | V.A x =>
       match w with
@@ -205,7 +205,7 @@ def update_then_error
   Result ((core.result.Result Std.U32 Std.U32) × Std.U32)
   := do
   let acc1 ← acc + 1#u32
-  let s : _root_.Sum Std.U32 ((core.result.Result Std.U32 Std.U32) × Std.U32) ←
+  let s ←
     match v with
     | V.A x =>
       do
@@ -230,7 +230,7 @@ def update_then_error
     Source: 'tests/src/switch-early-returns.rs', lines 72:0-82:1
     Visibility: public -/
 def panic_or_return (v : V) : Result Std.U32 := do
-  let s : _root_.Sum Std.U32 Std.U32 ←
+  let s ←
     match v with
     | V.A x => ok (Sum.inl x)
     | V.B x => do
@@ -272,9 +272,8 @@ def struct_calls
   Result ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec Std.U32) ×
     (alloc.vec.Vec Std.U32))
   := do
-  let s1 : _root_.Sum (Ck × Std.U32 × (Ck → ((alloc.vec.Vec Std.U32) ×
-    (alloc.vec.Vec Std.U32)))) ((core.result.Result Std.U32 Std.U32) ×
-    (alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32)) ←
+  let s1 : _root_.Sum (Ck × _ × (Ck → ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec
+    Std.U32)))) _ ←
     match v with
     | V.A x =>
       do

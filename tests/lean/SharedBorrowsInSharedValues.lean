@@ -30,8 +30,7 @@ def all_nonzero_loop.body
     Unit))
   := do
   let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
-  let s : _root_.Sum Unit (_root_.Sum (core.slice.iter.Iter Std.U32)
-    (core.result.Result Unit Unit)) ←
+  let s : _root_.Sum _ (_root_.Sum _ (core.result.Result Unit Unit)) ←
     match o with
     | none => ok (Sum.inr (Sum.inr (core.result.Result.Ok ())))
     | some x =>

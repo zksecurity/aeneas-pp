@@ -87,10 +87,9 @@ def Checker.telescope_loop.body
   let n ←
     alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Node)
       self.t.nodes i
-  let s : _root_.Sum (Checker × (Checker → Terms)) (_root_.Sum ((Checker →
-    Terms) × Checker × Std.U32 × T1 × (alloc.vec.Vec Std.U32) × Std.U32)
-    ((core.result.Result ((alloc.vec.Vec Std.U32) × Std.U32) Unit) × Checker ×
-    (Checker → Terms))) ←
+  let s : _root_.Sum (_ × (Checker → Terms)) (_root_.Sum ((Checker → Terms) × _
+    × _ × _ × _ × _) ((core.result.Result ((alloc.vec.Vec Std.U32) × Std.U32)
+    Unit) × _ × (Checker → Terms))) ←
     match n with
     | Node.Pi a b =>
       do
@@ -114,11 +113,8 @@ def Checker.telescope_loop.body
         ok (Sum.inr (Sum.inr (core.result.Result.Err e1, self1,
           fun c => (call_mut_back c).t)))
     | Node.Other => ok (Sum.inl (self, fun (c : Checker) => c.t))
-  let s1 : _root_.Sum ((core.result.Result ((alloc.vec.Vec Std.U32) × Std.U32)
-    Unit) × Checker × (Checker → Terms)) (_root_.Sum ((Checker → Terms) ×
-    Checker × Std.U32 × T1 × (alloc.vec.Vec Std.U32) × Std.U32)
-    ((core.result.Result ((alloc.vec.Vec Std.U32) × Std.U32) Unit) × Checker ×
-    (Terms → Terms))) ←
+  let s1 : _root_.Sum _ (_root_.Sum _ ((core.result.Result ((alloc.vec.Vec
+    Std.U32) × Std.U32) Unit) × _ × (Terms → Terms))) ←
     match s with
     | Sum.inl p =>
       let (self1, back1) := p
@@ -237,12 +233,10 @@ def Checker.telescope01generateclosure_loop.body
   let n ←
     alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Node)
       self.t.nodes i2
-  let s : _root_.Sum (Checker × generate.closure × (generate.closure → Bool) ×
-    (Checker → Terms)) (_root_.Sum ((Checker → Terms) × (generate.closure →
-    Bool) × Checker × Std.U32 × generate.closure × (alloc.vec.Vec Std.U32) ×
-    Std.U32 × Std.Usize) ((core.result.Result ((alloc.vec.Vec Std.U32) ×
-    Std.U32) Unit) × Checker × generate.closure × (generate.closure → Bool) ×
-    (Checker → Terms))) ←
+  let s : _root_.Sum (_ × _ × (generate.closure → Bool) × (Checker → Terms))
+    (_root_.Sum ((Checker → Terms) × (generate.closure → Bool) × _ × _ × _ × _
+    × _ × _) ((core.result.Result ((alloc.vec.Vec Std.U32) × Std.U32) Unit) × _
+    × _ × (generate.closure → Bool) × (Checker → Terms))) ←
     match n with
     | Node.Pi a b =>
       do
@@ -274,12 +268,8 @@ def Checker.telescope01generateclosure_loop.body
       ok (Sum.inl (self, next,
         fun (c : generate.closure) => let (_, _, b) := c
                                       b, fun (c : Checker) => c.t))
-  let s1 : _root_.Sum ((core.result.Result ((alloc.vec.Vec Std.U32) × Std.U32)
-    Unit) × Checker × generate.closure × (generate.closure → Bool) × (Checker →
-    Terms)) (_root_.Sum ((Checker → Terms) × (generate.closure → Bool) ×
-    Checker × Std.U32 × generate.closure × (alloc.vec.Vec Std.U32) × Std.U32 ×
-    Std.Usize) ((core.result.Result ((alloc.vec.Vec Std.U32) × Std.U32) Unit) ×
-    Checker × Bool × (Terms → Terms) × (Bool → Bool))) ←
+  let s1 : _root_.Sum _ (_root_.Sum _ ((core.result.Result ((alloc.vec.Vec
+    Std.U32) × Std.U32) Unit) × _ × _ × (Terms → Terms) × (Bool → Bool))) ←
     match s with
     | Sum.inl t =>
       let (self1, next1, back2, back3) := t

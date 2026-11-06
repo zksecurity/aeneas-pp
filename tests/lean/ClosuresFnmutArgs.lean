@@ -39,11 +39,10 @@ def Eng.telescope_loop.body
     Std.U32 × T1 × Std.U32 × Std.U32) ((core.result.Result Std.U32 Std.U32) ×
     Eng × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)))
   := do
-  let s : _root_.Sum ((core.result.Result Std.U32 Std.U32) × Eng × (Eng →
+  let s : _root_.Sum ((core.result.Result Std.U32 Std.U32) × _ × (Eng →
     alloc.vec.Vec Std.U32)) (_root_.Sum ((alloc.vec.Vec Std.U32 → alloc.vec.Vec
-    Std.U32) × Eng × Std.U32 × T1 × Std.U32 × Std.U32) ((core.result.Result
-    Std.U32 Std.U32) × Eng × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)))
-    ←
+    Std.U32) × _ × _ × _ × _ × _) ((core.result.Result Std.U32 Std.U32) × _ ×
+    _)) ←
     if i < n
     then
       do

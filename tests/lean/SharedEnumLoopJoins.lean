@@ -78,7 +78,7 @@ def count_until_loop.body
   (t : F) (x : Std.U32) (i : Std.U32) :
   Result (ControlFlow (Std.U32 × Std.U32) Std.U32)
   := do
-  let s : _root_.Sum Std.U32 (Std.U32 × Std.U32) ←
+  let s ←
     if i != 0#u32
     then
       do
@@ -117,7 +117,7 @@ def count_until (t : F) (x : Std.U32) (i : Std.U32) : Result Std.U32 := do
 @[rust_loop_body]
 def has_a_loop.body
   (t : F) (i : Std.U32) : Result (ControlFlow Std.U32 Bool) := do
-  let s : _root_.Sum Bool Std.U32 ←
+  let s ←
     if i != 0#u32
     then
       do

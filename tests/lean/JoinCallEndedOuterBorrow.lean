@@ -133,13 +133,11 @@ def verify
       verify.closure.Insts.CoreOpsFunctionFnMutTupleShared2Shared0DeclBool i
       actual
   let r ← core.option.Option.ok_or o (toStr "unexpected")
-  let s : _root_.Sum (core.result.Result Std.U32 String) (core.result.Result
-    Std.U32 String) ←
+  let s : _root_.Sum (core.result.Result Std.U32 String) _ ←
     match r with
     | core.result.Result.Ok val =>
       do
-      let s1 : _root_.Sum Unit (_root_.Sum (core.result.Result Std.U32 String)
-        (core.result.Result Std.U32 String)) ←
+      let s1 ←
         match actual.kind with
         | Kind.Rec ar ak =>
           match val.kind with
@@ -147,7 +145,7 @@ def verify
             do
             let b ←
               core.cmp.impls.PartialEqShared.ne core.cmp.PartialEqBool ak ek
-            let s2 : _root_.Sum Unit (_root_.Sum (core.result.Result Std.U32
+            let s2 : _root_.Sum _ (_root_.Sum (core.result.Result Std.U32
               String) (core.result.Result Std.U32 String)) ←
               if b
               then ok (Sum.inl ())
@@ -166,8 +164,7 @@ def verify
                         alloc.string.String.Insts.CoreConvertFromShared0Str
                         (toStr "type")
                     ok (Sum.inr (Sum.inl (core.result.Result.Err s3)))
-            let s3 : _root_.Sum (core.result.Result Std.U32 String)
-              (core.result.Result Std.U32 String) ←
+            let s3 : _root_.Sum (core.result.Result Std.U32 String) _ ←
               match s2 with
               | Sum.inl _ =>
                 do

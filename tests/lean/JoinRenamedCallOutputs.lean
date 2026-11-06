@@ -78,8 +78,8 @@ def Input.reach.closure.Insts.CoreOpsFunctionFnMutTupleU32Tuple.call_mut
     Visibility: public -/
 def Input.reach
   (self : Input) : Result ((core.result.Result Std.U32 Unit) × Input) := do
-  let s : _root_.Sum ((core.result.Result Std.U32 Unit) × Input) (Input ×
-    Std.U32 × (Std.U32 → Std.U32)) ←
+  let s : _root_.Sum ((core.result.Result Std.U32 Unit) × _) (_ × _ × (Std.U32
+    → Std.U32)) ←
     match self.node with
     | Node.One a =>
       do
@@ -106,8 +106,7 @@ def Input.reach
       | core.result.Result.Err e =>
         ok (Sum.inl (core.result.Result.Err e, self1))
     | Node.Leaf => ok (Sum.inr (self, 0#u32, fun i => i))
-  let s1 : _root_.Sum (Input × Std.U32 × (Std.U32 → Std.U32))
-    ((core.result.Result Std.U32 Unit) × Input) ←
+  let s1 ←
     match s with
     | Sum.inl p => ok (Sum.inr p)
     | Sum.inr t => ok (Sum.inl t)

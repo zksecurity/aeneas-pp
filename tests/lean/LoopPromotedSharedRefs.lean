@@ -62,8 +62,7 @@ def first_quote_loop.body
     core.cmp.PartialEq.ne.trait_default
       (core.option.Option.Insts.CoreCmpPartialEqOption
       (core.cmp.PartialEqShared core.cmp.PartialEqU8)) o (some 34#u8)
-  let s : _root_.Sum Std.Usize (_root_.Sum Std.Usize ((core.result.Result
-    Std.U32 Unit) × Std.Usize)) ←
+  let s : _root_.Sum _ (_root_.Sum _ ((core.result.Result Std.U32 Unit) × _)) ←
     if b
     then ok (Sum.inr (Sum.inr (core.result.Result.Err (), cursor)))
     else
@@ -116,7 +115,7 @@ def count_until_loop.body
     core.cmp.PartialEq.ne.trait_default
       (core.option.Option.Insts.CoreCmpPartialEqOption
       (core.cmp.PartialEqShared core.cmp.PartialEqU8)) o (some c)
-  let s : _root_.Sum Unit (Std.U8 × Std.Usize) ←
+  let s ←
     if b
     then
       let i1 := Slice.len bytes

@@ -272,7 +272,7 @@ def two_borrowers
     Source: 'tests/src/join-dead-locals.rs', lines 36:0-45:1
     Visibility: public -/
 def maybe_owned (v : Slice Std.U8) (b : Bool) : Result Std.Usize := do
-  let s : _root_.Sum Unit Std.Usize ←
+  let s ←
     if b
     then
       do

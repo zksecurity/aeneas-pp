@@ -97,9 +97,7 @@ def steps_loop0.body
   let (o, iter1) ←
     core.iter.range.IteratorRange.next core.iter.range.StepU32 iter
   let s : _root_.Sum ((core.result.Result Std.U32 Unit) × Engine × (Engine →
-    Std.U32)) (_root_.Sum ((Engine → Std.U32) × Engine × Std.U32 × Std.U32 ×
-    Std.U32 × (core.ops.range.Range Std.U32) × Std.U32) (Std.U32 × Engine ×
-    (Std.U32 → Std.U32))) ←
+    Std.U32)) (_root_.Sum ((Engine → Std.U32) × _ × _ × _ × _ × _ × _) _) ←
     match o with
     | none =>
       do
@@ -122,10 +120,7 @@ def steps_loop0.body
           val, iter1, i1)))
       | core.result.Result.Err _ =>
         ok (Sum.inl (r, e1, fun e2 => (step_back e2).total))
-  let s1 : _root_.Sum (Std.U32 × Engine × (Std.U32 → Std.U32)) (_root_.Sum
-    ((Engine → Std.U32) × Engine × Std.U32 × Std.U32 × Std.U32 ×
-    (core.ops.range.Range Std.U32) × Std.U32) ((core.result.Result Std.U32
-    Unit) × Engine × (Std.U32 → Std.U32))) ←
+  let s1 : _root_.Sum _ (_root_.Sum _ (_ × _ × (Std.U32 → Std.U32))) ←
     match s with
     | Sum.inl t =>
       let (r, e1, back1) := t

@@ -57,7 +57,7 @@ def str_eq_then_branch (a : Str) (c : Bool) : Result Std.U32 := do
 def str_match_then_branches
   (kind : Str) (n : Std.U32) : Result (Option Std.U32) := do
   let b ← Str.Insts.CoreCmpPartialEqStr.eq kind (toStr "type")
-  let s : _root_.Sum Std.U32 (Option Std.U32) ←
+  let s : _root_.Sum _ (Option Std.U32) ←
     if b
     then ok (Sum.inl 1#u32)
     else

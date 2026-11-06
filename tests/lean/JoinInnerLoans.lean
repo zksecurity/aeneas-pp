@@ -35,7 +35,7 @@ def Table.contains_loop.body
   Result (ControlFlow (Table × Std.U64 × Std.Usize) Bool)
   := do
   let i1 := alloc.vec.Vec.len self.keys
-  let s : _root_.Sum Unit (_root_.Sum (Table × Std.U64 × Std.Usize) Bool) ←
+  let s ←
     if i < i1
     then
       do

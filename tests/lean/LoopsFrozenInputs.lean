@@ -43,8 +43,7 @@ def Table.get_loop.body
   let (k, v) ←
     alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Std.U64 ×
       Std.U32)) t.slots i
-  let s : _root_.Sum (Option Std.U32) (Table × Std.U64 × Std.Usize × Std.Usize)
-    ←
+  let s : _root_.Sum (Option Std.U32) _ ←
     if k = key
     then ok (Sum.inl (some v))
     else

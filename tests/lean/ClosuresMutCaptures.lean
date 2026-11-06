@@ -109,10 +109,10 @@ def Eng.telescope_loop.body
     Std.U32 × T1 × Std.U32 × Std.U32) ((core.result.Result Std.U32 Unit) × Eng
     × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)))
   := do
-  let s : _root_.Sum ((core.result.Result Std.U32 Unit) × Eng × (Eng →
+  let s : _root_.Sum ((core.result.Result Std.U32 Unit) × _ × (Eng →
     alloc.vec.Vec Std.U32)) (_root_.Sum ((alloc.vec.Vec Std.U32 → alloc.vec.Vec
-    Std.U32) × Eng × Std.U32 × T1 × Std.U32 × Std.U32) ((core.result.Result
-    Std.U32 Unit) × Eng × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32))) ←
+    Std.U32) × _ × _ × _ × _ × _) ((core.result.Result Std.U32 Unit) × _ × _))
+    ←
     if i < n
     then
       do
@@ -210,12 +210,10 @@ def Eng.telescope01countclosure_loop.body
     Std.U32 Unit) × Eng × Bool × (alloc.vec.Vec Std.U32 → alloc.vec.Vec
     Std.U32)))
   := do
-  let s : _root_.Sum ((core.result.Result Std.U32 Unit) × Eng ×
-    Eng.count.closure × (Eng.count.closure → Bool) × (Eng → alloc.vec.Vec
-    Std.U32)) (_root_.Sum ((alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) ×
-    (Bool → Bool) × Eng × Std.U32 × Bool × Std.U32 × Std.U32)
-    ((core.result.Result Std.U32 Unit) × Eng × Bool × (alloc.vec.Vec Std.U32 →
-    alloc.vec.Vec Std.U32) × (Bool → Bool))) ←
+  let s : _root_.Sum ((core.result.Result Std.U32 Unit) × _ × _ ×
+    (Eng.count.closure → Bool) × (Eng → alloc.vec.Vec Std.U32)) (_root_.Sum
+    ((alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) × (Bool → Bool) × _ × _ ×
+    _ × _ × _) ((core.result.Result Std.U32 Unit) × _ × _ × _ × _)) ←
     if i < n
     then
       do

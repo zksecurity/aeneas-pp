@@ -49,8 +49,8 @@ def verify
   (t : Std.U32) (b : Bool) :
   Result ((core.result.Result Unit Unit) × Std.U32)
   := do
-  let s : _root_.Sum (Checker × (Checker → Std.U32)) ((core.result.Result Unit
-    Unit) × Checker × (Checker → Std.U32)) ←
+  let s : _root_.Sum (Checker × (Checker → Std.U32)) (_ × _ × (Checker →
+    Std.U32)) ←
     if b
     then
       do
@@ -61,7 +61,7 @@ def verify
         ok (Sum.inr (r, ck, fun c => (infer_back c).t))
     else ok (Sum.inl (({ t } : Checker), fun (c : Checker) => c.t))
   let s1 : _root_.Sum ((core.result.Result Unit Unit) × Checker × (Checker →
-    Std.U32)) ((core.result.Result Unit Unit) × Std.U32) ←
+    Std.U32)) ((core.result.Result Unit Unit) × _) ←
     match s with
     | Sum.inl p =>
       do
