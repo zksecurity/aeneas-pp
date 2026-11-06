@@ -33,13 +33,14 @@ def infer
   (ck : Checker) :
   Result ((core.result.Result Unit Unit) × Checker × (Checker → Checker))
   := do
-  let (r, i) ←
+  let (r, c) ←
     if ck.t > 10#u32
-    then ok (core.result.Result.Err (), ck.t)
-    else do
-         let i1 ← ck.t + 1#u32
-         ok (core.result.Result.Ok (), i1)
-  ok (r, { t := i }, fun ck1 => ck1)
+    then ok (core.result.Result.Err (), ck)
+    else
+      do
+      let i ← ck.t + 1#u32
+      ok (core.result.Result.Ok (), ({ t := i } : Checker))
+  ok (r, c, fun ck1 => ck1)
 
 /-- [join_common_dummies::verify]:
     Source: 'tests/src/join-common-dummies.rs', lines 22:0-29:1

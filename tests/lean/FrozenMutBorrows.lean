@@ -125,15 +125,14 @@ def Eng.iota
   := do
   let r ← Eng.decl self n
   let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-  let s : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) × Eng × Env
-    × (Eng → alloc.vec.Vec Std.U32)) ((core.result.Result (Option Std.U32)
-    Std.U32) × (alloc.vec.Vec Std.U32) × Env × Env × (alloc.vec.Vec Std.U32 →
-    alloc.vec.Vec Std.U32)) ←
+  let s : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) × Eng ×
+    (Eng → alloc.vec.Vec Std.U32)) ((core.result.Result (Option Std.U32)
+    Std.U32) × Eng × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)) ←
     match cf with
     | core.ops.control_flow.ControlFlow.Continue val =>
       do
       let s1 : _root_.Sum (Eng × Std.U32 × (Eng → alloc.vec.Vec Std.U32))
-        ((core.result.Result (Option Std.U32) Std.U32) × Eng × Env × (Eng →
+        ((core.result.Result (Option Std.U32) Std.U32) × Eng × (Eng →
         alloc.vec.Vec Std.U32)) ←
         if k
         then
@@ -144,41 +143,39 @@ def Eng.iota
           | core.ops.control_flow.ControlFlow.Continue val1 =>
             match val1 with
             | none =>
-              ok (Sum.inr (core.result.Result.Ok none, self1, self.env,
+              ok (Sum.inr (core.result.Result.Ok none, self1,
                 fun e => (kc_back e).t))
             | some c => ok (Sum.inl (self1, c, fun e => (kc_back e).t))
           | core.ops.control_flow.ControlFlow.Break residual =>
             let r2 ←
               core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
                 (Option Std.U32) (core.convert.FromSame Std.U32) residual
-            ok (Sum.inr (r2, self1, self.env, fun e => (kc_back e).t))
+            ok (Sum.inr (r2, self1, fun e => (kc_back e).t))
         else ok (Sum.inl (self, val, fun (e : Eng) => let ⟨ v, _ ⟩ := e
                                                       v))
       match s1 with
       | Sum.inl t =>
         let (self1, major, back) := t
         let i ← major + val
-        ok (Sum.inr (core.result.Result.Ok (some i), self1.t, self1.env,
-          self.env, fun v => back { self1 with t := v }))
+        ok (Sum.inr (core.result.Result.Ok (some i), self1,
+          fun v => back { self1 with t := v }))
       | Sum.inr t => ok (Sum.inl t)
     | core.ops.control_flow.ControlFlow.Break residual =>
       do
       let r1 ←
         core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
           (Option Std.U32) (core.convert.FromSame Std.U32) residual
-      ok (Sum.inl (r1, self, self.env, fun (e : Eng) => let ⟨ v, _ ⟩ := e
-                                                        v))
-  let (r1, v, e, back) ←
+      ok (Sum.inl (r1, self, fun (e : Eng) => let ⟨ v, _ ⟩ := e
+                                              v))
+  let (r1, e, back) ←
     match s with
     | Sum.inl t =>
-      let (r2, self1, _, back1) := t
-      ok (r2, self1.t, self1.env, fun v1 => back1 { self1 with t := v1 })
-    | Sum.inr t => ok (let (r2, v1, e1, _, f) := t
-                       (r2, v1, e1, f))
-  let back'a :=
-    fun (self1 : Eng) => let v1 := back self1.t
-                         { self with t := v1 }
-  ok (r1, { t := v, env := e }, back'a)
+      let (r2, self1, back1) := t
+      ok (r2, self1, fun v => back1 { self1 with t := v })
+    | Sum.inr t => ok t
+  let back'a := fun (self1 : Eng) => let v := back self1.t
+                                     { self with t := v }
+  ok (r1, e, back'a)
 
 /-- [frozen_mut_borrows::Store]
     Source: 'tests/src/frozen-mut-borrows.rs', lines 72:0-74:1
@@ -286,24 +283,21 @@ def Eval.iota
     | core.ops.control_flow.ControlFlow.Continue val =>
       do
       let s : _root_.Sum (Eval × Std.U32 × (Eval → ((alloc.vec.Vec Std.U32) ×
-        Store))) ((core.result.Result (Option Std.U32) Std.U32) ×
-        (alloc.vec.Vec Std.U32) × Env × Store × Std.U32 × (alloc.vec.Vec
-        Std.U32 → Store → ((alloc.vec.Vec Std.U32) × Store))) ←
+        Store))) ((core.result.Result (Option Std.U32) Std.U32) × Eval ×
+        (alloc.vec.Vec Std.U32 → Store → ((alloc.vec.Vec Std.U32) × Store))) ←
         if k
         then
           do
           let (r2, self2, kc_back) ← Eval.kc self val
           let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r2
           let s1 : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) ×
-            Eval × (core.ops.control_flow.ControlFlow (core.result.Result Never
-            Std.U32) (Option Std.U32)) × (Eval → ((alloc.vec.Vec Std.U32) ×
-            Store))) (Eval × Std.U32 × (Eval → ((alloc.vec.Vec Std.U32) ×
-            Store))) ←
+            Eval × (Eval → ((alloc.vec.Vec Std.U32) × Store))) (Eval × Std.U32
+            × (Eval → ((alloc.vec.Vec Std.U32) × Store))) ←
             match cf1 with
             | core.ops.control_flow.ControlFlow.Continue val1 =>
               match val1 with
               | none =>
-                ok (Sum.inl (core.result.Result.Ok none, self2, cf1,
+                ok (Sum.inl (core.result.Result.Ok none, self2,
                   fun e => let e1 := kc_back e
                            (e1.t, e1.s)))
               | some c =>
@@ -315,23 +309,22 @@ def Eval.iota
               let r3 ←
                 core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
                   (Option Std.U32) (core.convert.FromSame Std.U32) residual
-              ok (Sum.inl (r3, self2, cf1,
+              ok (Sum.inl (r3, self2,
                 fun e => let e1 := kc_back e
                          (e1.t, e1.s)))
           match s1 with
           | Sum.inl t =>
-            let (r3, self3, _, back1) := t
-            ok (Sum.inr (r3, self3.t, self3.env, self3.s, val,
+            let (r3, self3, back1) := t
+            ok (Sum.inr (r3, self3,
               fun v s2 => back1 { self3 with t := v, s := s2 }))
           | Sum.inr t => ok (Sum.inl t)
         else
           ok (Sum.inl (self, val,
             fun (e : Eval) => let ⟨ v, _, s1 ⟩ := e
                               (v, s1)))
-      let s1 : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) ×
-        (alloc.vec.Vec Std.U32) × Env × Store × Std.U32 × (alloc.vec.Vec
-        Std.U32 → Store → ((alloc.vec.Vec Std.U32) × Store)))
-        ((core.result.Result (Option Std.U32) Std.U32) × Eval × Env × (Eval →
+      let s1 : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) × Eval
+        × (alloc.vec.Vec Std.U32 → Store → ((alloc.vec.Vec Std.U32) × Store)))
+        ((core.result.Result (Option Std.U32) Std.U32) × Eval × (Eval →
         ((alloc.vec.Vec Std.U32) × Store))) ←
         match s with
         | Sum.inl t =>
@@ -342,7 +335,7 @@ def Eval.iota
               () (self2, major)
           let s2 : _root_.Sum (Eval × Std.U32 × (Eval → ((alloc.vec.Vec
             Std.U32) × Store))) ((core.result.Result (Option Std.U32) Std.U32)
-            × Eval × Std.U32 × (Eval → ((alloc.vec.Vec Std.U32) × Store))) ←
+            × Eval × (Eval → ((alloc.vec.Vec Std.U32) × Store))) ←
             if b
             then
               ok (Sum.inl (self2, major,
@@ -361,13 +354,13 @@ def Eval.iota
                 let r3 ←
                   core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
                     (Option Std.U32) (core.convert.FromSame Std.U32) residual
-                ok (Sum.inr (r3, self3, major,
+                ok (Sum.inr (r3, self3,
                   fun e => let e1 := eta_back e
                            (e1.t, e1.s)))
           let s3 : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) ×
-            Eval × Std.U32 × (Eval → ((alloc.vec.Vec Std.U32) × Store)))
-            ((core.result.Result (Option Std.U32) Std.U32) × Eval × Env × (Eval
-            → ((alloc.vec.Vec Std.U32) × Store))) ←
+            Eval × (Eval → ((alloc.vec.Vec Std.U32) × Store)))
+            ((core.result.Result (Option Std.U32) Std.U32) × Eval × (Eval →
+            ((alloc.vec.Vec Std.U32) × Store))) ←
             match s2 with
             | Sum.inl t1 =>
               do
@@ -377,7 +370,7 @@ def Eval.iota
               match cf1 with
               | core.ops.control_flow.ControlFlow.Continue val1 =>
                 let i ← val1 + val
-                ok (Sum.inr (core.result.Result.Ok (some i), self4, self.env,
+                ok (Sum.inr (core.result.Result.Ok (some i), self4,
                   fun e =>
                     let e1 := whnf_back e
                     let (v, s4) := back2 { e1 with env := self3.env }
@@ -386,15 +379,15 @@ def Eval.iota
                 let r3 ←
                   core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
                     (Option Std.U32) (core.convert.FromSame Std.U32) residual
-                ok (Sum.inl (r3, self4, major1,
+                ok (Sum.inl (r3, self4,
                   fun e =>
                     let e1 := whnf_back e
                     back2 { e1 with env := self3.env }))
             | Sum.inr t1 => ok (Sum.inl t1)
           match s3 with
           | Sum.inl t1 =>
-            let (r2, self3, major1, back2) := t1
-            ok (Sum.inl (r2, self3.t, self3.env, self3.s, major1,
+            let (r2, self3, back2) := t1
+            ok (Sum.inl (r2, self3,
               fun v s4 =>
                 let (v1, s5) := back2 { self3 with t := v, s := s4 }
                 back1 { self2 with t := v1, s := s5 }))
@@ -402,12 +395,10 @@ def Eval.iota
         | Sum.inr t => ok (Sum.inl t)
       match s1 with
       | Sum.inl t =>
-        let (r2, v, e, s2, _, back1) := t
-        ok (r2, ({ t := v, env := e, s := s2 } : Eval),
-          fun (e1 : Eval) => let ⟨ v1, _, s3 ⟩ := e1
-                             back1 v1 s3)
-      | Sum.inr t => ok (let (r2, e, _, f) := t
-                         (r2, e, f))
+        let (r2, e, back1) := t
+        ok (r2, e, fun (e1 : Eval) => let ⟨ v, _, s2 ⟩ := e1
+                                      back1 v s2)
+      | Sum.inr t => ok t
     | core.ops.control_flow.ControlFlow.Break residual =>
       do
       let r2 ←
@@ -431,21 +422,18 @@ def run_eval_iota
   := do
   let decls ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.U32) 7#u32
   let decls1 ← alloc.vec.Vec.push decls 2#u32
-  let v ←
+  let s ←
     if fill
     then
       do
-      let v1 ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.U32) 1#u32
-      let v2 ← alloc.vec.Vec.push v1 2#u32
-      alloc.vec.Vec.push v2 3#u32
-    else ok (alloc.vec.Vec.new Std.U32)
+      let v ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.U32) 1#u32
+      let v1 ← alloc.vec.Vec.push v 2#u32
+      let v2 ← alloc.vec.Vec.push v1 3#u32
+      ok ({ vals := v2 } : Store)
+    else ok ({ vals := (alloc.vec.Vec.new Std.U32) } : Store)
   let (r, e, iota_back) ←
     Eval.iota
-      {
-        t := (alloc.vec.Vec.new Std.U32),
-        env := { decls := decls1 },
-        s := { vals := v }
-      } n k
+      { t := (alloc.vec.Vec.new Std.U32), env := { decls := decls1 }, s } n k
   let e1 := iota_back e
   let i := alloc.vec.Vec.len e1.t
   let i1 := alloc.vec.Vec.len e1.s.vals

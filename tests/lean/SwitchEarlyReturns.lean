@@ -44,15 +44,14 @@ def chain
   (v0 : V) (v1 : V) (v2 : V) (v3 : V) (v4 : V) (v5 : V) :
   Result (core.result.Result Std.U32 Std.U32)
   := do
-  let s : _root_.Sum (V × Std.U32) (core.result.Result Std.U32 Std.U32) ←
+  let s : _root_.Sum Std.U32 (core.result.Result Std.U32 Std.U32) ←
     match v0 with
     | V.A x =>
       do
       let r ← check x
       let cf ← core.result.Result.Insts.CoreOpsTry.branch r
       match cf with
-      | core.ops.control_flow.ControlFlow.Continue val =>
-        ok (Sum.inl (v0, val))
+      | core.ops.control_flow.ControlFlow.Continue val => ok (Sum.inl val)
       | core.ops.control_flow.ControlFlow.Break residual =>
         let r1 ←
           core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
@@ -64,26 +63,23 @@ def chain
       let r ← check i
       let cf ← core.result.Result.Insts.CoreOpsTry.branch r
       match cf with
-      | core.ops.control_flow.ControlFlow.Continue val =>
-        ok (Sum.inl (v0, val))
+      | core.ops.control_flow.ControlFlow.Continue val => ok (Sum.inl val)
       | core.ops.control_flow.ControlFlow.Break residual =>
         let r1 ←
           core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
             Std.U32 (core.convert.FromSame Std.U32) residual
         ok (Sum.inr r1)
-    | V.C _ => ok (Sum.inl (v0, 0#u32))
+    | V.C _ => ok (Sum.inl 0#u32)
   match s with
-  | Sum.inl p =>
-    let (_, r) := p
-    let s1 : _root_.Sum (V × Std.U32) (core.result.Result Std.U32 Std.U32) ←
+  | Sum.inl r =>
+    let s1 : _root_.Sum Std.U32 (core.result.Result Std.U32 Std.U32) ←
       match v1 with
       | V.A x =>
         do
         let r1 ← check x
         let cf ← core.result.Result.Insts.CoreOpsTry.branch r1
         match cf with
-        | core.ops.control_flow.ControlFlow.Continue val =>
-          ok (Sum.inl (v1, val))
+        | core.ops.control_flow.ControlFlow.Continue val => ok (Sum.inl val)
         | core.ops.control_flow.ControlFlow.Break residual =>
           let r2 ←
             core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
@@ -95,26 +91,23 @@ def chain
         let r1 ← check i
         let cf ← core.result.Result.Insts.CoreOpsTry.branch r1
         match cf with
-        | core.ops.control_flow.ControlFlow.Continue val =>
-          ok (Sum.inl (v1, val))
+        | core.ops.control_flow.ControlFlow.Continue val => ok (Sum.inl val)
         | core.ops.control_flow.ControlFlow.Break residual =>
           let r2 ←
             core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
               Std.U32 (core.convert.FromSame Std.U32) residual
           ok (Sum.inr r2)
-      | V.C _ => ok (Sum.inl (v1, r))
+      | V.C _ => ok s
     match s1 with
-    | Sum.inl p1 =>
-      let (_, r1) := p1
-      let s2 : _root_.Sum (V × Std.U32) (core.result.Result Std.U32 Std.U32) ←
+    | Sum.inl r1 =>
+      let s2 : _root_.Sum Std.U32 (core.result.Result Std.U32 Std.U32) ←
         match v2 with
         | V.A x =>
           do
           let r2 ← check x
           let cf ← core.result.Result.Insts.CoreOpsTry.branch r2
           match cf with
-          | core.ops.control_flow.ControlFlow.Continue val =>
-            ok (Sum.inl (v2, val))
+          | core.ops.control_flow.ControlFlow.Continue val => ok (Sum.inl val)
           | core.ops.control_flow.ControlFlow.Break residual =>
             let r3 ←
               core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
@@ -126,19 +119,16 @@ def chain
           let r2 ← check i
           let cf ← core.result.Result.Insts.CoreOpsTry.branch r2
           match cf with
-          | core.ops.control_flow.ControlFlow.Continue val =>
-            ok (Sum.inl (v2, val))
+          | core.ops.control_flow.ControlFlow.Continue val => ok (Sum.inl val)
           | core.ops.control_flow.ControlFlow.Break residual =>
             let r3 ←
               core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
                 Std.U32 (core.convert.FromSame Std.U32) residual
             ok (Sum.inr r3)
-        | V.C _ => ok (Sum.inl (v2, r1))
+        | V.C _ => ok s1
       match s2 with
-      | Sum.inl p2 =>
-        let (_, r2) := p2
-        let s3 : _root_.Sum (V × Std.U32) (core.result.Result Std.U32 Std.U32)
-          ←
+      | Sum.inl r2 =>
+        let s3 : _root_.Sum Std.U32 (core.result.Result Std.U32 Std.U32) ←
           match v3 with
           | V.A x =>
             do
@@ -146,7 +136,7 @@ def chain
             let cf ← core.result.Result.Insts.CoreOpsTry.branch r3
             match cf with
             | core.ops.control_flow.ControlFlow.Continue val =>
-              ok (Sum.inl (v3, val))
+              ok (Sum.inl val)
             | core.ops.control_flow.ControlFlow.Break residual =>
               let r4 ←
                 core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
@@ -159,18 +149,16 @@ def chain
             let cf ← core.result.Result.Insts.CoreOpsTry.branch r3
             match cf with
             | core.ops.control_flow.ControlFlow.Continue val =>
-              ok (Sum.inl (v3, val))
+              ok (Sum.inl val)
             | core.ops.control_flow.ControlFlow.Break residual =>
               let r4 ←
                 core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
                   Std.U32 (core.convert.FromSame Std.U32) residual
               ok (Sum.inr r4)
-          | V.C _ => ok (Sum.inl (v3, r2))
+          | V.C _ => ok s2
         match s3 with
-        | Sum.inl p3 =>
-          let (_, r3) := p3
-          let s4 : _root_.Sum (V × Std.U32) (core.result.Result Std.U32
-            Std.U32) ←
+        | Sum.inl r3 =>
+          let s4 : _root_.Sum Std.U32 (core.result.Result Std.U32 Std.U32) ←
             match v4 with
             | V.A x =>
               do
@@ -178,7 +166,7 @@ def chain
               let cf ← core.result.Result.Insts.CoreOpsTry.branch r4
               match cf with
               | core.ops.control_flow.ControlFlow.Continue val =>
-                ok (Sum.inl (v4, val))
+                ok (Sum.inl val)
               | core.ops.control_flow.ControlFlow.Break residual =>
                 let r5 ←
                   core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
@@ -191,16 +179,15 @@ def chain
               let cf ← core.result.Result.Insts.CoreOpsTry.branch r4
               match cf with
               | core.ops.control_flow.ControlFlow.Continue val =>
-                ok (Sum.inl (v4, val))
+                ok (Sum.inl val)
               | core.ops.control_flow.ControlFlow.Break residual =>
                 let r5 ←
                   core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
                     Std.U32 (core.convert.FromSame Std.U32) residual
                 ok (Sum.inr r5)
-            | V.C _ => ok (Sum.inl (v4, r3))
+            | V.C _ => ok s3
           match s4 with
-          | Sum.inl p4 =>
-            let (_, r4) := p4
+          | Sum.inl r4 =>
             match v5 with
             | V.A x =>
               let r5 ← check x
@@ -250,60 +237,49 @@ def early_return_if (x : Std.U32) (b : Bool) (c : Bool) : Result Std.U32 := do
     Source: 'tests/src/switch-early-returns.rs', lines 45:0-56:1
     Visibility: public -/
 def nested (v : V) (w : V) : Result (core.result.Result Std.U32 Std.U32) := do
-  let s : _root_.Sum (V × V × Std.U32) (core.result.Result Std.U32 Std.U32) ←
+  let s : _root_.Sum Std.U32 (core.result.Result Std.U32 Std.U32) ←
     match v with
     | V.A x =>
-      do
-      let s1 : _root_.Sum (V × Std.U32) (core.result.Result Std.U32 Std.U32) ←
-        match w with
-        | V.A y =>
-          do
-          let i ← x + y
-          let r ← check i
-          let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-          match cf with
-          | core.ops.control_flow.ControlFlow.Continue val =>
-            ok (Sum.inl (w, val))
-          | core.ops.control_flow.ControlFlow.Break residual =>
-            let r1 ←
-              core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-                Std.U32 (core.convert.FromSame Std.U32) residual
-            ok (Sum.inr r1)
-        | V.B y =>
-          do
-          let r ← check y
-          let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-          match cf with
-          | core.ops.control_flow.ControlFlow.Continue val =>
-            ok (Sum.inl (w, val))
-          | core.ops.control_flow.ControlFlow.Break residual =>
-            let r1 ←
-              core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-                Std.U32 (core.convert.FromSame Std.U32) residual
-            ok (Sum.inr r1)
-        | V.C _ => ok (Sum.inl (w, x))
-      match s1 with
-      | Sum.inl p => let (v1, i) := p
-                     ok (Sum.inl (v, v1, i))
-      | Sum.inr r => ok (Sum.inr r)
+      match w with
+      | V.A y =>
+        do
+        let i ← x + y
+        let r ← check i
+        let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+        match cf with
+        | core.ops.control_flow.ControlFlow.Continue val => ok (Sum.inl val)
+        | core.ops.control_flow.ControlFlow.Break residual =>
+          let r1 ←
+            core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+              Std.U32 (core.convert.FromSame Std.U32) residual
+          ok (Sum.inr r1)
+      | V.B y =>
+        do
+        let r ← check y
+        let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+        match cf with
+        | core.ops.control_flow.ControlFlow.Continue val => ok (Sum.inl val)
+        | core.ops.control_flow.ControlFlow.Break residual =>
+          let r1 ←
+            core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+              Std.U32 (core.convert.FromSame Std.U32) residual
+          ok (Sum.inr r1)
+      | V.C _ => ok (Sum.inl x)
     | V.B x =>
       do
       let r ← check x
       let cf ← core.result.Result.Insts.CoreOpsTry.branch r
       match cf with
-      | core.ops.control_flow.ControlFlow.Continue val =>
-        ok (Sum.inl (v, w, val))
+      | core.ops.control_flow.ControlFlow.Continue val => ok (Sum.inl val)
       | core.ops.control_flow.ControlFlow.Break residual =>
         let r1 ←
           core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
             Std.U32 (core.convert.FromSame Std.U32) residual
         ok (Sum.inr r1)
-    | V.C x => ok (Sum.inl (v, w, x))
+    | V.C x => ok (Sum.inl x)
   match s with
-  | Sum.inl t =>
-    let (_, _, a) := t
-    let i ← a + 1#u32
-    ok (core.result.Result.Ok i)
+  | Sum.inl a => let i ← a + 1#u32
+                 ok (core.result.Result.Ok i)
   | Sum.inr r => ok r
 
 /-- [switch_early_returns::update_then_error]:
@@ -314,15 +290,14 @@ def update_then_error
   Result ((core.result.Result Std.U32 Std.U32) × Std.U32)
   := do
   let acc1 ← acc + 1#u32
-  let s : _root_.Sum (V × Std.U32) ((core.result.Result Std.U32 Std.U32) ×
-    Std.U32) ←
+  let s : _root_.Sum Std.U32 ((core.result.Result Std.U32 Std.U32) × Std.U32) ←
     match v with
     | V.A x =>
       do
       let r ← check x
       let cf ← core.result.Result.Insts.CoreOpsTry.branch r
       match cf with
-      | core.ops.control_flow.ControlFlow.Continue val => ok (Sum.inl (v, val))
+      | core.ops.control_flow.ControlFlow.Continue val => ok (Sum.inl val)
       | core.ops.control_flow.ControlFlow.Break residual =>
         let r1 ←
           core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
@@ -334,35 +309,32 @@ def update_then_error
       let r ← check i
       let cf ← core.result.Result.Insts.CoreOpsTry.branch r
       match cf with
-      | core.ops.control_flow.ControlFlow.Continue val => ok (Sum.inl (v, val))
+      | core.ops.control_flow.ControlFlow.Continue val => ok (Sum.inl val)
       | core.ops.control_flow.ControlFlow.Break residual =>
         let r1 ←
           core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
             Std.U32 (core.convert.FromSame Std.U32) residual
         ok (Sum.inr (r1, acc1))
-    | V.C x => ok (Sum.inl (v, x))
+    | V.C x => ok (Sum.inl x)
   match s with
-  | Sum.inl p =>
-    let (_, x) := p
-    let acc2 ← acc1 + 10#u32
-    ok (core.result.Result.Ok x, acc2)
+  | Sum.inl x => let acc2 ← acc1 + 10#u32
+                 ok (core.result.Result.Ok x, acc2)
   | Sum.inr p => ok p
 
 /-- [switch_early_returns::panic_or_return]:
     Source: 'tests/src/switch-early-returns.rs', lines 72:0-82:1
     Visibility: public -/
 def panic_or_return (v : V) : Result Std.U32 := do
-  let s : _root_.Sum (V × Std.U32) Std.U32 ←
+  let s : _root_.Sum Std.U32 Std.U32 ←
     match v with
-    | V.A x => ok (Sum.inl (v, x))
+    | V.A x => ok (Sum.inl x)
     | V.B x => do
                massert (x < 50#u32)
                let x1 ← x + 1#u32
-               ok (Sum.inl (v, x1))
+               ok (Sum.inl x1)
     | V.C _ => ok (Sum.inr 7#u32)
   match s with
-  | Sum.inl p => let (_, x) := p
-                 x + 1#u32
+  | Sum.inl x => x + 1#u32
   | Sum.inr i => ok i
 
 /-- [switch_early_returns::Ck]
@@ -400,7 +372,7 @@ def struct_calls
   Result ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec Std.U32) ×
     (alloc.vec.Vec Std.U32))
   := do
-  let s1 : _root_.Sum (V × Ck × Std.U32 × (Ck → ((alloc.vec.Vec Std.U32) ×
+  let s1 : _root_.Sum (Ck × Std.U32 × (Ck → ((alloc.vec.Vec Std.U32) ×
     (alloc.vec.Vec Std.U32)))) ((core.result.Result Std.U32 Std.U32) ×
     (alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32)) ←
     match v with
@@ -410,8 +382,8 @@ def struct_calls
       let cf ← core.result.Result.Insts.CoreOpsTry.branch r
       match cf with
       | core.ops.control_flow.ControlFlow.Continue val =>
-        ok (Sum.inl (v, ck, val, fun c => let c1 := push_back c
-                                          (c1.t, c1.s)))
+        ok (Sum.inl (ck, val, fun c => let c1 := push_back c
+                                       (c1.t, c1.s)))
       | core.ops.control_flow.ControlFlow.Break residual =>
         let r1 ←
           core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
@@ -428,7 +400,7 @@ def struct_calls
         let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
         match cf1 with
         | core.ops.control_flow.ControlFlow.Continue val1 =>
-          ok (Sum.inl (v, ck1, val1,
+          ok (Sum.inl (ck1, val1,
             fun c => let c1 := push_back1 c
                      let c2 := push_back c1
                      (c2.t, c2.s)))
@@ -447,13 +419,13 @@ def struct_calls
         let c := push_back ck
         ok (Sum.inr (r1, c.t, c.s))
     | V.C x =>
-      ok (Sum.inl (v, ({ t, s } : Ck), x,
+      ok (Sum.inl (({ t, s } : Ck), x,
         fun (c : Ck) => let v1 := c.t
                         let v2 := c.s
                         (v1, v2)))
   match s1 with
   | Sum.inl t1 =>
-    let (_, ck, x, back) := t1
+    let (ck, x, back) := t1
     let (r, c, push_back) ← Ck.push ck x
     let c1 := push_back c
     let (t2, _) := back c1

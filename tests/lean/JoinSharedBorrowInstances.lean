@@ -40,69 +40,66 @@ inductive Node where
 /-- [join_shared_borrow_instances::node_eq]:
     Source: 'tests/src/join-shared-borrow-instances.rs', lines 24:0-29:1 -/
 def node_eq (a : Node) (b : Node) : Result Bool := do
-  let s : _root_.Sum (Node × Node × Std.U32 × Std.U32) (Node × Node × Node ×
-    Node) ←
+  let s : _root_.Sum (Std.U32 × Std.U32) Unit ←
     match a with
     | Node.Bound a1 =>
       match b with
-      | Node.Bound b1 => ok (Sum.inl (a, b, a1, b1))
-      | Node.Free _ => ok (Sum.inr (a, b, a, b))
-      | Node.Sort _ => ok (Sum.inr (a, b, a, b))
-      | Node.Const _ _ => ok (Sum.inr (a, b, a, b))
-      | Node.App _ _ => ok (Sum.inr (a, b, a, b))
-      | Node.Lam _ _ => ok (Sum.inr (a, b, a, b))
-      | Node.Pi _ _ => ok (Sum.inr (a, b, a, b))
-      | Node.Let _ _ _ => ok (Sum.inr (a, b, a, b))
-      | Node.Proj _ _ _ => ok (Sum.inr (a, b, a, b))
-      | Node.Nat _ => ok (Sum.inr (a, b, a, b))
-      | Node.Str _ => ok (Sum.inr (a, b, a, b))
+      | Node.Bound b1 => ok (Sum.inl (a1, b1))
+      | Node.Free _ => ok (Sum.inr ())
+      | Node.Sort _ => ok (Sum.inr ())
+      | Node.Const _ _ => ok (Sum.inr ())
+      | Node.App _ _ => ok (Sum.inr ())
+      | Node.Lam _ _ => ok (Sum.inr ())
+      | Node.Pi _ _ => ok (Sum.inr ())
+      | Node.Let _ _ _ => ok (Sum.inr ())
+      | Node.Proj _ _ _ => ok (Sum.inr ())
+      | Node.Nat _ => ok (Sum.inr ())
+      | Node.Str _ => ok (Sum.inr ())
     | Node.Free a1 =>
       match b with
-      | Node.Bound _ => ok (Sum.inr (a, b, a, b))
-      | Node.Free b1 => ok (Sum.inl (a, b, a1, b1))
-      | Node.Sort _ => ok (Sum.inr (a, b, a, b))
-      | Node.Const _ _ => ok (Sum.inr (a, b, a, b))
-      | Node.App _ _ => ok (Sum.inr (a, b, a, b))
-      | Node.Lam _ _ => ok (Sum.inr (a, b, a, b))
-      | Node.Pi _ _ => ok (Sum.inr (a, b, a, b))
-      | Node.Let _ _ _ => ok (Sum.inr (a, b, a, b))
-      | Node.Proj _ _ _ => ok (Sum.inr (a, b, a, b))
-      | Node.Nat _ => ok (Sum.inr (a, b, a, b))
-      | Node.Str _ => ok (Sum.inr (a, b, a, b))
+      | Node.Bound _ => ok (Sum.inr ())
+      | Node.Free b1 => ok (Sum.inl (a1, b1))
+      | Node.Sort _ => ok (Sum.inr ())
+      | Node.Const _ _ => ok (Sum.inr ())
+      | Node.App _ _ => ok (Sum.inr ())
+      | Node.Lam _ _ => ok (Sum.inr ())
+      | Node.Pi _ _ => ok (Sum.inr ())
+      | Node.Let _ _ _ => ok (Sum.inr ())
+      | Node.Proj _ _ _ => ok (Sum.inr ())
+      | Node.Nat _ => ok (Sum.inr ())
+      | Node.Str _ => ok (Sum.inr ())
     | Node.Sort a1 =>
       match b with
-      | Node.Bound _ => ok (Sum.inr (a, b, a, b))
-      | Node.Free _ => ok (Sum.inr (a, b, a, b))
-      | Node.Sort b1 => ok (Sum.inl (a, b, a1, b1))
-      | Node.Const _ _ => ok (Sum.inr (a, b, a, b))
-      | Node.App _ _ => ok (Sum.inr (a, b, a, b))
-      | Node.Lam _ _ => ok (Sum.inr (a, b, a, b))
-      | Node.Pi _ _ => ok (Sum.inr (a, b, a, b))
-      | Node.Let _ _ _ => ok (Sum.inr (a, b, a, b))
-      | Node.Proj _ _ _ => ok (Sum.inr (a, b, a, b))
-      | Node.Nat _ => ok (Sum.inr (a, b, a, b))
-      | Node.Str _ => ok (Sum.inr (a, b, a, b))
-    | Node.Const _ _ => ok (Sum.inr (a, b, a, b))
-    | Node.App _ _ => ok (Sum.inr (a, b, a, b))
-    | Node.Lam _ _ => ok (Sum.inr (a, b, a, b))
-    | Node.Pi _ _ => ok (Sum.inr (a, b, a, b))
-    | Node.Let _ _ _ => ok (Sum.inr (a, b, a, b))
-    | Node.Proj _ _ _ => ok (Sum.inr (a, b, a, b))
-    | Node.Nat _ => ok (Sum.inr (a, b, a, b))
-    | Node.Str _ => ok (Sum.inr (a, b, a, b))
-  let s1 : _root_.Sum (Node × Node × Node × Node) (Bool × Node × Node × Node ×
-    Node) ←
+      | Node.Bound _ => ok (Sum.inr ())
+      | Node.Free _ => ok (Sum.inr ())
+      | Node.Sort b1 => ok (Sum.inl (a1, b1))
+      | Node.Const _ _ => ok (Sum.inr ())
+      | Node.App _ _ => ok (Sum.inr ())
+      | Node.Lam _ _ => ok (Sum.inr ())
+      | Node.Pi _ _ => ok (Sum.inr ())
+      | Node.Let _ _ _ => ok (Sum.inr ())
+      | Node.Proj _ _ _ => ok (Sum.inr ())
+      | Node.Nat _ => ok (Sum.inr ())
+      | Node.Str _ => ok (Sum.inr ())
+    | Node.Const _ _ => ok (Sum.inr ())
+    | Node.App _ _ => ok (Sum.inr ())
+    | Node.Lam _ _ => ok (Sum.inr ())
+    | Node.Pi _ _ => ok (Sum.inr ())
+    | Node.Let _ _ _ => ok (Sum.inr ())
+    | Node.Proj _ _ _ => ok (Sum.inr ())
+    | Node.Nat _ => ok (Sum.inr ())
+    | Node.Str _ => ok (Sum.inr ())
+  let s1 : _root_.Sum Unit Bool ←
     match s with
-    | Sum.inl t =>
+    | Sum.inl p =>
       do
-      let (n, n1, a1, b1) := t
+      let (a1, b1) := p
       let b2 ← lift (core.cmp.impls.PartialEqU32.eq a1 b1)
-      ok (Sum.inr (b2, a, b, n, n1))
-    | Sum.inr t => ok (Sum.inl t)
+      ok (Sum.inr b2)
+    | Sum.inr _ => ok (Sum.inl ())
   match s1 with
   | Sum.inl _ => ok false
-  | Sum.inr t => ok (let (b1, _, _, _, _) := t
-                     b1)
+  | Sum.inr b1 => ok b1
 
 /-- [join_shared_borrow_instances::same]:
     Source: 'tests/src/join-shared-borrow-instances.rs', lines 31:0-47:1
@@ -118,8 +115,8 @@ def same
     let i1 ← lift (UScalar.cast .Usize b)
     let right ←
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Node) nodes i1
-    let s : _root_.Sum (Node × Node × Std.U32 × Std.U32 × Std.U32 × Std.U32)
-      (_root_.Sum (Bool × Node × Node) (Node × Node)) ←
+    let s : _root_.Sum (Std.U32 × Std.U32 × Std.U32 × Std.U32) (_root_.Sum Bool
+      (Node × Node)) ←
       match left with
       | Node.Bound _ => ok (Sum.inr (Sum.inr (left, right)))
       | Node.Free _ => ok (Sum.inr (Sum.inr (left, right)))
@@ -131,7 +128,7 @@ def same
         | Node.Free _ => ok (Sum.inr (Sum.inr (left, right)))
         | Node.Sort _ => ok (Sum.inr (Sum.inr (left, right)))
         | Node.Const _ _ => ok (Sum.inr (Sum.inr (left, right)))
-        | Node.App u v => ok (Sum.inl (left, right, x, y, u, v))
+        | Node.App u v => ok (Sum.inl (x, y, u, v))
         | Node.Lam _ _ => ok (Sum.inr (Sum.inr (left, right)))
         | Node.Pi _ _ => ok (Sum.inr (Sum.inr (left, right)))
         | Node.Let _ _ _ => ok (Sum.inr (Sum.inr (left, right)))
@@ -145,7 +142,7 @@ def same
         | Node.Sort _ => ok (Sum.inr (Sum.inr (left, right)))
         | Node.Const _ _ => ok (Sum.inr (Sum.inr (left, right)))
         | Node.App _ _ => ok (Sum.inr (Sum.inr (left, right)))
-        | Node.Lam u v => ok (Sum.inl (left, right, x, y, u, v))
+        | Node.Lam u v => ok (Sum.inl (x, y, u, v))
         | Node.Pi _ _ => ok (Sum.inr (Sum.inr (left, right)))
         | Node.Let _ _ _ => ok (Sum.inr (Sum.inr (left, right)))
         | Node.Proj _ _ _ => ok (Sum.inr (Sum.inr (left, right)))
@@ -159,7 +156,7 @@ def same
         | Node.Const _ _ => ok (Sum.inr (Sum.inr (left, right)))
         | Node.App _ _ => ok (Sum.inr (Sum.inr (left, right)))
         | Node.Lam _ _ => ok (Sum.inr (Sum.inr (left, right)))
-        | Node.Pi u v => ok (Sum.inl (left, right, x, y, u, v))
+        | Node.Pi u v => ok (Sum.inl (x, y, u, v))
         | Node.Let _ _ _ => ok (Sum.inr (Sum.inr (left, right)))
         | Node.Proj _ _ _ => ok (Sum.inr (Sum.inr (left, right)))
         | Node.Nat _ => ok (Sum.inr (Sum.inr (left, right)))
@@ -185,7 +182,7 @@ def same
               then same nodes z w
               else ok false
             else ok false
-          ok (Sum.inr (Sum.inl (b2, left, right)))
+          ok (Sum.inr (Sum.inl b2))
         | Node.Proj _ _ _ => ok (Sum.inr (Sum.inr (left, right)))
         | Node.Nat _ => ok (Sum.inr (Sum.inr (left, right)))
         | Node.Str _ => ok (Sum.inr (Sum.inr (left, right)))
@@ -211,30 +208,29 @@ def same
               then same nodes x y
               else ok false
             else ok false
-          ok (Sum.inr (Sum.inl (b2, left, right)))
+          ok (Sum.inr (Sum.inl b2))
         | Node.Nat _ => ok (Sum.inr (Sum.inr (left, right)))
         | Node.Str _ => ok (Sum.inr (Sum.inr (left, right)))
       | Node.Nat _ => ok (Sum.inr (Sum.inr (left, right)))
       | Node.Str _ => ok (Sum.inr (Sum.inr (left, right)))
-    let s1 : _root_.Sum (Node × Node) (Bool × Node × Node) ←
+    let s1 : _root_.Sum (Node × Node) Bool ←
       match s with
       | Sum.inl t =>
         do
-        let (left1, right1, x, y, u, v) := t
+        let (x, y, u, v) := t
         let b1 ← same nodes x u
         if b1
         then let b2 ← same nodes y v
-             ok (Sum.inr (b2, left1, right1))
-        else ok (Sum.inr (false, left1, right1))
+             ok (Sum.inr b2)
+        else ok (Sum.inr false)
       | Sum.inr s2 =>
         match s2 with
-        | Sum.inl t => ok (Sum.inr t)
+        | Sum.inl b1 => ok (Sum.inr b1)
         | Sum.inr p => ok (Sum.inl p)
     match s1 with
     | Sum.inl p => let (left1, right1) := p
                    node_eq left1 right1
-    | Sum.inr t => ok (let (b1, _, _) := t
-                       b1)
+    | Sum.inr b1 => ok b1
 partial_fixpoint
 
 end join_shared_borrow_instances

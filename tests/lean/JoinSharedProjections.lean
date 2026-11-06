@@ -52,24 +52,22 @@ def value (n : Number) : Result Std.U32 := do
 def sum
   (x : Std.U32) (y : Std.U32) (owned : Bool) : Result (Option Std.U32) := do
   let o ← decode x owned
-  let s : _root_.Sum (Std.U32 × Std.U32) ((Option Std.U32) × Std.U32 × Std.U32)
-    ←
+  let s : _root_.Sum Unit (Option Std.U32) ←
     match o with
-    | none => ok (Sum.inl (x, y))
+    | none => ok (Sum.inl ())
     | some a =>
       do
       let o1 ← decode y owned
       match o1 with
-      | none => ok (Sum.inl (x, y))
+      | none => ok (Sum.inl ())
       | some b =>
         let i ← value a
         let i1 ← value b
         let i2 ← i + i1
-        ok (Sum.inr (some i2, x, y))
+        ok (Sum.inr (some i2))
   match s with
   | Sum.inl _ => ok none
-  | Sum.inr t => ok (let (o1, _, _) := t
-                     o1)
+  | Sum.inr o1 => ok o1
 
 /-- [join_shared_projections::test_sum]:
     Source: 'tests/src/join-shared-projections.rs', lines 43:0-46:1

@@ -207,29 +207,29 @@ def
   := do
   let (i, v, b) := c
   let (c1, count, a) := tupled_args
-  let (i1, b1, ck, back) ←
+  let (i1, c2, ck, back) ←
     if count < i
     then
       do
       let i2 ←
         alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v
           count
-      ok (i2, b, c1, fun (c2 : Checker) => let ⟨ t, _ ⟩ := c2
+      ok (i2, c, c1, fun (c3 : Checker) => let ⟨ t, _ ⟩ := c3
                                            t)
     else
       do
-      let b2 ← if a = 3#u32
+      let b1 ← if a = 3#u32
                then ok true
                else ok b
       let (i2, ck1, local_back) ← Checker.local c1 a
-      ok (i2, b2, ck1, fun c2 => (local_back c2).t)
+      ok (i2, (i, v, b1), ck1, fun c3 => (local_back c3).t)
   let back1 :=
     fun (tupled_args1 : Checker) =>
       let t := back { ck with t := tupled_args1.t }
       { c1 with t }
-  let back2 := fun (c2 : generate.closure) => let (_, _, b2) := c2
-                                              (i, v, b2)
-  ok (core.result.Result.Ok (some i1), ck, (i, v, b1), back1, back2)
+  let back2 := fun (c3 : generate.closure) => let (_, _, b1) := c3
+                                              (i, v, b1)
+  ok (core.result.Result.Ok (some i1), ck, c2, back1, back2)
 
 /-- [closure_shared_captures_loop::{closure_shared_captures_loop::Checker<'a>}::telescope::<_, _, closure_shared_captures_loop::generate::{closure}<_, _, _, _>>]: loop body 0:
     Source: 'tests/src/closure-shared-captures-loop.rs', lines 38:18-47:5

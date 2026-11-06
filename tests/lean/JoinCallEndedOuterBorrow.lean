@@ -134,14 +134,13 @@ def verify
       actual
   let r ← core.option.Option.ok_or o (toStr "unexpected")
   let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-  let s : _root_.Sum ((core.result.Result Std.U32 String) × Decl × (Slice
-    Decl)) ((core.result.Result Std.U32 String) × Decl × (Slice Decl)) ←
+  let s : _root_.Sum (core.result.Result Std.U32 String) (core.result.Result
+    Std.U32 String) ←
     match cf with
     | core.ops.control_flow.ControlFlow.Continue val =>
       do
-      let s1 : _root_.Sum (Kind × Kind × Kind × Kind) (_root_.Sum
-        ((core.result.Result Std.U32 String) × Decl × (Slice Decl))
-        ((core.result.Result Std.U32 String) × Decl × (Slice Decl))) ←
+      let s1 : _root_.Sum Unit (_root_.Sum (core.result.Result Std.U32 String)
+        (core.result.Result Std.U32 String)) ←
         match actual.kind with
         | Kind.Rec ar ak =>
           match val.kind with
@@ -149,9 +148,8 @@ def verify
             do
             let b ←
               core.cmp.impls.PartialEqShared.ne core.cmp.PartialEqBool ak ek
-            let s2 : _root_.Sum Unit (_root_.Sum ((core.result.Result Std.U32
-              String) × Decl × (Slice Decl)) (core.result.Result Std.U32
-              String)) ←
+            let s2 : _root_.Sum Unit (_root_.Sum (core.result.Result Std.U32
+              String) (core.result.Result Std.U32 String)) ←
               if b
               then ok (Sum.inl ())
               else
@@ -168,10 +166,9 @@ def verify
                       core.convert.IntoFrom.into
                         alloc.string.String.Insts.CoreConvertFromShared0Str
                         (toStr "type")
-                    ok (Sum.inr (Sum.inl (core.result.Result.Err s3, actual,
-                      generated)))
+                    ok (Sum.inr (Sum.inl (core.result.Result.Err s3)))
             let s3 : _root_.Sum (core.result.Result Std.U32 String)
-              ((core.result.Result Std.U32 String) × Decl × (Slice Decl)) ←
+              (core.result.Result Std.U32 String) ←
               match s2 with
               | Sum.inl _ =>
                 do
@@ -182,37 +179,31 @@ def verify
                 ok (Sum.inl (core.result.Result.Err s4))
               | Sum.inr s4 =>
                 match s4 with
-                | Sum.inl t => ok (Sum.inr t)
+                | Sum.inl r1 => ok (Sum.inr r1)
                 | Sum.inr r1 => ok (Sum.inl r1)
             match s3 with
-            | Sum.inl r1 => ok (Sum.inr (Sum.inr (r1, actual, generated)))
-            | Sum.inr t => ok (Sum.inr (Sum.inl t))
-          | Kind.Other =>
-            ok (Sum.inl (actual.kind, Kind.Other, actual.kind, Kind.Other))
-        | Kind.Other =>
-          ok (Sum.inl (Kind.Other, val.kind, Kind.Other, val.kind))
+            | Sum.inl r1 => ok (Sum.inr (Sum.inr r1))
+            | Sum.inr r1 => ok (Sum.inr (Sum.inl r1))
+          | Kind.Other => ok (Sum.inl ())
+        | Kind.Other => ok (Sum.inl ())
       match s1 with
-      | Sum.inl t =>
-        let (k, _, _, _) := t
+      | Sum.inl _ =>
         let s2 ←
           core.convert.IntoFrom.into
             alloc.string.String.Insts.CoreConvertFromShared0Str (toStr "kind")
-        ok (Sum.inl (core.result.Result.Err s2, { actual with kind := k },
-          generated))
+        ok (Sum.inl (core.result.Result.Err s2))
       | Sum.inr s2 =>
         match s2 with
-        | Sum.inl t => ok (Sum.inr t)
-        | Sum.inr t => ok (Sum.inl t)
+        | Sum.inl r1 => ok (Sum.inr r1)
+        | Sum.inr r1 => ok (Sum.inl r1)
     | core.ops.control_flow.ControlFlow.Break residual =>
       do
       let r1 ←
         core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
           Std.U32 alloc.string.String.Insts.CoreConvertFromShared0Str residual
-      ok (Sum.inl (r1, actual, generated))
+      ok (Sum.inl r1)
   match s with
-  | Sum.inl t => let (r1, _, _) := t
-                 ok r1
-  | Sum.inr t => ok (let (r1, _, _) := t
-                     r1)
+  | Sum.inl r1 => ok r1
+  | Sum.inr r1 => ok r1
 
 end join_call_ended_outer_borrow

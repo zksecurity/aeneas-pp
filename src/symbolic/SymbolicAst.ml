@@ -310,6 +310,8 @@ and let_expr = {
   out_abs : abs list;
       (** The abstractions introduced in the joined environment (those are
           output by the bound expression) *)
+  joined_ctx : (Contexts.eval_ctx[@opaque]);
+      (** The joined environment, in which the next expression is evaluated *)
   join_id : symbolic_expr_id;
       (** The id of the join: the [Join] nodes of the bound expression which
           reach it carry this id *)

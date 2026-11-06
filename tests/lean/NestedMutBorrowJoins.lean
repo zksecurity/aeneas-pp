@@ -198,19 +198,20 @@ def swap_in_one_branch
   (s : alloc.vec.Vec Std.U32) (k : Std.U32) :
   Result ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32))
   := do
-  let (v, v1, v2, back) ←
+  let (c, back) ←
     if k = 0#u32
     then
       do
       let (ck, swap_back) ← Ck.swap { t, e, s }
-      ok (ck.t, ck.e, ck.s,
-        fun v3 v4 => let c := swap_back { ck with t := v3, s := v4 }
-                     (c.t, c.s))
-    else ok (t, e, s, fun v3 v4 => (v3, v4))
-  let (_, c, push_t_back) ← Ck.push_t { t := v, e := v1, s := v2 } 7#u32
-  let c1 := push_t_back c
-  let (t1, _) := back c1.t c1.s
-  let (_, s1) := back c1.t c1.s
+      ok (ck,
+        fun v v1 =>
+          let c1 := swap_back { ck with t := v, s := v1 }
+          (c1.t, c1.s))
+    else ok (({ t, e, s } : Ck), fun v v1 => (v, v1))
+  let (_, c1, push_t_back) ← Ck.push_t c 7#u32
+  let c2 := push_t_back c1
+  let (t1, _) := back c2.t c2.s
+  let (_, s1) := back c2.t c2.s
   ok (t1, s1)
 
 /-- [nested_mut_borrow_joins::no_shared_field]:
@@ -220,19 +221,19 @@ def no_shared_field
   (t : alloc.vec.Vec Std.U32) (s : alloc.vec.Vec Std.U32) (k : Std.U32) :
   Result ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32))
   := do
-  let (v, v1, back) ←
+  let (m, back) ←
     if k = 0#u32
     then
       do
-      let (m, mk_helper_back) ← mk_helper { t, s } 1#u32
-      ok (m.t, m.s,
-        fun v2 v3 => let m1 := mk_helper_back { t := v2, s := v3 }
-                     (m1.t, m1.s))
-    else ok (t, s, fun v2 v3 => (v2, v3))
-  let (m, mk_helper_back) ← mk_helper { t := v, s := v1 } 2#u32
-  let m1 := mk_helper_back m
-  let (t1, _) := back m1.t m1.s
-  let (_, s1) := back m1.t m1.s
+      let (m1, mk_helper_back) ← mk_helper { t, s } 1#u32
+      ok (m1,
+        fun v v1 => let m2 := mk_helper_back { t := v, s := v1 }
+                    (m2.t, m2.s))
+    else ok (({ t, s } : Mk), fun v v1 => (v, v1))
+  let (m1, mk_helper_back) ← mk_helper m 2#u32
+  let m2 := mk_helper_back m1
+  let (t1, _) := back m2.t m2.s
+  let (_, s1) := back m2.t m2.s
   ok (t1, s1)
 
 /-- [nested_mut_borrow_joins::chain]:

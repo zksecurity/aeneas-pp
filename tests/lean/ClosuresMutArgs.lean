@@ -36,23 +36,23 @@ def Eng.guarded
   Result ((core.result.Result T Std.U32) × Eng × (Eng → Eng))
   := do
   let i ← self.d + 1#u32
-  let (r, v, i1, back) ←
+  let (r, e, back) ←
     if i > 3#u32
     then
       do
-      let i2 ← i - 1#u32
-      ok (core.result.Result.Err i2, self.t, i2, fun v1 => v1)
+      let i1 ← i - 1#u32
+      ok (core.result.Result.Err i1, { self with d := i1 }, fun v => v)
     else
       do
       let (r1, self1, call_once_back) ←
         coreopsfunctionFnOnceT2TupleMutAEngResultTU32Inst.call_once f
           { self with d := i }
-      let i2 ← self1.d - 1#u32
-      ok (r1, self1.t, i2, fun v1 => (call_once_back { self1 with t := v1 }).t)
-  let back'a :=
-    fun (self1 : Eng) => let v1 := back self1.t
-                         { self with t := v1 }
-  ok (r, { t := v, d := i1 }, back'a)
+      let i1 ← self1.d - 1#u32
+      ok (r1, { self1 with d := i1 },
+        fun v => (call_once_back { self1 with t := v }).t)
+  let back'a := fun (self1 : Eng) => let v := back self1.t
+                                     { self with t := v }
+  ok (r, e, back'a)
 
 /-- [closures_mut_args::{closures_mut_args::Eng<'a>}::under]:
     Source: 'tests/src/closures-mut-args.rs', lines 25:4-30:5 -/

@@ -134,19 +134,19 @@ def
     (Eng → Eng))
   := do
   let (e, i) := tupled_args
-  let (r, v, i1) ←
+  let (r, e1) ←
     if i > c
-    then ok (core.result.Result.Err i, e.t, e.d)
+    then ok (core.result.Result.Err i, e)
     else
       do
-      let v1 ← alloc.vec.Vec.push e.t i
-      let i2 ← e.d + 1#u32
-      let i3 ← i % 2#u32
-      if i3 = 0#u32
-      then ok (core.result.Result.Ok true, v1, i2)
-      else ok (core.result.Result.Ok false, v1, i2)
+      let v ← alloc.vec.Vec.push e.t i
+      let i1 ← e.d + 1#u32
+      let i2 ← i % 2#u32
+      if i2 = 0#u32
+      then ok (core.result.Result.Ok true, ({ t := v, d := i1 } : Eng))
+      else ok (core.result.Result.Ok false, ({ t := v, d := i1 } : Eng))
   let back := fun (tupled_args1 : Eng) => { e with t := tupled_args1.t }
-  ok (r, c, { t := v, d := i1 }, back)
+  ok (r, c, e1, back)
 
 /-- [closures_fnmut_args::{closures_fnmut_args::Eng<'a>}::count_even::{impl core::ops::function::FnOnce<(&'_4 mut closures_fnmut_args::Eng<'_2>, u32), core::result::Result<bool, u32>> for closures_fnmut_args::{closures_fnmut_args::Eng<'a>}::count_even::{closure}<'a, '_1, '_2, '_3>}::call_once]:
     Source: 'tests/src/closures-fnmut-args.rs', lines 31:26-38:9 -/

@@ -523,16 +523,16 @@ def loop_hidden_static_mut1 (x : Std.U32) (n : Std.U32) : Result Std.U32 := do
     Source: 'tests/src/static.rs', lines 303:0-306:1 -/
 def branch_hidden_static_mut
   (s : StaticMut) (b : Bool) : Result StaticMut := do
-  let (i, back) ←
+  let (sm, back) ←
     if b
     then
       do
       let (s1, id_hidden_static_mut_back) ← id_hidden_static_mut s
-      ok (s1.x, fun i1 => (id_hidden_static_mut_back { x := i1 }).x)
-    else ok (s.x, fun i1 => i1)
-  let i1 ← i + 1#u32
-  let i2 := back i1
-  ok { x := i2 }
+      ok (s1, fun i => (id_hidden_static_mut_back { x := i }).x)
+    else ok (s, fun i => i)
+  let i ← sm.x + 1#u32
+  let i1 := back i
+  ok { x := i1 }
 
 /-- [static::loop_hidden_static_ref]: loop body 0:
     Source: 'tests/src/static.rs', lines 312:4-316:5 -/

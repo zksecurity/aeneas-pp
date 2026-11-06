@@ -79,7 +79,7 @@ def Input.reach.closure.Insts.CoreOpsFunctionFnMutTupleU32Tuple.call_mut
 def Input.reach
   (self : Input) : Result ((core.result.Result Std.U32 Unit) × Input) := do
   let s : _root_.Sum ((core.result.Result Std.U32 Unit) × Input) (Input ×
-    Std.U32 × Unit × (Std.U32 → Std.U32)) ←
+    Std.U32 × (Std.U32 → Std.U32)) ←
     match self.node with
     | Node.One a =>
       do
@@ -88,7 +88,7 @@ def Input.reach
           (self.seen, 0#u32) a
       let (i, i1) := visit
       let (i2, _) := call_mut_back visit
-      ok (Sum.inr ({ self with seen := i2 }, i1, (),
+      ok (Sum.inr ({ self with seen := i2 }, i1,
         fun i3 => let (_, i4) := call_mut_back1 (i, i3)
                   i4))
     | Node.Name n =>
@@ -97,7 +97,7 @@ def Input.reach
       let cf ← core.result.Result.Insts.CoreOpsTry.branch r
       match cf with
       | core.ops.control_flow.ControlFlow.Continue _ =>
-        ok (Sum.inr (self, 0#u32, (), fun i => i))
+        ok (Sum.inr (self, 0#u32, fun i => i))
       | core.ops.control_flow.ControlFlow.Break residual =>
         let r1 ←
           core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
@@ -109,21 +109,21 @@ def Input.reach
       let cf ← core.result.Result.Insts.CoreOpsTry.branch r
       match cf with
       | core.ops.control_flow.ControlFlow.Continue _ =>
-        ok (Sum.inr (self1, 0#u32, (), fun i => i))
+        ok (Sum.inr (self1, 0#u32, fun i => i))
       | core.ops.control_flow.ControlFlow.Break residual =>
         let r1 ←
           core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
             Std.U32 (core.convert.FromSame Unit) residual
         ok (Sum.inl (r1, self1))
-    | Node.Leaf => ok (Sum.inr (self, 0#u32, (), fun i => i))
-  let s1 : _root_.Sum (Input × Std.U32 × Unit × (Std.U32 → Std.U32))
+    | Node.Leaf => ok (Sum.inr (self, 0#u32, fun i => i))
+  let s1 : _root_.Sum (Input × Std.U32 × (Std.U32 → Std.U32))
     ((core.result.Result Std.U32 Unit) × Input) ←
     match s with
     | Sum.inl p => ok (Sum.inr p)
     | Sum.inr t => ok (Sum.inl t)
   match s1 with
   | Sum.inl t =>
-    let (self1, i, _, back) := t
+    let (self1, i, back) := t
     let todo := back i
     ok (core.result.Result.Ok todo, self1)
   | Sum.inr p => ok p

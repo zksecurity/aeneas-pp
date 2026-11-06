@@ -53,16 +53,16 @@ def Engine.eval_nonzero_loop.body
   := do
   let (r, self1, eval_back) ← Engine.eval self e
   let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-  let s : _root_.Sum (Std.U32 × Engine × Std.U32) (_root_.Sum ((Engine →
-    (Std.U32 × Std.U32)) × Engine × Std.U32) ((core.result.Result Std.U32 Unit)
-    × Engine × Std.U32 × (Engine → (Std.U32 × Std.U32)))) ←
+  let s : _root_.Sum (Std.U32 × Engine) (_root_.Sum ((Engine → (Std.U32 ×
+    Std.U32)) × Engine × Std.U32) ((core.result.Result Std.U32 Unit) × Engine ×
+    Std.U32 × (Engine → (Std.U32 × Std.U32)))) ←
     match cf with
     | core.ops.control_flow.ControlFlow.Continue val =>
       if val = 0#u32
       then
         ok (Sum.inr (Sum.inl (fun e1 => let e2 := eval_back e1
                                         back e2, self1, 1#u32)))
-      else ok (Sum.inl (val, self1, val))
+      else ok (Sum.inl (val, self1))
     | core.ops.control_flow.ControlFlow.Break residual =>
       do
       let r1 ←
@@ -72,8 +72,8 @@ def Engine.eval_nonzero_loop.body
         fun e1 => let e2 := eval_back e1
                   back e2)))
   match s with
-  | Sum.inl t =>
-    let (i, self2, _) := t
+  | Sum.inl p =>
+    let (i, self2) := p
     ok (done (core.result.Result.Ok i, self2,
       fun (e1 : Engine) =>
         let i1 := e1.t
@@ -130,16 +130,15 @@ def Engine.run_loop.body
   := do
   let (r, self, eval_back) ← Engine.eval { t := i, s := i1 } n
   let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-  let s : _root_.Sum (Std.U32 × Std.U32 × Std.U32 × Std.U32) (_root_.Sum
-    ((Std.U32 → Std.U32 → (Std.U32 × Std.U32)) × Std.U32 × Std.U32 × Std.U32)
-    ((core.result.Result Std.U32 Unit) × Engine × Std.U32 × (Engine → (Std.U32
-    × Std.U32)))) ←
+  let s : _root_.Sum (Std.U32 × Engine) (_root_.Sum ((Std.U32 → Std.U32 →
+    (Std.U32 × Std.U32)) × Std.U32 × Std.U32 × Std.U32) ((core.result.Result
+    Std.U32 Unit) × Engine × Std.U32 × (Engine → (Std.U32 × Std.U32)))) ←
     match cf with
     | core.ops.control_flow.ControlFlow.Continue val =>
       do
       let i2 ← self.s + val
       if n = 0#u32
-      then ok (Sum.inl (val, self.t, i2, val))
+      then ok (Sum.inl (val, { self with s := i2 }))
       else
         let n1 ← n - 1#u32
         ok (Sum.inr (Sum.inl
@@ -154,14 +153,14 @@ def Engine.run_loop.body
         fun e => let e1 := eval_back e
                  back e1.t e1.s)))
   match s with
-  | Sum.inl t =>
-    let (i2, i3, i4, _) := t
-    ok (done (core.result.Result.Ok i2, { t := i3, s := i4 },
-      fun (e : Engine) =>
-        let i5 := e.t
-        let i6 := e.s
-        let e1 := eval_back { t := i5, s := i6 }
-        back e1.t e1.s))
+  | Sum.inl p =>
+    let (i2, e) := p
+    ok (done (core.result.Result.Ok i2, e,
+      fun (e1 : Engine) =>
+        let i3 := e1.t
+        let i4 := e1.s
+        let e2 := eval_back { t := i3, s := i4 }
+        back e2.t e2.s))
   | Sum.inr s1 =>
     match s1 with
     | Sum.inl t => let (f, i2, i3, i4) := t
@@ -208,17 +207,17 @@ def run_swap_loop.body
   := do
   let (r, e, eval_back) ← Engine.eval { t := a, s := b } n
   let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-  let s : _root_.Sum (Std.U32 × Std.U32 × Std.U32 × Std.U32 × (Std.U32 →
-    Std.U32 → (Std.U32 × Std.U32))) (_root_.Sum ((Std.U32 → Std.U32 → (Std.U32
-    × Std.U32)) × Std.U32 × Std.U32 × Std.U32) ((core.result.Result Std.U32
-    Unit) × Std.U32 × Std.U32 × Std.U32)) ←
+  let s : _root_.Sum (Std.U32 × Engine × (Std.U32 → Std.U32 → (Std.U32 ×
+    Std.U32))) (_root_.Sum ((Std.U32 → Std.U32 → (Std.U32 × Std.U32)) × Std.U32
+    × Std.U32 × Std.U32) ((core.result.Result Std.U32 Unit) × Std.U32 × Std.U32
+    × Std.U32)) ←
     match cf with
     | core.ops.control_flow.ControlFlow.Continue val =>
       do
       let i ← e.s + 10#u32
       if n = 0#u32
       then
-        ok (Sum.inl (val, i, e.t, val,
+        ok (Sum.inl (val, ({ t := i, s := e.t } : Engine),
           fun i1 i2 => let e1 := eval_back { t := i2, s := i1 }
                        (e1.t, e1.s)))
       else
@@ -236,9 +235,9 @@ def run_swap_loop.body
       ok (Sum.inr (Sum.inr (r1, a1, b1, n)))
   match s with
   | Sum.inl t =>
-    let (i, i1, i2, _, back1) := t
-    let (i3, i4) := back1 i1 i2
-    let (a1, b1) := back i3 i4
+    let (i, e1, back1) := t
+    let (i1, i2) := back1 e1.t e1.s
+    let (a1, b1) := back i1 i2
     ok (done (core.result.Result.Ok i, a1, b1))
   | Sum.inr s1 =>
     match s1 with

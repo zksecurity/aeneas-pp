@@ -367,14 +367,11 @@ def BitReader.refill (self : BitReader) : Result BitReader := do
     Visibility: public -/
 def BitReader.peek
   (self : BitReader) (b : Bool) : Result (Std.U64 × BitReader) := do
-  let (s, i) ←
-    if b
-    then do
-         let self1 ← BitReader.refill self
-         ok (self1.data, self1.bit_buf)
-    else ok (self.data, self.bit_buf)
-  let i1 ← lift (i &&& 1#u64)
-  ok (i1, { data := s, bit_buf := i })
+  let br ← if b
+           then BitReader.refill self
+           else ok self
+  let i ← lift (br.bit_buf &&& 1#u64)
+  ok (i, br)
 
 /-- [nested_borrows::MutBorrow]
     Source: 'tests/src/nested-borrows.rs', lines 164:0-166:1

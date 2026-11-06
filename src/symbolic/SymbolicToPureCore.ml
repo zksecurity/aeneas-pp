@@ -242,6 +242,9 @@ type bs_ctx = {
       (** The handlers for the exit targets reachable from the current
           position: the join and the exits of the innermost let-binding, or
           the exits of the function or of the loop body. *)
+  join_outputs : join_outputs S.SymbolicExprId.Map.t;
+      (** The outputs of the joins of the enclosing let-bindings (see
+          {!SymbolicToPureExpressions.translate_let}) *)
   mut_borrow_to_consumed : texpr V.BorrowId.Map.t;
       (** A map from mutable borrows consumed by region abstractions to consumed
           values.
@@ -328,6 +331,22 @@ and exit_handler = {
   payload_ty : ty;
   deliver : (bs_ctx -> texpr -> texpr[@opaque]);
 }
+
+(** The outputs of a join, which the branches reaching it deliver *)
+and join_outputs = {
+  values : join_output list;  (** The output values, in order *)
+  abs : bool list;
+      (** For each output abstraction of the join: whether its continuation is
+          output *)
+}
+
+(** An output value of a join *)
+and join_output =
+  | JoinValue of int  (** The output symbolic value of the given index *)
+  | JoinStruct of texpr * int FVarId.Map.t
+      (** A structure of the joined context whose leaves are output symbolic
+          values: the structure where every leaf is a variable, and the index
+          of the output symbolic value of each variable *)
 [@@deriving show]
 
 (* TODO: move *)

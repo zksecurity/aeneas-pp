@@ -200,13 +200,13 @@ def
   := do
   let (e, i) := tupled_args
   let v ← alloc.vec.Vec.push e.t i
-  let b ← if i = 2#u32
-          then ok true
-          else ok c
+  let c1 ← if i = 2#u32
+           then ok true
+           else ok c
   let i1 ← i % 2#u32
   let back := fun (tupled_args1 : Eng) => { e with t := tupled_args1.t }
-  let back1 := fun c1 => c1
-  ok (core.result.Result.Ok (decide (i1 = 0#u32)), b, { e with t := v }, back,
+  let back1 := fun c2 => c2
+  ok (core.result.Result.Ok (decide (i1 = 0#u32)), c1, { e with t := v }, back,
     back1)
 
 /-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::telescope::<_, _, closures_mut_captures::{closures_mut_captures::Eng<'a>}::count::{closure}<_, _, _, _>>]: loop body 0:

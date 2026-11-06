@@ -156,63 +156,48 @@ def let_else_chain
         let acc2 ← acc1 + 1#u32
         let r ← check c
         let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-        let s : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) ×
-          Val) ((core.result.Result (Option Std.U32) Std.U32) × Val × Val ×
-          Std.U32) ←
+        let s : _root_.Sum (core.result.Result (Option Std.U32) Std.U32)
+          ((core.result.Result (Option Std.U32) Std.U32) × Std.U32) ←
           match cf with
           | core.ops.control_flow.ControlFlow.Continue val =>
             do
-            let s1 : _root_.Sum (Val × Std.U32) ((core.result.Result (Option
-              Std.U32) Std.U32) × Val × Std.U32) ←
+            let s1 : _root_.Sum Std.U32 (core.result.Result (Option Std.U32)
+              Std.U32) ←
               match w with
               | Val.Neutral h1 _ =>
                 match h1 with
-                | Head.Var i => ok (Sum.inl (w, i))
-                | Head.Const _ _ =>
-                  ok (Sum.inr (core.result.Result.Err 7#u32, w, val))
+                | Head.Var i => ok (Sum.inl i)
+                | Head.Const _ _ => ok (Sum.inr (core.result.Result.Err 7#u32))
               | Val.Nat n =>
                 do
                 let r1 ← check n
                 let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
                 match cf1 with
                 | core.ops.control_flow.ControlFlow.Continue val1 =>
-                  ok (Sum.inl (w, val1))
+                  ok (Sum.inl val1)
                 | core.ops.control_flow.ControlFlow.Break residual =>
                   let r2 ←
                     core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
                       (Option Std.U32) (core.convert.FromSame Std.U32) residual
-                  ok (Sum.inr (r2, w, val))
-              | Val.Sort =>
-                ok (Sum.inr (core.result.Result.Ok (some 0#u32), Val.Sort,
-                  val))
-            let s2 : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32)
-              × Val × Std.U32) ((core.result.Result (Option Std.U32) Std.U32) ×
-              Val × Val × Std.U32) ←
-              match s1 with
-              | Sum.inl p =>
-                do
-                let (w1, y) := p
-                let acc3 ← acc2 + 10#u32
-                let i ← val + y
-                let i1 ← i + sp
-                let i2 ← i1 + c
-                ok (Sum.inr (core.result.Result.Ok (some i2), v, w1, acc3))
-              | Sum.inr t => ok (Sum.inl t)
-            match s2 with
-            | Sum.inl t => let (r1, w1, _) := t
-                           ok (Sum.inl (r1, w1))
-            | Sum.inr t => ok (Sum.inr t)
+                  ok (Sum.inr r2)
+              | Val.Sort => ok (Sum.inr (core.result.Result.Ok (some 0#u32)))
+            match s1 with
+            | Sum.inl y =>
+              let acc3 ← acc2 + 10#u32
+              let i ← val + y
+              let i1 ← i + sp
+              let i2 ← i1 + c
+              ok (Sum.inr (core.result.Result.Ok (some i2), acc3))
+            | Sum.inr r1 => ok (Sum.inl r1)
           | core.ops.control_flow.ControlFlow.Break residual =>
             do
             let r1 ←
               core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
                 (Option Std.U32) (core.convert.FromSame Std.U32) residual
-            ok (Sum.inl (r1, w))
+            ok (Sum.inl r1)
         match s with
-        | Sum.inl p => let (r1, _) := p
-                       ok (r1, acc2)
-        | Sum.inr t => ok (let (r1, _, _, i) := t
-                           (r1, i))
+        | Sum.inl r1 => ok (r1, acc2)
+        | Sum.inr p => ok p
       | Class.Other => ok (core.result.Result.Ok none, acc1)
   | Val.Nat _ => ok (core.result.Result.Ok none, acc1)
   | Val.Sort => ok (core.result.Result.Ok none, acc1)
@@ -278,41 +263,38 @@ def scopes_in_loop_loop.body
       do
       let v ← Slice.index_usize a i
       let i2 ← i + 1#usize
-      let s1 : _root_.Sum (Std.Usize × Val × Val) (_root_.Sum ((Slice Val) ×
-        Std.U32 × Std.Usize) Std.Usize) ←
+      let s1 : _root_.Sum Std.Usize (_root_.Sum ((Slice Val) × Std.U32 ×
+        Std.Usize) Std.Usize) ←
         match v with
         | Val.Neutral h _ =>
           match h with
-          | Head.Var _ => ok (Sum.inl (i2, v, v))
+          | Head.Var _ => ok (Sum.inl i2)
           | Head.Const c cls =>
             do
-            let s2 : _root_.Sum (Std.U32 × Class) (_root_.Sum Std.Usize
-              (Std.Usize × Val × Val)) ←
+            let s2 : _root_.Sum Std.U32 (_root_.Sum Std.Usize Std.Usize) ←
               match cls with
               | Class.Def =>
                 if c > 50#u32
                 then ok (Sum.inr (Sum.inl i2))
                 else do
                      let n1 ← n + 1#u32
-                     ok (Sum.inl (n1, Class.Def))
+                     ok (Sum.inl n1)
               | Class.Ctor => do
                               let n1 ← n + c
-                              ok (Sum.inl (n1, Class.Ctor))
-              | Class.Other => ok (Sum.inr (Sum.inr (i2, v, v)))
+                              ok (Sum.inl n1)
+              | Class.Other => ok (Sum.inr (Sum.inr i2))
             match s2 with
-            | Sum.inl p =>
-              let (n1, _) := p
+            | Sum.inl n1 =>
               let n2 ← n1 + 1#u32
               ok (Sum.inr (Sum.inl (a, n2, i2)))
             | Sum.inr s3 =>
               match s3 with
               | Sum.inl i3 => ok (Sum.inr (Sum.inr i3))
-              | Sum.inr t => ok (Sum.inl t)
-        | Val.Nat _ => ok (Sum.inl (i2, v, v))
-        | Val.Sort => ok (Sum.inl (i2, Val.Sort, v))
+              | Sum.inr i3 => ok (Sum.inl i3)
+        | Val.Nat _ => ok (Sum.inl i2)
+        | Val.Sort => ok (Sum.inl i2)
       match s1 with
-      | Sum.inl t => let (i3, _, _) := t
-                     ok (Sum.inr (a, n, i3))
+      | Sum.inl i3 => ok (Sum.inr (a, n, i3))
       | Sum.inr s2 =>
         match s2 with
         | Sum.inl t => ok (Sum.inr t)
@@ -404,32 +386,29 @@ def real_loops (n : Std.U32) : Result Std.U32 := do
     Source: 'tests/src/forward-scopes.rs', lines 148:0-160:1
     Visibility: public -/
 def panic_or_return (v : Val) (x : Std.U32) : Result Std.U32 := do
-  let s : _root_.Sum (Val × Std.U32) (Std.U32 × Val) ←
+  let s : _root_.Sum Std.U32 Std.U32 ←
     match v with
     | Val.Neutral h _ =>
       match h with
-      | Head.Var i => ok (Sum.inl (v, i))
-      | Head.Const _ _ => ok (Sum.inr (0#u32, v))
+      | Head.Var i => ok (Sum.inl i)
+      | Head.Const _ _ => ok (Sum.inr 0#u32)
     | Val.Nat n => do
                    massert (n < 50#u32)
-                   ok (Sum.inl (v, n))
-    | Val.Sort => ok (Sum.inr (x, Val.Sort))
-  let s1 : _root_.Sum (Std.U32 × Val) (Std.U32 × Val) ←
+                   ok (Sum.inl n)
+    | Val.Sort => ok (Sum.inr x)
+  let s1 : _root_.Sum Std.U32 Std.U32 ←
     match s with
-    | Sum.inl p =>
-      let (v1, y) := p
+    | Sum.inl y =>
       if y > x
       then do
            let z ← y - x
            let x1 ← z + 1#u32
-           ok (Sum.inr (x1, v1))
-      else ok (Sum.inl (y, v1))
-    | Sum.inr p => ok (Sum.inl p)
+           ok (Sum.inr x1)
+      else ok s
+    | Sum.inr i => ok (Sum.inl i)
   match s1 with
-  | Sum.inl p => let (i, _) := p
-                 ok i
-  | Sum.inr p => ok (let (i, _) := p
-                     i)
+  | Sum.inl i => ok i
+  | Sum.inr i => ok i
 
 /-- [forward_scopes::loop_in_scope]: loop body 0:
     Source: 'tests/src/forward-scopes.rs', lines 167:12-169:13
@@ -460,19 +439,17 @@ def loop_in_scope_loop
     Source: 'tests/src/forward-scopes.rs', lines 163:0-176:1
     Visibility: public -/
 def loop_in_scope (v : Val) (n : Std.U32) : Result Std.U32 := do
-  let s : _root_.Sum (Val × Std.U32) (Std.U32 × Val) ←
+  let s : _root_.Sum Std.U32 Std.U32 ←
     match v with
-    | Val.Neutral _ _ => ok (Sum.inl (v, 0#u32))
+    | Val.Neutral _ _ => ok (Sum.inl 0#u32)
     | Val.Nat m =>
       do
-      let (i, _, _, k) ← loop_in_scope_loop m n m 0#u32
-      ok (Sum.inl (Val.Nat i, k))
-    | Val.Sort => ok (Sum.inr (n, Val.Sort))
+      let (_, _, _, k) ← loop_in_scope_loop m n m 0#u32
+      ok (Sum.inl k)
+    | Val.Sort => ok (Sum.inr n)
   match s with
-  | Sum.inl p => let (_, k) := p
-                 k + n
-  | Sum.inr p => ok (let (i, _) := p
-                     i)
+  | Sum.inl k => k + n
+  | Sum.inr i => ok i
 
 /-- [forward_scopes::live_borrow]:
     Source: 'tests/src/forward-scopes.rs', lines 180:0-198:1
@@ -483,40 +460,38 @@ def live_borrow
   := do
   let (r, index_mut_back) ← Array.index_mut_usize a 0#usize
   let r1 ← r + 1#u32
-  let s : _root_.Sum (Std.U32 × Val × Val × Std.U32 × (Std.U32 → Array Std.U32
-    2#usize)) (Std.U32 × (Array Std.U32 2#usize) × Val × Val) ←
+  let s : _root_.Sum (Std.U32 × Std.U32 × (Std.U32 → Array Std.U32 2#usize))
+    (Std.U32 × (Array Std.U32 2#usize)) ←
     match v with
-    | Val.Neutral _ _ => ok (Sum.inl (r1, v, w, r1, index_mut_back))
+    | Val.Neutral _ _ => ok (Sum.inl (r1, r1, index_mut_back))
     | Val.Nat n =>
       do
       let r2 ← r1 + n
-      let s1 : _root_.Sum (Val × Std.U32) (Std.U32 × Val × Val × Std.U32 ×
-        (Std.U32 → Array Std.U32 2#usize)) ←
+      let s1 : _root_.Sum Std.U32 (Std.U32 × Std.U32 × (Std.U32 → Array Std.U32
+        2#usize)) ←
         match w with
-        | Val.Neutral _ _ => ok (Sum.inl (w, 1#u32))
-        | Val.Nat m => ok (Sum.inl (w, m))
+        | Val.Neutral _ _ => ok (Sum.inl 1#u32)
+        | Val.Nat m => ok (Sum.inl m)
         | Val.Sort =>
           do
           let r3 ← r2 + 100#u32
-          ok (Sum.inr (0#u32, v, Val.Sort, r3, index_mut_back))
+          ok (Sum.inr (0#u32, r3, index_mut_back))
       match s1 with
-      | Sum.inl p =>
-        let (w1, m) := p
+      | Sum.inl m =>
         let r3 ← r2 + m
         let a1 := index_mut_back r3
         let i ← Array.index_usize a1 1#usize
         let i1 ← i + r3
         let a2 ← Array.update a1 1#usize i1
         let r4 ← Array.index_usize a2 1#usize
-        ok (Sum.inr (r4, a2, v, w1))
+        ok (Sum.inr (r4, a2))
       | Sum.inr t => ok (Sum.inl t)
-    | Val.Sort => ok (Sum.inl (r1, Val.Sort, w, r1, index_mut_back))
+    | Val.Sort => ok (Sum.inl (r1, r1, index_mut_back))
   match s with
-  | Sum.inl t => let (i, _, _, r2, back) := t
+  | Sum.inl t => let (i, r2, back) := t
                  let a1 := back r2
                  ok (i, a1)
-  | Sum.inr t => ok (let (i, a1, _, _) := t
-                     (i, a1))
+  | Sum.inr p => ok p
 
 /-- [forward_scopes::live_borrow_rev]:
     Source: 'tests/src/forward-scopes.rs', lines 201:0-216:1
@@ -572,23 +547,22 @@ def shared_from_call
   (a : Array Std.U32 2#usize) (v : Val) (k : Std.U32) :
   Result (Std.U32 × (Array Std.U32 2#usize))
   := do
-  let s : _root_.Sum (Val × Std.U32 × (Array Std.U32 2#usize)) (Std.U32 ×
-    (Array Std.U32 2#usize) × Val) ←
+  let s : _root_.Sum (Std.U32 × (Array Std.U32 2#usize)) (Std.U32 × (Array
+    Std.U32 2#usize)) ←
     match v with
     | Val.Neutral _ _ =>
       do
       let s1 ← Array.index_usize a 1#usize
-      ok (Sum.inl (v, s1, a))
+      ok (Sum.inl (s1, a))
     | Val.Nat _ => do
                    let (s1, a1) ← bump_and_get a k
-                   ok (Sum.inl (v, s1, a1))
-    | Val.Sort => ok (Sum.inr (0#u32, a, Val.Sort))
+                   ok (Sum.inl (s1, a1))
+    | Val.Sort => ok (Sum.inr (0#u32, a))
   match s with
-  | Sum.inl t => let (_, s1, back) := t
+  | Sum.inl p => let (s1, back) := p
                  let i ← s1 + 1#u32
                  ok (i, back)
-  | Sum.inr t => ok (let (i, a1, _) := t
-                     (i, a1))
+  | Sum.inr p => ok p
 
 /-- [forward_scopes::conditional_referent]:
     Source: 'tests/src/forward-scopes.rs', lines 235:0-242:1

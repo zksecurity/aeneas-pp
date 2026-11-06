@@ -30,20 +30,19 @@ def find_loop.body
     Std.Usize))
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum (Std.Usize × Std.U32) (_root_.Sum ((Slice Std.U32) ×
-    Std.U32 × Std.Usize) ((Option Std.Usize) × (Slice Std.U32) × Std.U32)) ←
+  let s : _root_.Sum Std.Usize (_root_.Sum ((Slice Std.U32) × Std.U32 ×
+    Std.Usize) ((Option Std.Usize) × (Slice Std.U32) × Std.U32)) ←
     if i < i1
     then
       do
       let i2 ← Slice.index_usize a i
       if i2 = x
-      then ok (Sum.inl (i, i2))
+      then ok (Sum.inl i)
       else let i3 ← i + 1#usize
            ok (Sum.inr (Sum.inl (a, x, i3)))
     else ok (Sum.inr (Sum.inr (none, a, x)))
   match s with
-  | Sum.inl p => let (i2, _) := p
-                 ok (done (some i2))
+  | Sum.inl i2 => ok (done (some i2))
   | Sum.inr s1 =>
     match s1 with
     | Sum.inl t => let (s2, i2, i3) := t
@@ -79,20 +78,19 @@ def first_above_loop.body
   Result (ControlFlow ((Slice Std.U32) × Std.U32 × Std.Usize) Std.U32)
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum (Std.U32 × Std.U32 × Std.U32) (_root_.Sum ((Slice Std.U32)
-    × Std.U32 × Std.Usize) (Std.U32 × (Slice Std.U32) × Std.U32)) ←
+  let s : _root_.Sum Std.U32 (_root_.Sum ((Slice Std.U32) × Std.U32 ×
+    Std.Usize) (Std.U32 × (Slice Std.U32) × Std.U32)) ←
     if i >= i1
     then ok (Sum.inr (Sum.inr (0#u32, a, x)))
     else
       do
       let i2 ← Slice.index_usize a i
       if i2 > x
-      then ok (Sum.inl (i2, i2, i2))
+      then ok (Sum.inl i2)
       else let i3 ← i + 1#usize
            ok (Sum.inr (Sum.inl (a, x, i3)))
   match s with
-  | Sum.inl t => let (i2, _, _) := t
-                 ok (done i2)
+  | Sum.inl i2 => ok (done i2)
   | Sum.inr s1 =>
     match s1 with
     | Sum.inl t => let (s2, i2, i3) := t
@@ -388,8 +386,8 @@ def nested_return_loop0.body
     Std.Usize) ((Option (Std.Usize × Std.Usize)) × (Array (Array Std.U32
     3#usize) 3#usize)))
   := do
-  let s : _root_.Sum (Std.Usize × Std.Usize × (Std.U32 → Array Std.U32 3#usize)
-    × (Array Std.U32 3#usize → Array (Array Std.U32 3#usize) 3#usize))
+  let s : _root_.Sum ((Std.Usize × Std.Usize) × (Std.U32 → Array Std.U32
+    3#usize) × (Array Std.U32 3#usize → Array (Array Std.U32 3#usize) 3#usize))
     (_root_.Sum ((Array (Array Std.U32 3#usize) 3#usize) × Std.U32 × Std.Usize)
     ((Option (Std.Usize × Std.Usize)) × (Array (Array Std.U32 3#usize) 3#usize)
     × Std.U32)) ←
@@ -404,7 +402,7 @@ def nested_return_loop0.body
       match s1 with
       | Sum.inl t =>
         let (i1, i2, _, back, back1) := t
-        ok (Sum.inl (i1, i2, back1, back))
+        ok (Sum.inl ((i1, i2), back1, back))
       | Sum.inr t =>
         let (m1, x1, i1, _) := t
         let i2 ← i1 + 1#usize
@@ -412,7 +410,7 @@ def nested_return_loop0.body
     else ok (Sum.inr (Sum.inr (none, m, x)))
   match s with
   | Sum.inl t =>
-    let (i1, i2, back, back1) := t
+    let ((i1, i2), back, back1) := t
     let a := back 0#u32
     let m1 := back1 a
     ok (done (some (i1, i2), m1))
@@ -457,20 +455,20 @@ def classify_loop.body
   := do
   let i1 := Slice.len a
   let s : _root_.Sum (Std.Usize × Std.I32) (_root_.Sum ((Slice Std.I32) ×
-    Std.Usize × Std.I32) (Std.I32 × Std.I32)) ←
+    Std.Usize × Std.I32) Std.I32) ←
     if i < i1
     then
       do
       let v ← Slice.index_usize a i
       let i2 ← i + 1#usize
-      let s1 : _root_.Sum (Std.Usize × Std.I32 × Std.I32 × Std.I32) (_root_.Sum
-        ((Slice Std.I32) × Std.Usize × Std.I32) (Std.I32 × Std.I32)) ←
+      let s1 : _root_.Sum (Std.Usize × Std.I32) (_root_.Sum ((Slice Std.I32) ×
+        Std.Usize × Std.I32) Std.I32) ←
         if v = 0#i32
-        then ok (Sum.inl (i2, neg, v, v))
+        then ok (Sum.inl (i2, neg))
         else
           do
           let s2 : _root_.Sum Std.I32 (_root_.Sum ((Slice Std.I32) × Std.Usize
-            × Std.I32) (Std.Usize × Std.I32 × Std.I32 × Std.I32)) ←
+            × Std.I32) (Std.Usize × Std.I32)) ←
             if v < (-100)#i32
             then ok (Sum.inl (-1)#i32)
             else
@@ -482,22 +480,21 @@ def classify_loop.body
                   do
                   let neg1 ← neg + 1#i32
                   if neg1 > 2#i32
-                  then ok (Sum.inr (Sum.inr (i2, neg1, v, v)))
+                  then ok (Sum.inr (Sum.inr (i2, neg1)))
                   else ok (Sum.inr (Sum.inl (a, i2, neg1)))
                 else ok (Sum.inr (Sum.inl (a, i2, neg)))
           match s2 with
-          | Sum.inl i3 => ok (Sum.inr (Sum.inr (i3, v)))
+          | Sum.inl i3 => ok (Sum.inr (Sum.inr i3))
           | Sum.inr s3 =>
             match s3 with
             | Sum.inl t => ok (Sum.inr (Sum.inl t))
-            | Sum.inr t => ok (Sum.inl t)
+            | Sum.inr p => ok (Sum.inl p)
       match s1 with
-      | Sum.inl t => let (i3, neg1, _, _) := t
-                     ok (Sum.inl (i3, neg1))
-      | Sum.inr s2 => ok (Sum.inr s2)
+      | Sum.inl _ => ok s1
+      | Sum.inr _ => ok s1
     else ok (Sum.inl (i, neg))
-  let s1 : _root_.Sum (Std.I32 × Std.I32) (_root_.Sum ((Slice Std.I32) ×
-    Std.Usize × Std.I32) (Std.I32 × (Slice Std.I32))) ←
+  let s1 : _root_.Sum Std.I32 (_root_.Sum ((Slice Std.I32) × Std.Usize ×
+    Std.I32) (Std.I32 × (Slice Std.I32))) ←
     match s with
     | Sum.inl p =>
       do
@@ -509,10 +506,9 @@ def classify_loop.body
     | Sum.inr s2 =>
       match s2 with
       | Sum.inl t => ok (Sum.inr (Sum.inl t))
-      | Sum.inr p => ok (Sum.inl p)
+      | Sum.inr i2 => ok (Sum.inl i2)
   match s1 with
-  | Sum.inl p => let (i2, _) := p
-                 ok (done i2)
+  | Sum.inl i2 => ok (done i2)
   | Sum.inr s2 =>
     match s2 with
     | Sum.inl t => let (s3, i2, i3) := t
@@ -907,13 +903,13 @@ def push_until_loop.body
   := do
   let i1 := Slice.len a
   let s : _root_.Sum Unit (_root_.Sum ((alloc.vec.Vec Std.U32) × (Slice
-    Std.U32) × Std.U32 × Std.Usize) (Std.U32 × Std.U32)) ←
+    Std.U32) × Std.U32 × Std.Usize) Std.U32) ←
     if i < i1
     then
       do
       let i2 ← Slice.index_usize a i
       if i2 = 0#u32
-      then ok (Sum.inr (Sum.inr (base, i2)))
+      then ok (Sum.inr (Sum.inr base))
       else
         if i2 > 10#u32
         then ok (Sum.inl ())
@@ -922,9 +918,9 @@ def push_until_loop.body
           let i3 ← i + 1#usize
           ok (Sum.inr (Sum.inl (v1, a, base, i3)))
     else ok (Sum.inl ())
-  let s1 : _root_.Sum (Std.U32 × Std.U32) (_root_.Sum ((alloc.vec.Vec Std.U32)
-    × (Slice Std.U32) × Std.U32 × Std.Usize) (Std.U32 × (alloc.vec.Vec Std.U32)
-    × (Slice Std.U32) × Std.U32)) ←
+  let s1 : _root_.Sum Std.U32 (_root_.Sum ((alloc.vec.Vec Std.U32) × (Slice
+    Std.U32) × Std.U32 × Std.Usize) (Std.U32 × (alloc.vec.Vec Std.U32) × (Slice
+    Std.U32) × Std.U32)) ←
     match s with
     | Sum.inl _ =>
       do
@@ -938,10 +934,9 @@ def push_until_loop.body
     | Sum.inr s2 =>
       match s2 with
       | Sum.inl t => ok (Sum.inr (Sum.inl t))
-      | Sum.inr p => ok (Sum.inl p)
+      | Sum.inr i2 => ok (Sum.inl i2)
   match s1 with
-  | Sum.inl p => let (i2, _) := p
-                 ok (done (i2, v))
+  | Sum.inl i2 => ok (done (i2, v))
   | Sum.inr s2 =>
     match s2 with
     | Sum.inl t => let (v1, s3, i2, i3) := t
@@ -982,14 +977,14 @@ def return_then_loop_loop0.body
     ((Slice Std.U32) × Std.U32) ((Slice Std.U32) × Std.U32 × Std.Usize)))
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum Std.U32 (_root_.Sum ((Slice Std.U32) × Std.U32 ×
-    Std.Usize) ((Slice Std.U32) × Std.U32 × Std.Usize)) ←
+  let s : _root_.Sum Unit (_root_.Sum ((Slice Std.U32) × Std.U32 × Std.Usize)
+    ((Slice Std.U32) × Std.U32 × Std.Usize)) ←
     if i < i1
     then
       do
       let i2 ← Slice.index_usize a i
       if i2 = x
-      then ok (Sum.inl i2)
+      then ok (Sum.inl ())
       else let i3 ← i + 1#usize
            ok (Sum.inr (Sum.inl (a, x, i3)))
     else ok (Sum.inr (Sum.inr (a, x, i)))

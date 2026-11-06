@@ -33,16 +33,16 @@ def step
   (e : Engine) (x : Std.U32) :
   Result ((core.result.Result Std.U32 Unit) × Engine × (Engine → Engine))
   := do
-  let (r, i) ←
+  let (r, e1) ←
     if x < e.bound
     then
       do
-      let i1 ← e.total + x
-      let i2 ← x + 1#u32
-      ok (core.result.Result.Ok i2, i1)
-    else ok (core.result.Result.Err (), e.total)
-  let back := fun (e1 : Engine) => { e with total := e1.total }
-  ok (r, { e with total := i }, back)
+      let i ← e.total + x
+      let i1 ← x + 1#u32
+      ok (core.result.Result.Ok i1, { e with total := i })
+    else ok (core.result.Result.Err (), e)
+  let back := fun (e2 : Engine) => { e with total := e2.total }
+  ok (r, e1, back)
 
 /-- [loop_after_loop_exit::steps]: loop body 1:
     Source: 'tests/src/loop-after-loop-exit.rs', lines 1:0-31:5
@@ -110,10 +110,10 @@ def steps_loop0.body
   := do
   let (o, iter1) ←
     core.iter.range.IteratorRange.next core.iter.range.StepU32 iter
-  let s : _root_.Sum ((core.result.Result Std.U32 Unit) × Engine × Std.U32 ×
-    (Engine → Std.U32)) (_root_.Sum ((Engine → Std.U32) × Engine × Std.U32 ×
-    Std.U32 × Std.U32 × (core.ops.range.Range Std.U32) × Std.U32) (Std.U32 ×
-    Std.U32 × Std.U32 × (Std.U32 → Std.U32))) ←
+  let s : _root_.Sum ((core.result.Result Std.U32 Unit) × Engine × (Engine →
+    Std.U32)) (_root_.Sum ((Engine → Std.U32) × Engine × Std.U32 × Std.U32 ×
+    Std.U32 × (core.ops.range.Range Std.U32) × Std.U32) (Std.U32 × Engine ×
+    (Std.U32 → Std.U32))) ←
     match o with
     | none =>
       do
@@ -128,10 +128,11 @@ def steps_loop0.body
       match s1 with
       | Sum.inl t =>
         let (i2, i3, _, _, x1, _, _, _, _, back1) := t
-        ok (Sum.inr (Sum.inr (x1, i2, i3, back1)))
+        ok (Sum.inr (Sum.inr (x1, ({ total := i2, bound := i3 } : Engine),
+          back1)))
       | Sum.inr t =>
-        let (r, e1, _, _, i2, _, _, _, _, _, back1) := t
-        ok (Sum.inl (r, e1, i2, back1))
+        let (r, e1, _, _, _, _, _, _, _, _, back1) := t
+        ok (Sum.inl (r, e1, back1))
     | some _ =>
       do
       let (r, e1, step_back) ← step e x
@@ -145,15 +146,15 @@ def steps_loop0.body
         let r1 ←
           core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
             Std.U32 (core.convert.FromSame Unit) residual
-        ok (Sum.inl (r1, e1, x, fun e2 => (step_back e2).total))
-  let s1 : _root_.Sum (Std.U32 × Std.U32 × Std.U32 × (Std.U32 → Std.U32))
-    (_root_.Sum ((Engine → Std.U32) × Engine × Std.U32 × Std.U32 × Std.U32 ×
+        ok (Sum.inl (r1, e1, fun e2 => (step_back e2).total))
+  let s1 : _root_.Sum (Std.U32 × Engine × (Std.U32 → Std.U32)) (_root_.Sum
+    ((Engine → Std.U32) × Engine × Std.U32 × Std.U32 × Std.U32 ×
     (core.ops.range.Range Std.U32) × Std.U32) ((core.result.Result Std.U32
     Unit) × Std.U32 × Std.U32 × Std.U32 × Std.U32 × Std.U32 × (Std.U32 →
     Std.U32))) ←
     match s with
     | Sum.inl t =>
-      let (r, e1, _, back1) := t
+      let (r, e1, back1) := t
       ok (Sum.inr (Sum.inr (r, e1.total, e1.bound, k, i, i1,
         fun i2 =>
           let i3 := back1 { e1 with total := i2 }
@@ -164,10 +165,10 @@ def steps_loop0.body
       | Sum.inr t => ok (Sum.inl t)
   match s1 with
   | Sum.inl t =>
-    let (i2, i3, i4, back1) := t
-    ok (done (core.result.Result.Ok i2, i3, i4,
-      fun i5 => let i6 := back1 i5
-                back { e with total := i6 }))
+    let (i2, e1, back1) := t
+    ok (done (core.result.Result.Ok i2, e1.total, e1.bound,
+      fun i3 => let i4 := back1 i3
+                back { e with total := i4 }))
   | Sum.inr s2 =>
     match s2 with
     | Sum.inl t =>

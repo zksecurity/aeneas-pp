@@ -1377,6 +1377,7 @@ and eval_switch_with_join (config : config) (span : Meta.span)
               bound_expr = cf branch_exprs;
               out_svalues = output_svalues;
               out_abs = output_abs;
+              joined_ctx;
               join_id;
               exits =
                 List.sort_uniq Stdlib.compare

@@ -281,6 +281,185 @@ let rec mk_sums_match (ctx : bs_ctx) (scrut : texpr)
                (mk_sums_match ctx (mk_texpr_from_fvar rest) branches');
            ])
 
+(** Substitute the free variables of an expression *)
+let texpr_subst_fvars (subst : texpr FVarId.Map.t) (e : texpr) : texpr =
+  let visitor =
+    object
+      inherit [_] map_expr
+
+      method! visit_FVar _ fid =
+        match FVarId.Map.find_opt fid subst with
+        | Some e -> e.e
+        | None -> FVar fid
+    end
+  in
+  visitor#visit_texpr () e
+
+(** The free variables an expression computes with: the variables which only
+    appear in meta-information are not used *)
+let texpr_get_used_fvars (e : texpr) : FVarId.Set.t =
+  let vars = ref FVarId.Set.empty in
+  let visitor =
+    object
+      inherit [_] iter_expr
+      method! visit_fvar_id _ var_id = vars := FVarId.Set.add var_id !vars
+      method! visit_emeta _ _ = ()
+    end
+  in
+  visitor#visit_texpr () e;
+  !vars
+
+(** Remove the meta-information which mentions the variables [vars] *)
+let texpr_remove_fvars_meta (vars : FVarId.Set.t) (e : texpr) : texpr =
+  let mentions (e : texpr) : bool =
+    not (FVarId.Set.disjoint (texpr_get_fvars e) vars)
+  in
+  let visitor =
+    object
+      inherit [_] map_expr as super
+
+      method! visit_Meta env m e =
+        let e = super#visit_texpr env e in
+        match m with
+        | Assignment (_, v, _) when mentions v -> e.e
+        | SymbolicAssignments l ->
+            Meta
+              ( SymbolicAssignments
+                  (List.filter (fun (x, v) -> not (mentions x || mentions v)) l),
+                e )
+        | SymbolicPlaces l ->
+            Meta (SymbolicPlaces (List.filter (fun (x, _) -> not (mentions x)) l), e)
+        | _ -> Meta (m, e)
+    end
+  in
+  visitor#visit_texpr () e
+
+(** Introduce the binders for the output symbolic values [svl] of a join, in the
+    joined context [joined].
+
+    A structure of the joined context whose leaves are all output symbolic
+    values (reading through the borrows) is output as a single value: the
+    branches deliver the structure and the next expression reads its fields,
+    rather than the branches delivering the fields one by one.
+
+    Return the variables binding the outputs, with the outputs. *)
+let bind_join_outputs (ctx : bs_ctx) (joined : C.eval_ctx)
+    (svl : V.symbolic_value list) : bs_ctx * (fvar * join_output) list =
+  let span = ctx.span in
+  let out_ids = V.SymbolicValueId.Set.of_list (List.map (fun (sv : V.symbolic_value) -> sv.sv_id) svl) in
+  (* The leaves of a structure, if they are all output symbolic values *)
+  let rec leaves (v : V.tvalue) : V.symbolic_value list option =
+    let v = ValuesUtils.unbox_tvalue span v in
+    match v.value with
+    | VSymbolic sv when V.SymbolicValueId.Set.mem sv.sv_id out_ids ->
+        Some [ sv ]
+    | VAdt { variant_id = None; fields } -> (
+        match v.ty with
+        | TAdt { builtin = None | Some TTuple; _ } ->
+            let fields = List.map leaves fields in
+            if List.mem None fields then None
+            else Some (List.concat_map Option.get fields)
+        | _ -> None)
+    | VBorrow (VMutBorrow (_, bv)) | VLoan (VSharedLoan (_, bv)) -> leaves bv
+    | VBorrow (VSharedBorrow (bid, _) | VFrozenMutBorrow (bid, _)) ->
+        leaves (InterpBorrowsCore.ctx_lookup_shared_value span joined bid)
+    | _ -> None
+  in
+  let is_struct (v : V.tvalue) : bool =
+    match (v.value, v.ty) with
+    | VAdt { variant_id = None; _ }, TAdt { builtin = None | Some TTuple; _ } ->
+        true
+    | _ -> false
+  in
+  (* Find the maximal structures whose leaves are distinct output symbolic
+     values, and which share no leaves with each other *)
+  let claimed = ref V.SymbolicValueId.Set.empty in
+  let structs = ref [] in
+  let rec find (v : V.tvalue) : unit =
+    let v = ValuesUtils.unbox_tvalue span v in
+    let struct_leaves = if is_struct v then leaves v else None in
+    match struct_leaves with
+    | Some (_ :: _ as l)
+      when let ids = List.map (fun (sv : V.symbolic_value) -> sv.sv_id) l in
+           let set = V.SymbolicValueId.Set.of_list ids in
+           V.SymbolicValueId.Set.cardinal set = List.length ids
+           && V.SymbolicValueId.Set.disjoint set !claimed ->
+        claimed :=
+          V.SymbolicValueId.Set.union !claimed
+            (V.SymbolicValueId.Set.of_list
+               (List.map (fun (sv : V.symbolic_value) -> sv.sv_id) l));
+        structs := (v, l) :: !structs
+    | _ -> (
+        match v.value with
+        | VAdt { fields; _ } -> List.iter find fields
+        | VBorrow (VMutBorrow (_, bv)) | VLoan (VSharedLoan (_, bv)) -> find bv
+        | _ -> ())
+  in
+  List.iter
+    (function
+      | V.EBinding (_, v) -> find v
+      | EAbs _ | EFrame -> ())
+    joined.env;
+  let structs = List.rev !structs in
+  (* Bind the outputs, in the order of [svl]: a structure is bound at the
+     position of its first leaf *)
+  let index =
+    V.SymbolicValueId.Map.of_list
+      (List.mapi (fun i (sv : V.symbolic_value) -> (sv.sv_id, i)) svl)
+  in
+  let struct_of (sv : V.symbolic_value) : int option =
+    List.find_index
+      (fun (_, l) ->
+        List.exists (fun (sv' : V.symbolic_value) -> sv'.sv_id = sv.sv_id) l)
+      structs
+  in
+  let ctx, bound, _ =
+    List.fold_left
+      (fun (ctx, bound, bound_structs) (sv : V.symbolic_value) ->
+        match struct_of sv with
+        | None ->
+            let ctx, var = fresh_var_for_symbolic_value sv ctx in
+            let out = JoinValue (V.SymbolicValueId.Map.find sv.sv_id index) in
+            (ctx, (var, out) :: bound, bound_structs)
+        | Some i when List.mem i bound_structs -> (ctx, bound, bound_structs)
+        | Some i ->
+            let v, l = List.nth structs i in
+            let ctx, vars = fresh_vars_for_symbolic_values l ctx in
+            let indices =
+              FVarId.Map.of_list
+                (List.map2
+                   (fun (var : fvar) (sv : V.symbolic_value) ->
+                     (var.id, V.SymbolicValueId.Map.find sv.sv_id index))
+                   vars l)
+            in
+            let e = tvalue_to_texpr ctx joined v in
+            let ctx, var = fresh_var None e.ty ctx in
+            (ctx, (var, JoinStruct (e, indices)) :: bound, i :: bound_structs))
+      (ctx, [], []) svl
+  in
+  (ctx, List.rev bound)
+
+(** Destructure the structures output by a join (see {!bind_join_outputs}) in
+    the next expression *)
+let destructure_join_outputs (ctx : bs_ctx) (outputs : (fvar * join_output) list)
+    (next : texpr) : texpr =
+  let rec to_pat (e : texpr) : tpat =
+    match destruct_apps e with
+    | { e = Qualif { id = AdtCons { variant_id = None; _ }; _ }; _ }, fields ->
+        mk_adt_pat e.ty None (List.map to_pat fields)
+    | { e = FVar fid; _ }, [] ->
+        mk_tpat_from_fvar None (FVarId.Map.find fid ctx.fvars)
+    | _ -> [%internal_error] ctx.span
+  in
+  List.fold_right
+    (fun ((var : fvar), out) next ->
+      match out with
+      | JoinValue _ -> next
+      | JoinStruct (e, _) ->
+          [%add_loc] mk_closed_checked_let ctx false (to_pat e)
+            (mk_texpr_from_fvar var) next)
+    outputs next
+
 let rec translate_expr (e : S.expr) (ctx : bs_ctx) : texpr =
   [%ldebug "e:\n" ^ bs_ctx_expr_to_string ctx e];
   match e with
@@ -2354,10 +2533,11 @@ and translate_continue_break (ctx : bs_ctx) (target : S.exit_target)
 and translate_let (ctx0 : bs_ctx) (lete : S.let_expr) : texpr =
   let ctx = ctx0 in
 
-  (* Introduce free variables for the outputs *)
-  let bind_outputs (ctx : bs_ctx) (absl : V.abs list)
-      (values : V.symbolic_value list) : bs_ctx * tpat list * tpat list =
-    let ctx, absl =
+  (* Introduce free variables for the output abstractions which have a
+     continuation *)
+  let bind_output_abs (ctx : bs_ctx) (absl : V.abs list) :
+      bs_ctx * fvar option list =
+    let ctx, fvars =
       (* Compute the type of the break abstractions *)
       let abs_tys = List.map (abs_to_ty ctx) absl in
       let abs_tys, ignored =
@@ -2391,18 +2571,64 @@ and translate_let (ctx0 : bs_ctx) (lete : S.let_expr) : texpr =
         }
       in
       (* *)
-      (ctx, List.map snd fvars)
+      (ctx, fvars)
     in
-    let ctx, values = fresh_vars_for_symbolic_values values ctx in
-    let mk_pats = List.map (mk_tpat_from_fvar None) in
-    (ctx, mk_pats absl, mk_pats values)
+    ( ctx,
+      List.map
+        (fun (abs : V.abs) -> List.assoc_opt abs.abs_id fvars)
+        absl )
   in
 
   (* Introduce the binders for the outputs *)
-  let ctx, out_abs, out_values =
-    bind_outputs ctx lete.out_abs lete.out_svalues
+  let ctx, out_values =
+    bind_join_outputs ctx lete.joined_ctx lete.out_svalues
   in
-  let outputs = out_values @ out_abs in
+  let ctx, out_abs = bind_output_abs ctx lete.out_abs in
+
+  (* Translate the next expression: the branches only deliver the outputs it
+     reads *)
+  let next_e = translate_expr lete.next_expr ctx in
+  let used = texpr_get_used_fvars next_e in
+  let all_out_values, all_out_abs = (out_values, out_abs) in
+  let out_values =
+    List.filter
+      (fun ((var : fvar), out) ->
+        match out with
+        | JoinValue _ -> FVarId.Set.mem var.id used
+        | JoinStruct (_, indices) ->
+            FVarId.Map.exists (fun fid _ -> FVarId.Set.mem fid used) indices)
+      out_values
+  in
+  let out_abs =
+    List.map
+      (fun var ->
+        Option.bind var (fun (var : fvar) ->
+            if FVarId.Set.mem var.id used then Some var else None))
+      out_abs
+  in
+  let next_e =
+    let dropped =
+      FVarId.Set.diff
+        (FVarId.Set.of_list
+           (List.concat_map
+              (fun ((var : fvar), out) ->
+                match out with
+                | JoinValue _ -> [ var.id ]
+                | JoinStruct (_, indices) -> List.map fst (FVarId.Map.bindings indices))
+              all_out_values
+           @ List.filter_map (Option.map (fun (var : fvar) -> var.id)) all_out_abs))
+        used
+    in
+    texpr_remove_fvars_meta dropped next_e
+  in
+  let next_e = destructure_join_outputs ctx out_values next_e in
+  let join_outputs =
+    { values = List.map snd out_values; abs = List.map Option.is_some out_abs }
+  in
+  let outputs =
+    List.map (mk_tpat_from_fvar None)
+      (List.map fst out_values @ List.filter_map Fun.id out_abs)
+  in
   let output = mk_simpl_tuple_pat outputs in
 
   [%ldebug
@@ -2470,6 +2696,8 @@ and translate_let (ctx0 : bs_ctx) (lete : S.let_expr) : texpr =
         mk_return =
           (if List.mem S.ExitReturn lete.exits then ctx.mk_return else None);
         exit_handlers = own_handler :: exit_handlers;
+        join_outputs =
+          S.SymbolicExprId.Map.add lete.join_id join_outputs ctx.join_outputs;
       }
     in
 
@@ -2477,9 +2705,6 @@ and translate_let (ctx0 : bs_ctx) (lete : S.let_expr) : texpr =
     translate_expr lete.bound_expr ctx
   in
   [%ltrace "- bound expression:\n" ^ texpr_to_string ctx bound_e];
-
-  (* Translate the next expression *)
-  let next_e = translate_expr lete.next_expr ctx in
 
   (* Create the let-binding *)
   if exits <> [] then
@@ -2508,13 +2733,29 @@ and translate_join (ctx : bs_ctx) (join_id : S.symbolic_expr_id)
     ^ String.concat "\n" (List.map (tvalue_to_string ctx) input_values)
     ^ "\n- input_abs:\n"
     ^ String.concat "\n\n" (List.map (abs_to_string ctx) input_abs)];
-  let conts = List.filter_map (translate_abs_to_cont ctx ectx) input_abs in
+  let outputs = S.SymbolicExprId.Map.find join_id ctx.join_outputs in
+  let conts =
+    List.filter_map
+      (fun (abs, output) ->
+        if output then translate_abs_to_cont ctx ectx abs else None)
+      (List.combine input_abs outputs.abs)
+  in
   let values = List.map (tvalue_to_texpr ctx ectx) input_values in
   [%ldebug
     "- translated values:\n"
     ^ String.concat "\n" (List.map (texpr_to_string ctx) values)
     ^ "\n- translated abs:\n"
     ^ String.concat "\n\n" (List.map (texpr_to_string ctx) conts)];
+  let values =
+    List.map
+      (function
+        | JoinValue i -> List.nth values i
+        | JoinStruct (e, indices) ->
+            texpr_subst_fvars
+              (FVarId.Map.map (List.nth values) indices)
+              e)
+      outputs.values
+  in
   (* Note that the order between the values and the continuations is not the same
      depending on whether we reach a break or a continue *)
   let outputs = values @ conts in

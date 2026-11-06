@@ -101,17 +101,16 @@ def Eng.find_loop.body
       let i2 ←
         alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
           self.s.v i
-      let s1 : _root_.Sum ((alloc.vec.Vec Std.U32) × Std.U32) (Std.U32 ×
-        Std.Usize) ←
+      let s1 : _root_.Sum Unit (Std.U32 × Std.Usize) ←
         if i2 = x
-        then ok (Sum.inl (self.env.v, self.env.n))
+        then ok (Sum.inl ())
         else
           do
           let i3 ←
             alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
               self.env.v 0#usize
           if i3 = x
-          then ok (Sum.inl (self.env.v, self.env.n))
+          then ok (Sum.inl ())
           else let i4 ← i + 1#usize
                ok (Sum.inr (x, i4))
       match s1 with
@@ -173,12 +172,12 @@ def read_join_then_write
 def sum_then_write
   (e : Eng) (i : Std.Usize) : Result (Std.U32 × Eng × (Eng → Eng)) := do
   let acc ← Eng.sum e i
-  let (s, n) ← if acc > 10#u32
-               then ok (e.s, e.s.n)
-               else ok (e.s, e.env.n)
+  let (e1, n) ← if acc > 10#u32
+                then ok (e, e.s.n)
+                else ok (e, e.env.n)
   let i1 ← acc + n
-  let back := fun (e1 : Eng) => { e with s := e1.s }
-  ok (i1, { e with s := { s with n := i1 } }, back)
+  let back := fun (e2 : Eng) => { e with s := e2.s }
+  ok (i1, { e1 with s := { e1.s with n := i1 } }, back)
 
 /-- [frozen_shared_refinements::local_write]:
     Source: 'tests/src/frozen-shared-refinements.rs', lines 73:0-78:1
