@@ -153,8 +153,7 @@ def call_closure2.closure_1.Insts.CoreOpsFunctionFnMutTupleU32.call_mut
   (state : call_closure2.closure_1) (_ : Unit) :
   Result (Std.U32 × call_closure2.closure_1)
   := do
-  let i ←
-    call_closure2.closure_1.Insts.CoreOpsFunctionFnTupleU32.call state ()
+  let i ← call_closure2.closure_1.Insts.CoreOpsFunctionFnTupleU32.call state ()
   ok (i, state)
 
 /-- [closures::call_closure2::{impl core::ops::function::FnOnce<(), u32> for closures::call_closure2::{closure#1}}::call_once]:
@@ -251,8 +250,7 @@ def call_closure2.closure.Insts.CoreOpsFunctionFnTupleU32 :
 /-- [closures::call_closure2]:
     Source: 'tests/src/closures.rs', lines 38:0-41:1 -/
 def call_closure2 : Result Std.U32 := do
-  let _ ←
-    call_closure call_closure2.closure.Insts.CoreOpsFunctionFnTupleU32 ()
+  let _ ← call_closure call_closure2.closure.Insts.CoreOpsFunctionFnTupleU32 ()
   call_closure call_closure2.closure_1.Insts.CoreOpsFunctionFnTupleU32 ()
 
 /-- [closures::u8_id]:
@@ -278,8 +276,8 @@ def P.Insts.CoreOpsFunctionFnOnceTupleU8U8.call_once
 /-- Trait implementation: [closures::{impl core::ops::function::FnOnce<(u8,), u8> for closures::u8_id}]
     Source: 'tests/src/closures.rs', lines 43:0-45:1 -/
 @[reducible]
-def P.Insts.CoreOpsFunctionFnOnceTupleU8U8 : core.ops.function.FnOnce (Std.U8
-  → Result Std.U8) Std.U8 Std.U8 := {
+def P.Insts.CoreOpsFunctionFnOnceTupleU8U8 : core.ops.function.FnOnce (Std.U8 →
+  Result Std.U8) Std.U8 Std.U8 := {
   call_once := P.Insts.CoreOpsFunctionFnOnceTupleU8U8.call_once
 }
 

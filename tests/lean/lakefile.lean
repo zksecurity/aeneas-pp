@@ -9,6 +9,7 @@ package «tests» {}
 
 @[default_target] lean_lib Adt
 @[default_target] lean_lib AdtBorrows
+@[default_target] lean_lib Arc
 @[default_target] lean_lib Arrays
 @[default_target] lean_lib ArraysDefs
 @[default_target] lean_lib ArraySliceIndex
@@ -27,6 +28,7 @@ package «tests» {}
 @[default_target] lean_lib CharCasts
 @[default_target] lean_lib ChunksExact
 @[default_target] lean_lib ClosureRecursion
+@[default_target] lean_lib ClosureRecursionOpaque
 @[default_target] lean_lib ClosureRegionRequirements
 @[default_target] lean_lib Closures
 @[default_target] lean_lib ClosuresFnmutArgs
@@ -38,6 +40,7 @@ package «tests» {}
 @[default_target] lean_lib ConstantsLean
 @[default_target] lean_lib ConstShadow
 @[default_target] lean_lib Curve25519
+@[default_target] lean_lib DeepNesting
 @[default_target] lean_lib Default
 @[default_target] lean_lib DefaultedMethod
 @[default_target] lean_lib Demo
@@ -100,6 +103,7 @@ package «tests» {}
 @[default_target] lean_lib JoinTargetSharedBorrows
 @[default_target] lean_lib LeanKeywords
 @[default_target] lean_lib LeanKeywordsClash
+@[default_target] lean_lib LeanNameCollisions
 @[default_target] lean_lib ListBorrows
 @[default_target] lean_lib LoopAfterLoopExit
 @[default_target] lean_lib LoopPromotedSharedRefs
@@ -146,6 +150,7 @@ package «tests» {}
 @[default_target] lean_lib StepBy
 @[default_target] lean_lib StepOverflowing
 @[default_target] lean_lib StringChars
+@[default_target] lean_lib StringEscapes
 @[default_target] lean_lib SwitchEarlyReturns
 @[default_target] lean_lib SwitchTest
 @[default_target] lean_lib TargetFeatures

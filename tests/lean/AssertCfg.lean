@@ -322,8 +322,8 @@ def assert_or_in_loop_loop.body
     let i1 ← lift (IScalar.hcast .U32 (-200)#i32)
     massert ((c1 >= i1) || (c1 < 100#u32))
     let iter2 ← if c1 >= i1
-                  then ok iter1
-                  else ok iter1
+                then ok iter1
+                else ok iter1
     let i2 ← c1 >>> 16#i32
     let i3 ← lift (100#u32 &&& i2)
     let c2 ← lift (core.num.U32.wrapping_add c1 i3)

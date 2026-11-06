@@ -282,7 +282,7 @@ let fun_builtin_filter_types_trait_clauses (ty_to_string : 'a -> string)
     match FunDeclId.TreeMap.find_opt id ctx.funs_filter_trait_clauses_map with
     | None -> Result.Ok clauses
     | Some filter ->
-        if List.length filter <> List.length types then (
+        if List.length filter <> List.length clauses then (
           let decl =
             [%silent_unwrap_opt_span] None (ctx_lookup_fun_decl_info ctx id)
           in
@@ -3812,11 +3812,16 @@ let extract_trait_impl (ctx : extraction_ctx) (fmt : F.formatter)
   F.pp_print_break fmt 0 0
 
 (** Lean only: prove that a function is monotone in its closure dictionaries
-    (see [closure_mono_funs] in {!ExtractBase.extraction_ctx}) *)
-let extract_derive_closure_mono (ctx : extraction_ctx) (fmt : F.formatter)
+    (see [closure_mono_funs] in {!ExtractBase.extraction_ctx}), or state it as
+    an axiom if the function is opaque *)
+let extract_closure_mono (ctx : extraction_ctx) (fmt : F.formatter)
     (def : fun_decl) : unit =
   let name = ctx_get_local_function def.item_meta.span def.def_id None ctx in
-  F.pp_print_string fmt ("derive_closure_mono " ^ name);
+  let command =
+    if Option.is_none def.body then "axiom_closure_mono"
+    else "derive_closure_mono"
+  in
+  F.pp_print_string fmt (command ^ " " ^ name);
   F.pp_print_break fmt 0 0;
   F.pp_print_break fmt 0 0
 

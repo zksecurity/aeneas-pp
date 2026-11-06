@@ -97,33 +97,38 @@ meta partial def withMethodsMono {β} [Inhabited β] (α : Expr) (methods : List
     withLocalDeclD `h (← mkAppM ``monotone #[fn]) fun h =>
       withMethodsMono α methods (hs.push h) k
 
+/-- The statement that `f` is monotone in its closure dictionaries (`FnOnce`,
+    `FnMut` and `Fn` instances) as long as their methods are monotone, with its
+    universe parameters -/
+meta def closureMonoType (fName : Name) : MetaM (List Name × Expr) := do
+  let info ← getConstInfo fName
+  let uName ← mkFreshUserName `u
+  let us := info.levelParams.map Level.param
+  let type ← forallTelescope info.type fun xs _ =>
+    withLocalDecl `α .implicit (mkSort (Level.param uName)) fun α => do
+    withLocalDecl `inst .instImplicit (← mkAppM ``PartialOrder #[α]) fun inst =>
+    withClosureDictFuns α xs 0 #[] #[] fun params dicts => do
+      let methods := dicts.toList.flatMap fun (_, g, paths) => paths.map (g, ·)
+      withMethodsMono α methods #[] fun hs => do
+        let fn ← withLocalDeclD `a α fun a => do
+          let args := (Array.range xs.size).map fun k =>
+            match dicts.find? (fun (i, _, _) => i == k) with
+            | some (_, g, _) => mkApp g a
+            | none => xs[k]!
+          mkLambdaFVars #[a] (mkAppN (mkConst fName us) args)
+        mkForallFVars (#[α, inst] ++ params ++ hs) (← mkAppM ``monotone #[fn])
+  return (uName :: info.levelParams, ← instantiateMVars type)
+
 /-- `derive_closure_mono f` proves that `f` is monotone in its closure
-    dictionaries (`FnOnce`, `FnMut` and `Fn` instances) as long as their methods
-    are monotone, and registers the theorem `f.closure_mono` for
-    `partial_fixpoint`. -/
+    dictionaries (see `closureMonoType`) and registers the theorem
+    `f.closure_mono` for `partial_fixpoint`. -/
 syntax (name := deriveClosureMono) "derive_closure_mono " ident : command
 
 @[command_elab deriveClosureMono]
 meta def elabDeriveClosureMono : CommandElab := fun stx => do
   let thmName ← liftTermElabM do
     let fName ← realizeGlobalConstNoOverloadWithInfo stx[1]
-    let info ← getConstInfo fName
-    let uName ← mkFreshUserName `u
-    let us := info.levelParams.map Level.param
-    let type ← forallTelescope info.type fun xs _ =>
-      withLocalDecl `α .implicit (mkSort (Level.param uName)) fun α => do
-      withLocalDecl `inst .instImplicit (← mkAppM ``PartialOrder #[α]) fun inst =>
-      withClosureDictFuns α xs 0 #[] #[] fun params dicts => do
-        let methods := dicts.toList.flatMap fun (_, g, paths) => paths.map (g, ·)
-        withMethodsMono α methods #[] fun hs => do
-          let fn ← withLocalDeclD `a α fun a => do
-            let args := (Array.range xs.size).map fun k =>
-              match dicts.find? (fun (i, _, _) => i == k) with
-              | some (_, g, _) => mkApp g a
-              | none => xs[k]!
-            mkLambdaFVars #[a] (mkAppN (mkConst fName us) args)
-          mkForallFVars (#[α, inst] ++ params ++ hs) (← mkAppM ``monotone #[fn])
-    let type ← instantiateMVars type
+    let (levelParams, type) ← closureMonoType fName
     let mvar ← mkFreshExprSyntheticOpaqueMVar type
     let tac ← `(tactic|
       (intros
@@ -134,9 +139,21 @@ meta def elabDeriveClosureMono : CommandElab := fun stx => do
     Term.runTactic mvar.mvarId! tac .term
     let value ← instantiateMVars mvar
     let thmName := fName ++ `closure_mono
-    addDecl <| Declaration.thmDecl
-      { name := thmName, levelParams := uName :: info.levelParams, type, value }
+    addDecl <| Declaration.thmDecl { name := thmName, levelParams, type, value }
     pure thmName
   elabCommand (← `(attribute [partial_fixpoint_monotone] $(mkIdent thmName)))
 
-end Aeneas.Std
+/-- `axiom_closure_mono f` states as an axiom `f.closure_mono`, the monotonicity
+    of the axiomatized function `f` in its closure dictionaries (see
+    `closureMonoType`), and registers it for `partial_fixpoint`. -/
+syntax (name := axiomClosureMono) "axiom_closure_mono " ident : command
+
+@[command_elab axiomClosureMono]
+meta def elabAxiomClosureMono : CommandElab := fun stx => do
+  let axName ← liftTermElabM do
+    let fName ← realizeGlobalConstNoOverloadWithInfo stx[1]
+    let (levelParams, type) ← closureMonoType fName
+    let axName := fName ++ `closure_mono
+    addDecl <| Declaration.axiomDecl { name := axName, levelParams, type, isUnsafe := false }
+    pure axName
+  elabCommand (← `(attribute [partial_fixpoint_monotone] $(mkIdent axName)))

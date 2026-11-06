@@ -104,8 +104,7 @@ def slice_iter_mut_while_loop0_loop0 (b : Bool) : Result Unit := do
 @[rust_loop_body]
 def slice_iter_mut_while_loop0.body
   (b : Bool) (it : core.slice.iter.IterMut Std.U16)
-  (back : core.slice.iter.IterMut Std.U16 → core.slice.iter.IterMut Std.U16)
-  :
+  (back : core.slice.iter.IterMut Std.U16 → core.slice.iter.IterMut Std.U16) :
   Result (ControlFlow ((core.slice.iter.IterMut Std.U16) ×
     (core.slice.iter.IterMut Std.U16 → core.slice.iter.IterMut Std.U16))
     (core.slice.iter.IterMut Std.U16))
@@ -208,8 +207,7 @@ def slice_iter_mut_while_early_return_loop0_loop0
 @[rust_loop_body]
 def slice_iter_mut_while_early_return_loop0.body
   (b : Bool) (it : core.slice.iter.IterMut Std.U16)
-  (back : core.slice.iter.IterMut Std.U16 → core.slice.iter.IterMut Std.U16)
-  :
+  (back : core.slice.iter.IterMut Std.U16 → core.slice.iter.IterMut Std.U16) :
   Result (ControlFlow ((core.slice.iter.IterMut Std.U16) ×
     (core.slice.iter.IterMut Std.U16 → core.slice.iter.IterMut Std.U16))
     (core.slice.iter.IterMut Std.U16))
@@ -275,8 +273,7 @@ def slice_iter_mut_while_early_return_two_bools_loop0_loop0
 @[rust_loop_body]
 def slice_iter_mut_while_early_return_two_bools_loop0.body
   (b0 : Bool) (b1 : Bool) (it : core.slice.iter.IterMut Std.U16)
-  (back : core.slice.iter.IterMut Std.U16 → core.slice.iter.IterMut Std.U16)
-  :
+  (back : core.slice.iter.IterMut Std.U16 → core.slice.iter.IterMut Std.U16) :
   Result (ControlFlow ((core.slice.iter.IterMut Std.U16) ×
     (core.slice.iter.IterMut Std.U16 → core.slice.iter.IterMut Std.U16))
     (core.slice.iter.IterMut Std.U16))

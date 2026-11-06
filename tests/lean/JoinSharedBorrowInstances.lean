@@ -40,8 +40,8 @@ inductive Node where
 /-- [join_shared_borrow_instances::node_eq]:
     Source: 'tests/src/join-shared-borrow-instances.rs', lines 24:0-29:1 -/
 def node_eq (a : Node) (b : Node) : Result Bool := do
-  let s : _root_.Sum (Node × Node × Std.U32 × Std.U32) (Node × Node × Node
-    × Node) ←
+  let s : _root_.Sum (Node × Node × Std.U32 × Std.U32) (Node × Node × Node ×
+    Node) ←
     match a with
     | Node.Bound a1 =>
       match b with
@@ -90,8 +90,8 @@ def node_eq (a : Node) (b : Node) : Result Bool := do
     | Node.Proj _ _ _ => ok (Sum.inr (a, b, a, b))
     | Node.Nat _ => ok (Sum.inr (a, b, a, b))
     | Node.Str _ => ok (Sum.inr (a, b, a, b))
-  let s1 : _root_.Sum (Node × Node × Node × Node) (Bool × Node × Node ×
-    Node × Node) ←
+  let s1 : _root_.Sum (Node × Node × Node × Node) (Bool × Node × Node × Node ×
+    Node) ←
     match s with
     | Sum.inl t =>
       do
@@ -118,8 +118,8 @@ def same
     let i1 ← lift (UScalar.cast .Usize b)
     let right ←
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Node) nodes i1
-    let s : _root_.Sum (Node × Node × Std.U32 × Std.U32 × Std.U32 ×
-      Std.U32) (_root_.Sum (Bool × Node × Node) (Node × Node)) ←
+    let s : _root_.Sum (Node × Node × Std.U32 × Std.U32 × Std.U32 × Std.U32)
+      (_root_.Sum (Bool × Node × Node) (Node × Node)) ←
       match left with
       | Node.Bound _ => ok (Sum.inr (Sum.inr (left, right)))
       | Node.Free _ => ok (Sum.inr (Sum.inr (left, right)))

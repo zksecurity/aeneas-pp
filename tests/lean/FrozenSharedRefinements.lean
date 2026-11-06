@@ -93,8 +93,8 @@ def Eng.find_loop.body
   Result (ControlFlow (Std.U32 × Std.Usize) (Option Std.Usize))
   := do
   let i1 := alloc.vec.Vec.len self.s.v
-  let s : _root_.Sum Unit (_root_.Sum (Std.U32 × Std.Usize) ((Option
-    Std.Usize) × Std.U32)) ←
+  let s : _root_.Sum Unit (_root_.Sum (Std.U32 × Std.Usize) ((Option Std.Usize)
+    × Std.U32)) ←
     if i < i1
     then
       do
@@ -174,8 +174,8 @@ def sum_then_write
   (e : Eng) (i : Std.Usize) : Result (Std.U32 × Eng × (Eng → Eng)) := do
   let acc ← Eng.sum e i
   let (s, n) ← if acc > 10#u32
-                 then ok (e.s, e.s.n)
-                 else ok (e.s, e.env.n)
+               then ok (e.s, e.s.n)
+               else ok (e.s, e.env.n)
   let i1 ← acc + n
   let back := fun (e1 : Eng) => { e with s := e1.s }
   ok (i1, { e with s := { s with n := i1 } }, back)
@@ -246,8 +246,8 @@ def test_reads : Result Unit := do
   massert b1
   let o2 ← Eng.find { s := st, env } 8#u32
   let b2 ← match o2 with
-             | none => ok true
-             | some _ => ok false
+           | none => ok true
+           | some _ => ok false
   massert b2
   let i3 ← pick2 env true
   massert (i3 = 11#u32)

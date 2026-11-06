@@ -65,8 +65,8 @@ def get (t : F) : Result Std.U32 := do
     Visibility: public -/
 def get_twice (t : F) : Result Std.U32 := do
   let n ← match t with
-            | F.A n1 => ok n1
-            | F.B x => ok x
+          | F.A n1 => ok n1
+          | F.B x => ok x
   let i ← get t
   n + i
 

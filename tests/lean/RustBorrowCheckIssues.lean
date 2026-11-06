@@ -49,13 +49,13 @@ def unnecessary_error : Result Unit := do
     Source: 'tests/src/rust-borrow-check-issues.rs', lines 35:0-52:1 -/
 def unnecessary_error_2 (b0 : Bool) (b1 : Bool) : Result Unit := do
   let i ← if b0
-            then ok 0#u32
-            else ok 1#u32
+          then ok 0#u32
+          else ok 1#u32
   let _ ← if b1
-            then do
-                 core.mem.drop 2#u32
-                 ok 2#u32
-            else ok 0#u32
+          then do
+               core.mem.drop 2#u32
+               ok 2#u32
+          else ok 0#u32
   let _ ← 2#u32 + 1#u32
   core.mem.drop i
 

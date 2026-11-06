@@ -91,8 +91,7 @@ def inc_twice (x : Std.U32) : Result (Std.U32 × Std.U32) := do
     Visibility: public -/
 def acc_twice
   (x : Std.U32) (y : Std.U32) : Result (Std.U32 × Std.U32 × Std.U32) := do
-  let (_, a, x1) ←
-    Acc.Insts.Trait_unit_outputStepU32.step { total := 0#u32 } x
+  let (_, a, x1) ← Acc.Insts.Trait_unit_outputStepU32.step { total := 0#u32 } x
   let (i, _, y1) ← run Acc.Insts.Trait_unit_outputStepU32 a y
   ok (i, x1, y1)
 

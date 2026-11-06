@@ -107,13 +107,12 @@ def Eng.decl
     Source: 'tests/src/frozen-mut-borrows.rs', lines 52:4-55:5 -/
 def Eng.kc
   (self : Eng) (x : Std.U32) :
-  Result ((core.result.Result (Option Std.U32) Std.U32) × Eng × (Eng →
-    Eng))
+  Result ((core.result.Result (Option Std.U32) Std.U32) × Eng × (Eng → Eng))
   := do
   let v ← alloc.vec.Vec.push self.t x
   let o ← if x > 5#u32
-            then ok (some x)
-            else ok none
+          then ok (some x)
+          else ok none
   let back'a := fun (self1 : Eng) => { self with t := self1.t }
   ok (core.result.Result.Ok o, { self with t := v }, back'a)
 
@@ -122,21 +121,20 @@ def Eng.kc
     Visibility: public -/
 def Eng.iota
   (self : Eng) (n : Std.Usize) (k : Bool) :
-  Result ((core.result.Result (Option Std.U32) Std.U32) × Eng × (Eng →
-    Eng))
+  Result ((core.result.Result (Option Std.U32) Std.U32) × Eng × (Eng → Eng))
   := do
   let r ← Eng.decl self n
   let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-  let s : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) × Eng ×
-    Env × (Eng → alloc.vec.Vec Std.U32)) ((core.result.Result (Option
-    Std.U32) Std.U32) × (alloc.vec.Vec Std.U32) × Env × Env ×
-    (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)) ←
+  let s : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) × Eng × Env
+    × (Eng → alloc.vec.Vec Std.U32)) ((core.result.Result (Option Std.U32)
+    Std.U32) × (alloc.vec.Vec Std.U32) × Env × Env × (alloc.vec.Vec Std.U32 →
+    alloc.vec.Vec Std.U32)) ←
     match cf with
     | core.ops.control_flow.ControlFlow.Continue val =>
       do
       let s1 : _root_.Sum (Eng × Std.U32 × (Eng → alloc.vec.Vec Std.U32))
-        ((core.result.Result (Option Std.U32) Std.U32) × Eng × Env × (Eng
-        → alloc.vec.Vec Std.U32)) ←
+        ((core.result.Result (Option Std.U32) Std.U32) × Eng × Env × (Eng →
+        alloc.vec.Vec Std.U32)) ←
         if k
         then
           do
@@ -168,9 +166,8 @@ def Eng.iota
       let r1 ←
         core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
           (Option Std.U32) (core.convert.FromSame Std.U32) residual
-      ok (Sum.inl (r1, self, self.env,
-        fun (e : Eng) => let ⟨ v, _ ⟩ := e
-                         v))
+      ok (Sum.inl (r1, self, self.env, fun (e : Eng) => let ⟨ v, _ ⟩ := e
+                                                        v))
   let (r1, v, e, back) ←
     match s with
     | Sum.inl t =>
@@ -228,13 +225,12 @@ def Eval.val (self : Eval) (v : Std.U32) : Result Std.U32 := do
     Source: 'tests/src/frozen-mut-borrows.rs', lines 92:4-95:5 -/
 def Eval.kc
   (self : Eval) (x : Std.U32) :
-  Result ((core.result.Result (Option Std.U32) Std.U32) × Eval × (Eval →
-    Eval))
+  Result ((core.result.Result (Option Std.U32) Std.U32) × Eval × (Eval → Eval))
   := do
   let v ← alloc.vec.Vec.push self.t x
   let o ← if x > 5#u32
-            then ok (some x)
-            else ok none
+          then ok (some x)
+          else ok none
   let back'a := fun self1 => { self1 with env := self.env }
   ok (core.result.Result.Ok o, { self with t := v }, back'a)
 
@@ -281,8 +277,7 @@ def Eval.iota.closure.Insts.CoreOpsFunctionFnPairShared2EvalU32Bool.call
     Visibility: public -/
 def Eval.iota
   (self : Eval) (n : Std.Usize) (k : Bool) :
-  Result ((core.result.Result (Option Std.U32) Std.U32) × Eval × (Eval →
-    Eval))
+  Result ((core.result.Result (Option Std.U32) Std.U32) × Eval × (Eval → Eval))
   := do
   let r ← Eval.decl self n
   let cf ← core.result.Result.Insts.CoreOpsTry.branch r
@@ -290,8 +285,8 @@ def Eval.iota
     match cf with
     | core.ops.control_flow.ControlFlow.Continue val =>
       do
-      let s : _root_.Sum (Eval × Std.U32 × (Eval → ((alloc.vec.Vec Std.U32)
-        × Store))) ((core.result.Result (Option Std.U32) Std.U32) ×
+      let s : _root_.Sum (Eval × Std.U32 × (Eval → ((alloc.vec.Vec Std.U32) ×
+        Store))) ((core.result.Result (Option Std.U32) Std.U32) ×
         (alloc.vec.Vec Std.U32) × Env × Store × Std.U32 × (alloc.vec.Vec
         Std.U32 → Store → ((alloc.vec.Vec Std.U32) × Store))) ←
         if k
@@ -300,10 +295,10 @@ def Eval.iota
           let (r2, self2, kc_back) ← Eval.kc self val
           let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r2
           let s1 : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) ×
-            Eval × (core.ops.control_flow.ControlFlow (core.result.Result
-            Never Std.U32) (Option Std.U32)) × (Eval → ((alloc.vec.Vec
-            Std.U32) × Store))) (Eval × Std.U32 × (Eval → ((alloc.vec.Vec
-            Std.U32) × Store))) ←
+            Eval × (core.ops.control_flow.ControlFlow (core.result.Result Never
+            Std.U32) (Option Std.U32)) × (Eval → ((alloc.vec.Vec Std.U32) ×
+            Store))) (Eval × Std.U32 × (Eval → ((alloc.vec.Vec Std.U32) ×
+            Store))) ←
             match cf1 with
             | core.ops.control_flow.ControlFlow.Continue val1 =>
               match val1 with
@@ -336,8 +331,8 @@ def Eval.iota
       let s1 : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) ×
         (alloc.vec.Vec Std.U32) × Env × Store × Std.U32 × (alloc.vec.Vec
         Std.U32 → Store → ((alloc.vec.Vec Std.U32) × Store)))
-        ((core.result.Result (Option Std.U32) Std.U32) × Eval × Env × (Eval
-        → ((alloc.vec.Vec Std.U32) × Store))) ←
+        ((core.result.Result (Option Std.U32) Std.U32) × Eval × Env × (Eval →
+        ((alloc.vec.Vec Std.U32) × Store))) ←
         match s with
         | Sum.inl t =>
           do
@@ -347,8 +342,7 @@ def Eval.iota
               () (self2, major)
           let s2 : _root_.Sum (Eval × Std.U32 × (Eval → ((alloc.vec.Vec
             Std.U32) × Store))) ((core.result.Result (Option Std.U32) Std.U32)
-            × Eval × Std.U32 × (Eval → ((alloc.vec.Vec Std.U32) ×
-            Store))) ←
+            × Eval × Std.U32 × (Eval → ((alloc.vec.Vec Std.U32) × Store))) ←
             if b
             then
               ok (Sum.inl (self2, major,
@@ -372,8 +366,8 @@ def Eval.iota
                            (e1.t, e1.s)))
           let s3 : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) ×
             Eval × Std.U32 × (Eval → ((alloc.vec.Vec Std.U32) × Store)))
-            ((core.result.Result (Option Std.U32) Std.U32) × Eval × Env ×
-            (Eval → ((alloc.vec.Vec Std.U32) × Store))) ←
+            ((core.result.Result (Option Std.U32) Std.U32) × Eval × Env × (Eval
+            → ((alloc.vec.Vec Std.U32) × Store))) ←
             match s2 with
             | Sum.inl t1 =>
               do

@@ -24,16 +24,16 @@ namespace joins
     Source: 'tests/src/joins.rs', lines 4:0-7:1 -/
 def opt_add_1 (b : Bool) (x : Std.U32) : Result Std.U32 := do
   let y ← if b
-            then ok 1#u32
-            else ok 0#u32
+          then ok 1#u32
+          else ok 0#u32
   x + y
 
 /-- [joins::opt_add_2]:
     Source: 'tests/src/joins.rs', lines 9:0-13:1 -/
 def opt_add_2 (b : Bool) (x : Std.U32) : Result Std.U32 := do
   let y ← if b
-            then ok 1#u32
-            else ok 0#u32
+          then ok 1#u32
+          else ok 0#u32
   let i ← x + y
   i + y
 
@@ -99,8 +99,8 @@ structure SharedBool where
 def shared_bool_scrutinee
   (k : SharedBool) (x : Std.U32) (y : Std.U32) : Result Std.U32 := do
   let f ← if k.value
-            then ok x
-            else ok y
+          then ok x
+          else ok y
   if x >= f
   then ok 1#u32
   else ok 0#u32
@@ -110,8 +110,8 @@ def shared_bool_scrutinee
 def shared_integer_scrutinee
   (n : Std.U8) (x : Std.U32) (y : Std.U32) : Result Std.U32 := do
   let f ← match n with
-            | 0#uscalar => ok x
-            | _ => ok y
+          | 0#uscalar => ok x
+          | _ => ok y
   if x >= f
   then ok 1#u32
   else ok 0#u32

@@ -135,8 +135,7 @@ def Engine.equal
       | core.result.Result.Ok r2 =>
         if r2
         then
-          let (t1, index_mut_back) ←
-            Array.index_mut_usize self2.s.equal eager
+          let (t1, index_mut_back) ← Array.index_mut_usize self2.s.equal eager
           let t2 ← Table.insert t1 key
           let a := index_mut_back t2
           ok (r1, { self2 with s := { self2.s with equal := a } },

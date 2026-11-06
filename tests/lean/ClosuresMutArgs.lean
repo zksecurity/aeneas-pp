@@ -59,8 +59,8 @@ def Eng.guarded
 def Eng.under
   {T : Type _} {T2 : Type _}
   (coreopsfunctionFnOnceT2PairMutAEngU32ResultTU32Inst :
-  core.ops.function.FnOnce T2 (Eng × Std.U32) ((core.result.Result T Std.U32)
-  × Eng × (Eng → Eng))) (self : Eng) (x : Std.U32) (f : T2) :
+  core.ops.function.FnOnce T2 (Eng × Std.U32) ((core.result.Result T Std.U32) ×
+  Eng × (Eng → Eng))) (self : Eng) (x : Std.U32) (f : T2) :
   Result ((core.result.Result T Std.U32) × Eng × (Eng → Eng))
   := do
   let i ← self.d + 1#u32
@@ -84,9 +84,9 @@ def
   Eng.guarded_under.closure.Insts.CoreOpsFunctionFnOnceTupleMut3EngResultTU32.call_once
   {T : Type _} {T2 : Type _}
   (coreopsfunctionFnOnceT2PairMutAEngU32ResultTU32Inst :
-  core.ops.function.FnOnce T2 (Eng × Std.U32) ((core.result.Result T Std.U32)
-  × Eng × (Eng → Eng))) (c : Eng.guarded_under.closure T T2)
-  (tupled_args : Eng) :
+  core.ops.function.FnOnce T2 (Eng × Std.U32) ((core.result.Result T Std.U32) ×
+  Eng × (Eng → Eng))) (c : Eng.guarded_under.closure T T2) (tupled_args : Eng)
+  :
   Result ((core.result.Result T Std.U32) × Eng × (Eng → Eng))
   := do
   let (i, t) := c
@@ -103,10 +103,9 @@ def
 def Eng.guarded_under.closure.Insts.CoreOpsFunctionFnOnceTupleMut3EngResultTU32
   {T : Type _} {T2 : Type _}
   (coreopsfunctionFnOnceT2PairMutAEngU32ResultTU32Inst :
-  core.ops.function.FnOnce T2 (Eng × Std.U32) ((core.result.Result T Std.U32)
-  × Eng × (Eng → Eng))) : core.ops.function.FnOnce
-  (Eng.guarded_under.closure T T2) Eng ((core.result.Result T Std.U32) × Eng
-  × (Eng → Eng)) := {
+  core.ops.function.FnOnce T2 (Eng × Std.U32) ((core.result.Result T Std.U32) ×
+  Eng × (Eng → Eng))) : core.ops.function.FnOnce (Eng.guarded_under.closure T
+  T2) Eng ((core.result.Result T Std.U32) × Eng × (Eng → Eng)) := {
   call_once :=
     Eng.guarded_under.closure.Insts.CoreOpsFunctionFnOnceTupleMut3EngResultTU32.call_once
     coreopsfunctionFnOnceT2PairMutAEngU32ResultTU32Inst
@@ -117,8 +116,8 @@ def Eng.guarded_under.closure.Insts.CoreOpsFunctionFnOnceTupleMut3EngResultTU32
 def Eng.guarded_under
   {T : Type _} {T2 : Type _}
   (coreopsfunctionFnOnceT2PairMutAEngU32ResultTU32Inst :
-  core.ops.function.FnOnce T2 (Eng × Std.U32) ((core.result.Result T Std.U32)
-  × Eng × (Eng → Eng))) (self : Eng) (x : Std.U32) (f : T2) :
+  core.ops.function.FnOnce T2 (Eng × Std.U32) ((core.result.Result T Std.U32) ×
+  Eng × (Eng → Eng))) (self : Eng) (x : Std.U32) (f : T2) :
   Result ((core.result.Result T Std.U32) × Eng × (Eng → Eng))
   := do
   let (r, self1, guarded_back) ←
@@ -250,8 +249,7 @@ def Eng.push.closure.Insts.CoreOpsFunctionFnOnceTupleMut3EngTuple.call_once
     Source: 'tests/src/closures-mut-args.rs', lines 55:18-55:33 -/
 @[reducible]
 def Eng.push.closure.Insts.CoreOpsFunctionFnOnceTupleMut3EngTuple :
-  core.ops.function.FnOnce Eng.push.closure Eng (Unit × Eng × (Eng → Eng))
-  := {
+  core.ops.function.FnOnce Eng.push.closure Eng (Unit × Eng × (Eng → Eng)) := {
   call_once :=
     Eng.push.closure.Insts.CoreOpsFunctionFnOnceTupleMut3EngTuple.call_once
 }

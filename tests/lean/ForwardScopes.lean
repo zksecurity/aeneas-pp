@@ -186,8 +186,8 @@ def let_else_chain
                 ok (Sum.inr (core.result.Result.Ok (some 0#u32), Val.Sort,
                   val))
             let s2 : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32)
-              × Val × Std.U32) ((core.result.Result (Option Std.U32) Std.U32)
-              × Val × Val × Std.U32) ←
+              × Val × Std.U32) ((core.result.Result (Option Std.U32) Std.U32) ×
+              Val × Val × Std.U32) ←
               match s1 with
               | Sum.inl p =>
                 do
@@ -483,8 +483,8 @@ def live_borrow
   := do
   let (r, index_mut_back) ← Array.index_mut_usize a 0#usize
   let r1 ← r + 1#u32
-  let s : _root_.Sum (Std.U32 × Val × Val × Std.U32 × (Std.U32 → Array
-    Std.U32 2#usize)) (Std.U32 × (Array Std.U32 2#usize) × Val × Val) ←
+  let s : _root_.Sum (Std.U32 × Val × Val × Std.U32 × (Std.U32 → Array Std.U32
+    2#usize)) (Std.U32 × (Array Std.U32 2#usize) × Val × Val) ←
     match v with
     | Val.Neutral _ _ => ok (Sum.inl (r1, v, w, r1, index_mut_back))
     | Val.Nat n =>
@@ -579,10 +579,9 @@ def shared_from_call
       do
       let s1 ← Array.index_usize a 1#usize
       ok (Sum.inl (v, s1, a))
-    | Val.Nat _ =>
-      do
-      let (s1, a1) ← bump_and_get a k
-      ok (Sum.inl (v, s1, a1))
+    | Val.Nat _ => do
+                   let (s1, a1) ← bump_and_get a k
+                   ok (Sum.inl (v, s1, a1))
     | Val.Sort => ok (Sum.inr (0#u32, a, Val.Sort))
   match s with
   | Sum.inl t => let (_, s1, back) := t
@@ -778,8 +777,8 @@ def first_plus (v : Slice Std.U32) (c : Bool) : Result (Option Std.U32) := do
   match cf with
   | core.ops.control_flow.ControlFlow.Continue val =>
     let r ← if c
-              then ok 1#u32
-              else ok 2#u32
+            then ok 1#u32
+            else ok 2#u32
     let i ← val + r
     ok (some i)
   | core.ops.control_flow.ControlFlow.Break residual =>
@@ -990,8 +989,7 @@ def test_shared_from_call : Result Unit := do
   massert (i1 = 6#u32)
   let (i2, a1) ← shared_from_call a Val.Sort 5#u32
   massert (i2 = 0#u32)
-  let (i3, a2) ←
-    shared_from_call a1 (Val.Neutral (Head.Var 0#u32) 0#u32) 5#u32
+  let (i3, a2) ← shared_from_call a1 (Val.Neutral (Head.Var 0#u32) 0#u32) 5#u32
   massert (i3 = 3#u32)
   let i4 ← Array.index_usize a2 0#usize
   massert (i4 = 6#u32)

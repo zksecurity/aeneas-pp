@@ -51,8 +51,7 @@ def call_inner_mut : Result Unit := do
     Source: 'tests/src/nested-borrows.rs', lines 28:0-32:1 -/
 def inner_mut_swap
   (ppx : Std.U32) (py : Std.U32) :
-  Result (Std.U32 × (Std.U32 → Std.U32) × (Std.U32 → (Std.U32 ×
-    Std.U32)))
+  Result (Std.U32 × (Std.U32 → Std.U32) × (Std.U32 → (Std.U32 × Std.U32)))
   := do
   let back'b := fun ppx1 => (10#u32, ppx1)
   ok (py, fun ppx1 => ppx1, back'b)
@@ -156,8 +155,8 @@ def iter_mut_loop {T : Type _} (it : IterMut T) : Result (IterMut T) := do
 @[rust_loop_body]
 def iter_mut_incr_loop.body
   (back : IterMut Std.U32 → Option Std.U32) (it : IterMut Std.U32) :
-  Result (ControlFlow ((IterMut Std.U32 → Option Std.U32) × (IterMut
-    Std.U32)) (Option Std.U32))
+  Result (ControlFlow ((IterMut Std.U32 → Option Std.U32) × (IterMut Std.U32))
+    (Option Std.U32))
   := do
   let (o, it1, next_back) ← IterMut.next it
   match o with
@@ -285,8 +284,7 @@ def incr_list_loop
     Source: 'tests/src/nested-borrows.rs', lines 130:0-135:1 -/
 def incr_list (l : List Std.U32) : Result (List Std.U32) := do
   let (it, iter_mut_back) ← List.iter_mut l
-  let back ←
-    incr_list_loop (fun (lim : ListIterMut Std.U32) => lim.current) it
+  let back ← incr_list_loop (fun (lim : ListIterMut Std.U32) => lim.current) it
   ok (iter_mut_back { current := back })
 
 /-- [nested_borrows::next1]:
@@ -319,8 +317,8 @@ def iter_list_while_loop0_loop0 (b : Bool) : Result Unit := do
 @[rust_loop_body]
 def iter_list_while_loop0.body
   {T : Type _} (b : Bool) (l : List T) (back : List T → List T) :
-  Result (ControlFlow ((List T) × (List T → List T)) ((List T) × (List T
-    → List T)))
+  Result (ControlFlow ((List T) × (List T → List T)) ((List T) × (List T → List
+    T)))
   := do
   let (o, l1, next1_back) ← next1 l
   match o with

@@ -30,12 +30,11 @@ def decl (e : Std.U32) : Result (Option Std.U32) := do
     Source: 'tests/src/nested-shared-call-joins.rs', lines 13:0-16:1
     Visibility: public -/
 def known (e : Std.U32) (b : Bool) : Result Std.U32 := do
-  let x ←
-    if b
-    then ok 0#u32
-    else do
-         let o ← decl e
-         core.option.Option.unwrap o
+  let x ← if b
+          then ok 0#u32
+          else do
+               let o ← decl e
+               core.option.Option.unwrap o
   x + 1#u32
 
 /-- [nested_shared_call_joins::Engine]
