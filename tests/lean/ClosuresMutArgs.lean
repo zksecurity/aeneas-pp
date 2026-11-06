@@ -276,35 +276,32 @@ def Eng.push_all.closure := Slice Std.U32
 @[rust_loop_body]
 def
   Eng.push_all.closure.Insts.CoreOpsFunctionFnOncePairMut3EngU32ResultUsizeU32.call_once_loop.body
-  (s : Slice Std.U32) (v : Std.U32) (v1 : alloc.vec.Vec Std.U32)
-  (i : Std.Usize) :
-  Result (ControlFlow ((alloc.vec.Vec Std.U32) × Std.Usize) (alloc.vec.Vec
-    Std.U32))
+  (s : Slice Std.U32) (v : Std.U32) (e : Eng) (i : Std.Usize) :
+  Result (ControlFlow (Eng × Std.Usize) Eng)
   := do
   let i1 := Slice.len s
   if i < i1
   then
     let i2 ← Slice.index_usize s i
     let i3 ← i2 + v
-    let v2 ← alloc.vec.Vec.push v1 i3
+    let v1 ← alloc.vec.Vec.push e.t i3
     let i4 ← i + 1#usize
-    ok (cont (v2, i4))
-  else ok (done v1)
+    ok (cont ({ e with t := v1 }, i4))
+  else ok (done e)
 
 /-- [closures_mut_args::{closures_mut_args::Eng<'a>}::push_all::{impl core::ops::function::FnOnce<(&'_4 mut closures_mut_args::Eng<'_2>, u32), core::result::Result<usize, u32>> for closures_mut_args::{closures_mut_args::Eng<'a>}::push_all::{closure}<'a, '_1, '_2, '_3>}::call_once]: loop 0:
     Source: 'tests/src/closures-mut-args.rs', lines 62:12-65:13 -/
 @[rust_loop]
 def
   Eng.push_all.closure.Insts.CoreOpsFunctionFnOncePairMut3EngU32ResultUsizeU32.call_once_loop
-  (s : Slice Std.U32) (v : alloc.vec.Vec Std.U32) (v1 : Std.U32)
-  (i : Std.Usize) :
-  Result (alloc.vec.Vec Std.U32)
+  (s : Slice Std.U32) (e : Eng) (v : Std.U32) (i : Std.Usize) :
+  Result Eng
   := do
   loop
-    (fun (v2, i1) =>
+    (fun (e1, i1) =>
       Eng.push_all.closure.Insts.CoreOpsFunctionFnOncePairMut3EngU32ResultUsizeU32.call_once_loop.body
-      s v1 v2 i1)
-    (v, i)
+      s v e1 i1)
+    (e, i)
 
 /-- [closures_mut_args::{closures_mut_args::Eng<'a>}::push_all::{impl core::ops::function::FnOnce<(&'_4 mut closures_mut_args::Eng<'_2>, u32), core::result::Result<usize, u32>> for closures_mut_args::{closures_mut_args::Eng<'a>}::push_all::{closure}<'a, '_1, '_2, '_3>}::call_once]:
     Source: 'tests/src/closures-mut-args.rs', lines 60:30-67:9 -/
@@ -314,12 +311,12 @@ def
   Result ((core.result.Result Std.Usize Std.U32) × Eng × (Eng → Eng))
   := do
   let (e, v) := tupled_args
-  let v1 ←
+  let e1 ←
     Eng.push_all.closure.Insts.CoreOpsFunctionFnOncePairMut3EngU32ResultUsizeU32.call_once_loop
-      c e.t v 0#usize
-  let i := alloc.vec.Vec.len v1
-  let back := fun (tupled_args1 : Eng) => { e with t := tupled_args1.t }
-  ok (core.result.Result.Ok i, { e with t := v1 }, back)
+      c e v 0#usize
+  let i := alloc.vec.Vec.len e1.t
+  let back := fun (tupled_args1 : Eng) => { e1 with t := tupled_args1.t }
+  ok (core.result.Result.Ok i, e1, back)
 
 /-- Trait implementation: [closures_mut_args::{closures_mut_args::Eng<'a>}::push_all::{impl core::ops::function::FnOnce<(&'_4 mut closures_mut_args::Eng<'_2>, u32), core::result::Result<usize, u32>> for closures_mut_args::{closures_mut_args::Eng<'a>}::push_all::{closure}<'a, '_1, '_2, '_3>}]
     Source: 'tests/src/closures-mut-args.rs', lines 60:30-67:9 -/

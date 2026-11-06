@@ -254,25 +254,25 @@ def scopes_in_loop_loop.body
   Result (ControlFlow ((Slice Val) × Std.U32 × Std.Usize) Std.U32)
   := do
   let i1 := Slice.len a
-  let s : _root_.Sum Std.Usize ((Slice Val) × Std.U32 × Std.Usize) ←
+  let s : _root_.Sum Unit ((Slice Val) × Std.U32 × Std.Usize) ←
     if i < i1
     then
       do
       let v ← Slice.index_usize a i
       let i2 ← i + 1#usize
       let s1 : _root_.Sum Std.Usize (_root_.Sum ((Slice Val) × Std.U32 ×
-        Std.Usize) Std.Usize) ←
+        Std.Usize) Unit) ←
         match v with
         | Val.Neutral h _ =>
           match h with
           | Head.Var _ => ok (Sum.inl i2)
           | Head.Const c cls =>
             do
-            let s2 : _root_.Sum Std.U32 (_root_.Sum Std.Usize Std.Usize) ←
+            let s2 : _root_.Sum Std.U32 (_root_.Sum Unit Std.Usize) ←
               match cls with
               | Class.Def =>
                 if c > 50#u32
-                then ok (Sum.inr (Sum.inl i2))
+                then ok (Sum.inr (Sum.inl ()))
                 else do
                      let n1 ← n + 1#u32
                      ok (Sum.inl n1)
@@ -286,7 +286,7 @@ def scopes_in_loop_loop.body
               ok (Sum.inr (Sum.inl (a, n2, i2)))
             | Sum.inr s3 =>
               match s3 with
-              | Sum.inl i3 => ok (Sum.inr (Sum.inr i3))
+              | Sum.inl _ => ok (Sum.inr (Sum.inr ()))
               | Sum.inr i3 => ok (Sum.inl i3)
         | _ => ok (Sum.inl i2)
       match s1 with
@@ -294,8 +294,8 @@ def scopes_in_loop_loop.body
       | Sum.inr s2 =>
         match s2 with
         | Sum.inl t => ok (Sum.inr t)
-        | Sum.inr i3 => ok (Sum.inl i3)
-    else ok (Sum.inl i)
+        | Sum.inr _ => ok (Sum.inl ())
+    else ok (Sum.inl ())
   match s with
   | Sum.inl _ => ok (done n)
   | Sum.inr t => let (s1, i2, i3) := t
@@ -411,13 +411,11 @@ def panic_or_return (v : Val) (x : Std.U32) : Result Std.U32 := do
     Visibility: public -/
 @[rust_loop_body]
 def loop_in_scope_loop.body
-  (m : Std.U32) (n : Std.U32) (m1 : Std.U32) (i : Std.U32) :
-  Result (ControlFlow Std.U32 (Std.U32 × Std.U32 × Std.U32 × Std.U32))
-  := do
-  if i < m1
+  (m : Std.U32) (i : Std.U32) : Result (ControlFlow Std.U32 Std.U32) := do
+  if i < m
   then let i1 ← i + 1#u32
        ok (cont i1)
-  else ok (done (m, n, m1, i))
+  else ok (done i)
 
 /-- [forward_scopes::loop_in_scope]: loop 0:
     Source: 'tests/src/forward-scopes.rs', lines 167:12-169:13
@@ -425,10 +423,10 @@ def loop_in_scope_loop.body
 @[rust_loop]
 def loop_in_scope_loop
   (m : Std.U32) (n : Std.U32) (m1 : Std.U32) (i : Std.U32) :
-  Result (Std.U32 × Std.U32 × Std.U32 × Std.U32)
+  Result Std.U32
   := do
   loop
-    (fun i1 => loop_in_scope_loop.body m n m1 i1)
+    (fun i1 => loop_in_scope_loop.body m1 i1)
     i
 
 /-- [forward_scopes::loop_in_scope]:
@@ -438,10 +436,9 @@ def loop_in_scope (v : Val) (n : Std.U32) : Result Std.U32 := do
   let s : _root_.Sum Std.U32 Std.U32 ←
     match v with
     | Val.Neutral _ _ => ok (Sum.inl 0#u32)
-    | Val.Nat m =>
-      do
-      let (_, _, _, k) ← loop_in_scope_loop m n m 0#u32
-      ok (Sum.inl k)
+    | Val.Nat m => do
+                   let k ← loop_in_scope_loop m n m 0#u32
+                   ok (Sum.inl k)
     | Val.Sort => ok (Sum.inr n)
   match s with
   | Sum.inl k => k + n
@@ -697,9 +694,9 @@ def contains_zero_loop.body
   := do
   let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
   let s : _root_.Sum Unit (_root_.Sum ((Slice Std.U32) × (core.slice.iter.Iter
-    Std.U32)) (Bool × (Slice Std.U32))) ←
+    Std.U32)) Bool) ←
     match o with
-    | none => ok (Sum.inr (Sum.inr (false, a)))
+    | none => ok (Sum.inr (Sum.inr false))
     | some x =>
       if x = 0#u32
       then ok (Sum.inl ())
@@ -710,8 +707,7 @@ def contains_zero_loop.body
     match s1 with
     | Sum.inl p => let (s2, i) := p
                    ok (cont (s2, i))
-    | Sum.inr p => let (b, _) := p
-                   ok (done b)
+    | Sum.inr b => ok (done b)
 
 /-- [forward_scopes::contains_zero]: loop 0:
     Source: 'tests/src/forward-scopes.rs', lines 295:14-301:1

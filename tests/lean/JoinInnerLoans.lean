@@ -35,8 +35,7 @@ def Table.contains_loop.body
   Result (ControlFlow (Table × Std.U64 × Std.Usize) Bool)
   := do
   let i1 := alloc.vec.Vec.len self.keys
-  let s : _root_.Sum Unit (_root_.Sum (Table × Std.U64 × Std.Usize) (Bool ×
-    (alloc.vec.Vec Std.U64) × Std.U64)) ←
+  let s : _root_.Sum Unit (_root_.Sum (Table × Std.U64 × Std.Usize) Bool) ←
     if i < i1
     then
       do
@@ -47,15 +46,14 @@ def Table.contains_loop.body
       then ok (Sum.inl ())
       else let i3 ← i + 1#usize
            ok (Sum.inr (Sum.inl (self, key, i3)))
-    else ok (Sum.inr (Sum.inr (false, self.keys, key)))
+    else ok (Sum.inr (Sum.inr false))
   match s with
   | Sum.inl _ => ok (done true)
   | Sum.inr s1 =>
     match s1 with
     | Sum.inl t => let (t1, i2, i3) := t
                    ok (cont (t1, i2, i3))
-    | Sum.inr t => let (b, _, _) := t
-                   ok (done b)
+    | Sum.inr b => ok (done b)
 
 /-- [join_inner_loans::{join_inner_loans::Table}::contains]: loop 0:
     Source: 'tests/src/join-inner-loans.rs', lines 16:14-23:5

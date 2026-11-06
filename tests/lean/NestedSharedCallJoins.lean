@@ -117,33 +117,31 @@ def Engine.pick
     Visibility: public -/
 @[rust_loop_body]
 def Engine.sum_loop.body
-  (s : Slice Std.U32) (v : alloc.vec.Vec Std.U32) (n : Std.Usize)
-  (s1 : Std.U32) (i : Std.Usize) :
-  Result (ControlFlow (Std.U32 × Std.Usize) Std.U32)
+  (e : Engine) (n : Std.Usize) (s : Std.U32) (i : Std.Usize) :
+  Result (ControlFlow (Std.U32 × Std.Usize) (Engine × Std.U32))
   := do
   if i < n
   then
-    let o ← Engine.node { nodes := s, log := v } i
+    let o ← Engine.node e i
     match o with
     | none => let i1 ← i + 1#usize
-              ok (cont (s1, i1))
-    | some x => let s2 ← s1 + x
+              ok (cont (s, i1))
+    | some x => let s1 ← s + x
                 let i1 ← i + 1#usize
-                ok (cont (s2, i1))
-  else ok (done s1)
+                ok (cont (s1, i1))
+  else ok (done (e, s))
 
 /-- [nested_shared_call_joins::{nested_shared_call_joins::Engine<'a>}::sum]: loop 0:
     Source: 'tests/src/nested-shared-call-joins.rs', lines 62:8-67:9
     Visibility: public -/
 @[rust_loop]
 def Engine.sum_loop
-  (s : Slice Std.U32) (v : alloc.vec.Vec Std.U32) (n : Std.Usize)
-  (s1 : Std.U32) (i : Std.Usize) :
-  Result Std.U32
+  (e : Engine) (n : Std.Usize) (s : Std.U32) (i : Std.Usize) :
+  Result (Engine × Std.U32)
   := do
   loop
-    (fun (s2, i1) => Engine.sum_loop.body s v n s2 i1)
-    (s1, i)
+    (fun (s1, i1) => Engine.sum_loop.body e n s1 i1)
+    (s, i)
 
 /-- [nested_shared_call_joins::{nested_shared_call_joins::Engine<'a>}::sum]:
     Source: 'tests/src/nested-shared-call-joins.rs', lines 59:4-70:5
@@ -152,10 +150,10 @@ def Engine.sum
   (self : Engine) (n : Std.Usize) :
   Result (Std.U32 × Engine × (Engine → Engine))
   := do
-  let s ← Engine.sum_loop self.nodes self.log n 0#u32 0#usize
-  let v ← alloc.vec.Vec.push self.log s
+  let (e, s) ← Engine.sum_loop self n 0#u32 0#usize
+  let v ← alloc.vec.Vec.push e.log s
   let back'a := fun (self1 : Engine) => { self with log := self1.log }
-  ok (s, { self with log := v }, back'a)
+  ok (s, { e with log := v }, back'a)
 
 /-- [nested_shared_call_joins::test_known]:
     Source: 'tests/src/nested-shared-call-joins.rs', lines 74:0-79:1

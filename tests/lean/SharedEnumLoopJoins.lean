@@ -117,18 +117,17 @@ def count_until (t : F) (x : Std.U32) (i : Std.U32) : Result Std.U32 := do
 @[rust_loop_body]
 def has_a_loop.body
   (t : F) (i : Std.U32) : Result (ControlFlow Std.U32 Bool) := do
-  let s : _root_.Sum (Std.U32 × Bool) Std.U32 ←
+  let s : _root_.Sum Bool Std.U32 ←
     if i != 0#u32
     then
       do
       let i1 ← i - 1#u32
       match t with
-      | F.A _ => ok (Sum.inl (i1, true))
+      | F.A _ => ok (Sum.inl true)
       | F.B _ => ok (Sum.inr i1)
-    else ok (Sum.inl (i, false))
+    else ok (Sum.inl false)
   match s with
-  | Sum.inl p => let (_, found) := p
-                 ok (done found)
+  | Sum.inl found => ok (done found)
   | Sum.inr i1 => ok (cont i1)
 
 /-- [shared_enum_loop_joins::has_a]: loop 0:

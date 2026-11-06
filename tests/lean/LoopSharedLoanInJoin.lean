@@ -71,44 +71,41 @@ def transform
     Visibility: public -/
 @[rust_loop_body]
 def State.extract_loop.body
-  (i : Std.U32) (iter : core.ops.range.Range Std.Usize)
-  (a : Array Std.U64 4#usize) (i1 : Std.U32) (result : Slice Std.U64)
+  (iter : core.ops.range.Range Std.Usize) (s : State) (result : Slice Std.U64)
   (lane_index : Std.Usize) :
-  Result (ControlFlow ((core.ops.range.Range Std.Usize) × (Array Std.U64
-    4#usize) × Std.U32 × (Slice Std.U64) × Std.Usize) ((Array Std.U64 4#usize)
-    × Std.U32 × (Slice Std.U64)))
+  Result (ControlFlow ((core.ops.range.Range Std.Usize) × State × (Slice
+    Std.U64) × Std.Usize) (State × (Slice Std.U64)))
   := do
   let (o, iter1) ←
     core.iter.range.IteratorRange.next core.iter.range.StepUsize iter
   match o with
-  | none => ok (done (a, i1, result))
-  | some i2 =>
-    let (a1, i3, lane_index1) ←
-      if i1 = i
+  | none => ok (done (s, result))
+  | some i =>
+    let (a, i1, lane_index1) ←
+      if s.index = s.limit
       then do
-           let a2 ← transform a
-           ok (a2, 0#u32, 0#usize)
-      else ok (a, i1, lane_index)
-    let i4 ← Array.index_usize a1 lane_index1
-    let s ← Slice.update result i2 i4
-    let i5 ← i3 + 1#u32
+           let a1 ← transform s.data
+           ok (a1, 0#u32, 0#usize)
+      else ok (s.data, s.index, lane_index)
+    let i2 ← Array.index_usize a lane_index1
+    let s1 ← Slice.update result i i2
+    let i3 ← i1 + 1#u32
     let lane_index2 ← lane_index1 + 1#usize
-    ok (cont (iter1, a1, i5, s, lane_index2))
+    ok (cont (iter1, { s with data := a, index := i3 }, s1, lane_index2))
 
 /-- [loop_shared_loan_in_join::{loop_shared_loan_in_join::State}::extract]: loop 0:
     Source: 'tests/src/loop_shared_loan_in_join.rs', lines 33:8-42:9
     Visibility: public -/
 @[rust_loop]
 def State.extract_loop
-  (iter : core.ops.range.Range Std.Usize) (a : Array Std.U64 4#usize)
-  (i : Std.U32) (i1 : Std.U32) (result : Slice Std.U64)
+  (iter : core.ops.range.Range Std.Usize) (s : State) (result : Slice Std.U64)
   (lane_index : Std.Usize) :
-  Result ((Array Std.U64 4#usize) × Std.U32 × (Slice Std.U64))
+  Result (State × (Slice Std.U64))
   := do
   loop
-    (fun (iter1, a1, i2, result1, lane_index1) => State.extract_loop.body i1
-      iter1 a1 i2 result1 lane_index1)
-    (iter, a, i, result, lane_index)
+    (fun (iter1, s1, result1, lane_index1) => State.extract_loop.body iter1 s1
+      result1 lane_index1)
+    (iter, s, result, lane_index)
 
 /-- [loop_shared_loan_in_join::{loop_shared_loan_in_join::State}::extract]:
     Source: 'tests/src/loop_shared_loan_in_join.rs', lines 31:4-43:5
@@ -118,9 +115,7 @@ def State.extract
   Result (State × (Slice Std.U64))
   := do
   let lane_index ← lift (UScalar.cast .Usize self.index)
-  let (a, i, result1) ←
-    State.extract_loop { start := 0#usize, «end» := count } self.data
-      self.index self.limit result lane_index
-  ok ({ self with data := a, index := i }, result1)
+  State.extract_loop { start := 0#usize, «end» := count } self result
+    lane_index
 
 end loop_shared_loan_in_join

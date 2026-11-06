@@ -93,8 +93,8 @@ def Eng.find_loop.body
   Result (ControlFlow (Std.U32 × Std.Usize) (Option Std.Usize))
   := do
   let i1 := alloc.vec.Vec.len self.s.v
-  let s : _root_.Sum Unit (_root_.Sum (Std.U32 × Std.Usize) ((Option Std.Usize)
-    × Std.U32)) ←
+  let s : _root_.Sum Unit (_root_.Sum (Std.U32 × Std.Usize) (Option Std.Usize))
+    ←
     if i < i1
     then
       do
@@ -114,7 +114,7 @@ def Eng.find_loop.body
           else let i4 ← i + 1#usize
                ok (Sum.inr (x, i4))
       match s1 with
-      | Sum.inl _ => ok (Sum.inr (Sum.inr (some i, x)))
+      | Sum.inl _ => ok (Sum.inr (Sum.inr (some i)))
       | Sum.inr p => ok (Sum.inr (Sum.inl p))
     else ok (Sum.inl ())
   match s with
@@ -123,8 +123,7 @@ def Eng.find_loop.body
     match s1 with
     | Sum.inl p => let (i2, i3) := p
                    ok (cont (i2, i3))
-    | Sum.inr p => let (o, _) := p
-                   ok (done o)
+    | Sum.inr o => ok (done o)
 
 /-- [frozen_shared_refinements::{frozen_shared_refinements::Eng<'a>}::find]: loop 0:
     Source: 'tests/src/frozen-shared-refinements.rs', lines 43:8-50:5

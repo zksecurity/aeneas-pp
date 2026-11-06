@@ -55,7 +55,7 @@ def Engine.eval_nonzero_loop.body
   let cf ← core.result.Result.Insts.CoreOpsTry.branch r
   let s : _root_.Sum (Std.U32 × Engine) (_root_.Sum ((Engine → (Std.U32 ×
     Std.U32)) × Engine × Std.U32) ((core.result.Result Std.U32 Unit) × Engine ×
-    Std.U32 × (Engine → (Std.U32 × Std.U32)))) ←
+    (Engine → (Std.U32 × Std.U32)))) ←
     match cf with
     | core.ops.control_flow.ControlFlow.Continue val =>
       if val = 0#u32
@@ -68,7 +68,7 @@ def Engine.eval_nonzero_loop.body
       let r1 ←
         core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
           Std.U32 (core.convert.FromSame Unit) residual
-      ok (Sum.inr (Sum.inr (r1, self1, e,
+      ok (Sum.inr (Sum.inr (r1, self1,
         fun e1 => let e2 := eval_back e1
                   back e2)))
   match s with
@@ -81,7 +81,7 @@ def Engine.eval_nonzero_loop.body
     match s1 with
     | Sum.inl t => let (f, e1, i) := t
                    ok (cont (f, e1, i))
-    | Sum.inr t => let (r1, e1, _, f) := t
+    | Sum.inr t => let (r1, e1, f) := t
                    ok (done (r1, e1, f))
 
 /-- [nested_borrows_depth2_loops::{nested_borrows_depth2_loops::Engine<'a>}::eval_nonzero]: loop 0:
@@ -116,62 +116,60 @@ def Engine.eval_nonzero
     Visibility: public -/
 @[rust_loop_body]
 def Engine.run_loop.body
-  (back : Std.U32 → Std.U32 → (Std.U32 × Std.U32)) (i : Std.U32) (i1 : Std.U32)
-  (n : Std.U32) :
-  Result (ControlFlow ((Std.U32 → Std.U32 → (Std.U32 × Std.U32)) × Std.U32 ×
-    Std.U32 × Std.U32) ((core.result.Result Std.U32 Unit) × Engine × (Engine →
-    (Std.U32 × Std.U32))))
+  (back : Std.U32 → Std.U32 → (Std.U32 × Std.U32)) (e : Engine) (n : Std.U32) :
+  Result (ControlFlow ((Std.U32 → Std.U32 → (Std.U32 × Std.U32)) × Engine ×
+    Std.U32) ((core.result.Result Std.U32 Unit) × Engine × (Engine → (Std.U32 ×
+    Std.U32))))
   := do
-  let (r, self, eval_back) ← Engine.eval { t := i, s := i1 } n
+  let (r, self, eval_back) ← Engine.eval e n
   let cf ← core.result.Result.Insts.CoreOpsTry.branch r
   let s : _root_.Sum (Std.U32 × Engine) (_root_.Sum ((Std.U32 → Std.U32 →
-    (Std.U32 × Std.U32)) × Std.U32 × Std.U32 × Std.U32) ((core.result.Result
-    Std.U32 Unit) × Engine × Std.U32 × (Engine → (Std.U32 × Std.U32)))) ←
+    (Std.U32 × Std.U32)) × Engine × Std.U32) ((core.result.Result Std.U32 Unit)
+    × Engine × (Engine → (Std.U32 × Std.U32)))) ←
     match cf with
     | core.ops.control_flow.ControlFlow.Continue val =>
       do
-      let i2 ← self.s + val
+      let i ← self.s + val
       if n = 0#u32
-      then ok (Sum.inl (val, { self with s := i2 }))
+      then ok (Sum.inl (val, { self with s := i }))
       else
         let n1 ← n - 1#u32
         ok (Sum.inr (Sum.inl
-          (fun i3 i4 => let e := eval_back { t := i3, s := i4 }
-                        back e.t e.s, self.t, i2, n1)))
+          (fun i1 i2 => let e1 := eval_back { t := i1, s := i2 }
+                        back e1.t e1.s, { self with s := i }, n1)))
     | core.ops.control_flow.ControlFlow.Break residual =>
       do
       let r1 ←
         core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
           Std.U32 (core.convert.FromSame Unit) residual
-      ok (Sum.inr (Sum.inr (r1, self, n,
-        fun e => let e1 := eval_back e
-                 back e1.t e1.s)))
+      ok (Sum.inr (Sum.inr (r1, self,
+        fun e1 => let e2 := eval_back e1
+                  back e2.t e2.s)))
   match s with
   | Sum.inl p =>
-    let (i2, e) := p
-    ok (done (core.result.Result.Ok i2, e,
-      fun e1 => let e2 := eval_back e1
-                back e2.t e2.s))
+    let (i, e1) := p
+    ok (done (core.result.Result.Ok i, e1,
+      fun e2 => let e3 := eval_back e2
+                back e3.t e3.s))
   | Sum.inr s1 =>
     match s1 with
-    | Sum.inl t => let (f, i2, i3, i4) := t
-                   ok (cont (f, i2, i3, i4))
-    | Sum.inr t => let (r1, e, _, f) := t
-                   ok (done (r1, e, f))
+    | Sum.inl t => let (f, e1, i) := t
+                   ok (cont (f, e1, i))
+    | Sum.inr t => let (r1, e1, f) := t
+                   ok (done (r1, e1, f))
 
 /-- [nested_borrows_depth2_loops::{nested_borrows_depth2_loops::Engine<'a>}::run]: loop 0:
     Source: 'tests/src/nested-borrows-depth2-loops.rs', lines 38:16-45:5
     Visibility: public -/
 @[rust_loop]
 def Engine.run_loop
-  (back : Std.U32 → Std.U32 → (Std.U32 × Std.U32)) (i : Std.U32) (i1 : Std.U32)
-  (n : Std.U32) :
+  (back : Std.U32 → Std.U32 → (Std.U32 × Std.U32)) (e : Engine) (n : Std.U32) :
   Result ((core.result.Result Std.U32 Unit) × Engine × (Engine → (Std.U32 ×
     Std.U32)))
   := do
   loop
-    (fun (back1, i2, i3, n1) => Engine.run_loop.body back1 i2 i3 n1)
-    (back, i, i1, n)
+    (fun (back1, e1, n1) => Engine.run_loop.body back1 e1 n1)
+    (back, e, n)
 
 /-- [nested_borrows_depth2_loops::{nested_borrows_depth2_loops::Engine<'a>}::run]:
     Source: 'tests/src/nested-borrows-depth2-loops.rs', lines 36:4-45:5
@@ -180,7 +178,7 @@ def Engine.run
   (self : Engine) (n : Std.U32) :
   Result ((core.result.Result Std.U32 Unit) × Engine × (Engine → Engine))
   := do
-  let (r, e, back) ← Engine.run_loop (fun i i1 => (i, i1)) self.t self.s n
+  let (r, e, back) ← Engine.run_loop (fun i i1 => (i, i1)) self n
   let back'a :=
     fun self1 => let (i, i1) := back self1
                  ({ t := i, s := i1 } : Engine)
@@ -191,50 +189,48 @@ def Engine.run
     Visibility: public -/
 @[rust_loop_body]
 def run_swap_loop.body
-  (back : Std.U32 → Std.U32 → (Std.U32 × Std.U32)) (n : Std.U32) (a : Std.U32)
-  (b : Std.U32) :
+  (back : Std.U32 → Std.U32 → (Std.U32 × Std.U32)) (n : Std.U32) (e : Engine) :
   Result (ControlFlow ((Std.U32 → Std.U32 → (Std.U32 × Std.U32)) × Std.U32 ×
-    Std.U32 × Std.U32) ((core.result.Result Std.U32 Unit) × Std.U32 × Std.U32))
+    Engine) ((core.result.Result Std.U32 Unit) × Std.U32 × Std.U32))
   := do
-  let (r, e, eval_back) ← Engine.eval { t := a, s := b } n
+  let (r, e1, eval_back) ← Engine.eval e n
   let cf ← core.result.Result.Insts.CoreOpsTry.branch r
   let s : _root_.Sum (Std.U32 × Engine × (Std.U32 → Std.U32 → (Std.U32 ×
     Std.U32))) (_root_.Sum ((Std.U32 → Std.U32 → (Std.U32 × Std.U32)) × Std.U32
-    × Std.U32 × Std.U32) ((core.result.Result Std.U32 Unit) × Std.U32 × Std.U32
-    × Std.U32)) ←
+    × Engine) ((core.result.Result Std.U32 Unit) × Std.U32 × Std.U32)) ←
     match cf with
     | core.ops.control_flow.ControlFlow.Continue val =>
       do
-      let i ← e.s + 10#u32
+      let i ← e1.s + 10#u32
       if n = 0#u32
       then
-        ok (Sum.inl (val, ({ t := i, s := e.t } : Engine),
-          fun i1 i2 => let e1 := eval_back { t := i2, s := i1 }
-                       (e1.t, e1.s)))
+        ok (Sum.inl (val, ({ t := i, s := e1.t } : Engine),
+          fun i1 i2 => let e2 := eval_back { t := i2, s := i1 }
+                       (e2.t, e2.s)))
       else
         let n1 ← n - 1#u32
         ok (Sum.inr (Sum.inl
-          (fun i1 i2 => let e1 := eval_back { t := i2, s := i1 }
-                        back e1.t e1.s, n1, i, e.t)))
+          (fun i1 i2 => let e2 := eval_back { t := i2, s := i1 }
+                        back e2.t e2.s, n1, ({ t := i, s := e1.t } : Engine))))
     | core.ops.control_flow.ControlFlow.Break residual =>
       do
       let r1 ←
         core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
           Std.U32 (core.convert.FromSame Unit) residual
-      let e1 := eval_back e
-      let (a1, b1) := back e1.t e1.s
-      ok (Sum.inr (Sum.inr (r1, a1, b1, n)))
+      let e2 := eval_back e1
+      let (a, b) := back e2.t e2.s
+      ok (Sum.inr (Sum.inr (r1, a, b)))
   match s with
   | Sum.inl t =>
-    let (i, e1, back1) := t
-    let (i1, i2) := back1 e1.t e1.s
-    let (a1, b1) := back i1 i2
-    ok (done (core.result.Result.Ok i, a1, b1))
+    let (i, e2, back1) := t
+    let (i1, i2) := back1 e2.t e2.s
+    let (a, b) := back i1 i2
+    ok (done (core.result.Result.Ok i, a, b))
   | Sum.inr s1 =>
     match s1 with
-    | Sum.inl t => let (f, i, i1, i2) := t
-                   ok (cont (f, i, i1, i2))
-    | Sum.inr t => let (r1, i, i1, _) := t
+    | Sum.inl t => let (f, i, e2) := t
+                   ok (cont (f, i, e2))
+    | Sum.inr t => let (r1, i, i1) := t
                    ok (done (r1, i, i1))
 
 /-- [nested_borrows_depth2_loops::run_swap]: loop 0:
@@ -242,13 +238,12 @@ def run_swap_loop.body
     Visibility: public -/
 @[rust_loop]
 def run_swap_loop
-  (back : Std.U32 → Std.U32 → (Std.U32 × Std.U32)) (n : Std.U32) (a : Std.U32)
-  (b : Std.U32) :
+  (back : Std.U32 → Std.U32 → (Std.U32 × Std.U32)) (n : Std.U32) (e : Engine) :
   Result ((core.result.Result Std.U32 Unit) × Std.U32 × Std.U32)
   := do
   loop
-    (fun (back1, n1, a1, b1) => run_swap_loop.body back1 n1 a1 b1)
-    (back, n, a, b)
+    (fun (back1, n1, e1) => run_swap_loop.body back1 n1 e1)
+    (back, n, e)
 
 /-- [nested_borrows_depth2_loops::run_swap]:
     Source: 'tests/src/nested-borrows-depth2-loops.rs', lines 49:0-60:1
@@ -258,7 +253,7 @@ def run_swap
   (a : Std.U32) (b : Std.U32) (n : Std.U32) :
   Result ((core.result.Result Std.U32 Unit) × Std.U32 × Std.U32)
   := do
-  run_swap_loop (fun i i1 => (i, i1)) n a b
+  run_swap_loop (fun i i1 => (i, i1)) n { t := a, s := b }
 
 /-- [nested_borrows_depth2_loops::run_engine]:
     Source: 'tests/src/nested-borrows-depth2-loops.rs', lines 62:0-71:1

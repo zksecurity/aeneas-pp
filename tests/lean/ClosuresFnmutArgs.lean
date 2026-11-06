@@ -34,25 +34,22 @@ def Eng.telescope_loop.body
   {T1 : Type _} (coreopsfunctionFnMutT1PairMutEngU32ResultBoolU32Inst :
   core.ops.function.FnMut T1 (Eng × Std.U32) ((core.result.Result Bool Std.U32)
   × Eng × (Eng → Eng))) (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)
-  (v : alloc.vec.Vec Std.U32) (i : Std.U32) (n : Std.U32) (next : T1)
-  (i1 : Std.U32) (c : Std.U32) :
-  Result (ControlFlow ((alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) ×
-    (alloc.vec.Vec Std.U32) × Std.U32 × Std.U32 × T1 × Std.U32 × Std.U32)
-    ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec Std.U32) × Std.U32 ×
-    (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)))
+  (e : Eng) (n : Std.U32) (next : T1) (i : Std.U32) (c : Std.U32) :
+  Result (ControlFlow ((alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) × Eng ×
+    Std.U32 × T1 × Std.U32 × Std.U32) ((core.result.Result Std.U32 Std.U32) ×
+    Eng × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)))
   := do
-  let s : _root_.Sum ((core.result.Result Std.U32 Std.U32) × Eng × T1 × (Eng →
+  let s : _root_.Sum ((core.result.Result Std.U32 Std.U32) × Eng × (Eng →
     alloc.vec.Vec Std.U32)) (_root_.Sum ((alloc.vec.Vec Std.U32 → alloc.vec.Vec
-    Std.U32) × (alloc.vec.Vec Std.U32) × Std.U32 × Std.U32 × T1 × Std.U32 ×
-    Std.U32) ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec Std.U32) ×
-    Std.U32 × Std.U32 × T1 × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)))
+    Std.U32) × Eng × Std.U32 × T1 × Std.U32 × Std.U32) ((core.result.Result
+    Std.U32 Std.U32) × Eng × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)))
     ←
-    if i1 < n
+    if i < n
     then
       do
       let ((r, self, call_mut_back), next1) ←
-        coreopsfunctionFnMutT1PairMutEngU32ResultBoolU32Inst.call_mut next
-          (({ t := v, d := i } : Eng), i1)
+        coreopsfunctionFnMutT1PairMutEngU32ResultBoolU32Inst.call_mut next (e,
+          i)
       let cf ← core.result.Result.Insts.CoreOpsTry.branch r
       match cf with
       | core.ops.control_flow.ControlFlow.Continue val =>
@@ -60,31 +57,30 @@ def Eng.telescope_loop.body
           if val
           then do
                let c2 ← c + 1#u32
-               ok (c2, fun e => (call_mut_back e).t)
-          else ok (c, fun e => (call_mut_back e).t)
-        let i2 ← i1 + 1#u32
+               ok (c2, fun e1 => (call_mut_back e1).t)
+          else ok (c, fun e1 => (call_mut_back e1).t)
+        let i1 ← i + 1#u32
         ok (Sum.inr (Sum.inl
-          (fun v1 => let v2 := back1 { self with t := v1 }
-                     back v2, self.t, self.d, n, next1, i2, c1)))
+          (fun v => let v1 := back1 { self with t := v }
+                    back v1, self, n, next1, i1, c1)))
       | core.ops.control_flow.ControlFlow.Break residual =>
         let r1 ←
           core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
             Std.U32 (core.convert.FromSame Std.U32) residual
-        ok (Sum.inl (r1, self, next1, fun e => (call_mut_back e).t))
-    else ok (Sum.inr (Sum.inr (core.result.Result.Ok c, v, i, n, next, back)))
+        ok (Sum.inl (r1, self, fun e1 => (call_mut_back e1).t))
+    else ok (Sum.inr (Sum.inr (core.result.Result.Ok c, e, back)))
   match s with
   | Sum.inl t =>
-    let (r, self, _, back1) := t
-    ok (done (r, self.t, self.d,
-      fun v1 => let v2 := back1 { self with t := v1 }
-                back v2))
+    let (r, self, back1) := t
+    ok (done (r, self, fun v => let v1 := back1 { self with t := v }
+                                back v1))
   | Sum.inr s1 =>
     match s1 with
     | Sum.inl t =>
-      let (f, v1, i2, i3, t1, i4, i5) := t
-      ok (cont (f, v1, i2, i3, t1, i4, i5))
-    | Sum.inr t => let (r, v1, i2, _, _, f) := t
-                   ok (done (r, v1, i2, f))
+      let (f, e1, i1, t1, i2, i3) := t
+      ok (cont (f, e1, i1, t1, i2, i3))
+    | Sum.inr t => let (r, e1, f) := t
+                   ok (done (r, e1, f))
 
 /-- [closures_fnmut_args::{closures_fnmut_args::Eng<'a>}::telescope]: loop 0:
     Source: 'tests/src/closures-fnmut-args.rs', lines 21:8-28:5 -/
@@ -93,16 +89,15 @@ def Eng.telescope_loop
   {T1 : Type _} (coreopsfunctionFnMutT1PairMutEngU32ResultBoolU32Inst :
   core.ops.function.FnMut T1 (Eng × Std.U32) ((core.result.Result Bool Std.U32)
   × Eng × (Eng → Eng))) (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)
-  (v : alloc.vec.Vec Std.U32) (i : Std.U32) (n : Std.U32) (next : T1)
-  (i1 : Std.U32) (c : Std.U32) :
-  Result ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec Std.U32) ×
-    Std.U32 × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32))
+  (e : Eng) (n : Std.U32) (next : T1) (i : Std.U32) (c : Std.U32) :
+  Result ((core.result.Result Std.U32 Std.U32) × Eng × (alloc.vec.Vec Std.U32 →
+    alloc.vec.Vec Std.U32))
   := do
   loop
-    (fun (back1, v1, i2, n1, next1, i3, c1) => Eng.telescope_loop.body
-      coreopsfunctionFnMutT1PairMutEngU32ResultBoolU32Inst back1 v1 i2 n1 next1
-      i3 c1)
-    (back, v, i, n, next, i1, c)
+    (fun (back1, e1, n1, next1, i1, c1) => Eng.telescope_loop.body
+      coreopsfunctionFnMutT1PairMutEngU32ResultBoolU32Inst back1 e1 n1 next1 i1
+      c1)
+    (back, e, n, next, i, c)
 
 /-- [closures_fnmut_args::{closures_fnmut_args::Eng<'a>}::telescope]:
     Source: 'tests/src/closures-fnmut-args.rs', lines 14:4-28:5 -/
@@ -112,13 +107,12 @@ def Eng.telescope
   × Eng × (Eng → Eng))) (self : Eng) (n : Std.U32) (next : T1) :
   Result ((core.result.Result Std.U32 Std.U32) × Eng × (Eng → Eng))
   := do
-  let (r, v, i, back) ←
+  let (r, e, back) ←
     Eng.telescope_loop coreopsfunctionFnMutT1PairMutAEngU32ResultBoolU32Inst
-      (fun v1 => v1) self.t self.d n next 0#u32 0#u32
-  let back'a :=
-    fun (self1 : Eng) => let v1 := back self1.t
-                         { self with t := v1 }
-  ok (r, { t := v, d := i }, back'a)
+      (fun v => v) self n next 0#u32 0#u32
+  let back'a := fun (self1 : Eng) => let v := back self1.t
+                                     { self with t := v }
+  ok (r, e, back'a)
 
 /-- [closures_fnmut_args::{closures_fnmut_args::Eng<'a>}::count_even::{closure}]
     Source: 'tests/src/closures-fnmut-args.rs', lines 31:26-38:9 -/

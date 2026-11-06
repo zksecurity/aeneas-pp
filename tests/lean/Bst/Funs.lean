@@ -55,38 +55,53 @@ def TreeSet.find
   := do
   TreeSet.find_loop OrdInst value self.root
 
+/-- [bst::{bst::TreeSet<T>}::insert]: loop body 0:
+    Source: 'src/bst.rs', lines 48:8-63:5
+    Visibility: public -/
+@[rust_loop_body]
+def TreeSet.insert_loop.body
+  {T : Type _} (OrdInst : Ord T) (value : T) (current_tree : Option (Node T))
+  (back : Option (Node T) → Option (Node T)) :
+  Result (ControlFlow ((Option (Node T)) × (Option (Node T) → Option (Node T)))
+    (Bool × (TreeSet T)))
+  := do
+  match current_tree with
+  | none =>
+    ok (done (true, { root := (back (some (Node.mk value none none))) }))
+  | some current_node =>
+    let o ← OrdInst.cmp current_node.value value
+    match o with
+    | Ordering.Less =>
+      ok (cont (current_node.right,
+        fun o1 => back (some (Node.mk current_node.value current_node.left o1))))
+    | Ordering.Equal => ok (done (false, { root := (back current_tree) }))
+    | Ordering.Greater =>
+      ok (cont (current_node.left,
+        fun o1 => back (some (Node.mk current_node.value o1
+          current_node.right))))
+
 /-- [bst::{bst::TreeSet<T>}::insert]: loop 0:
     Source: 'src/bst.rs', lines 48:8-63:5
     Visibility: public -/
 @[rust_loop]
 def TreeSet.insert_loop
-  {T : Type _} (OrdInst : Ord T) (value : T) (current_tree : Option (Node T)) :
-  Result (Bool × (Option (Node T)))
+  {T : Type _} (OrdInst : Ord T) (current_tree : Option (Node T))
+  (back : Option (Node T) → Option (Node T)) (value : T) :
+  Result (Bool × (TreeSet T))
   := do
-  match current_tree with
-  | none => ok (true, some (Node.mk value none none))
-  | some current_node =>
-    let o ← OrdInst.cmp current_node.value value
-    match o with
-    | Ordering.Less =>
-      let (b, back) ← TreeSet.insert_loop OrdInst value current_node.right
-      let back1 := some (Node.mk current_node.value current_node.left back)
-      ok (b, back1)
-    | Ordering.Equal => ok (false, current_tree)
-    | Ordering.Greater =>
-      let (b, back) ← TreeSet.insert_loop OrdInst value current_node.left
-      let back1 := some (Node.mk current_node.value back current_node.right)
-      ok (b, back1)
-partial_fixpoint
+  loop
+    (fun (current_tree1, back1) => TreeSet.insert_loop.body OrdInst value
+      current_tree1 back1)
+    (current_tree, back)
 
 /-- [bst::{bst::TreeSet<T>}::insert]:
     Source: 'src/bst.rs', lines 45:4-63:5
     Visibility: public -/
+@[reducible]
 def TreeSet.insert
   {T : Type _} (OrdInst : Ord T) (self : TreeSet T) (value : T) :
   Result (Bool × (TreeSet T))
   := do
-  let (b, o) ← TreeSet.insert_loop OrdInst value self.root
-  ok (b, { root := o })
+  TreeSet.insert_loop OrdInst self.root (fun o => o) value
 
 end bst

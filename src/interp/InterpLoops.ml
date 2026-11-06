@@ -497,8 +497,9 @@ let eval_loop_symbolic (config : config) (span : span)
   let cc (el : SA.expr list) : SA.expr =
     let exits =
       List.map2
-        (fun (exit, (_, exit_abs, exit_svalues)) exit_expr : SA.loop_exit_info ->
-          { exit; exit_svalues; exit_abs; exit_expr })
+        (fun (exit, (exit_ctx, exit_abs, exit_svalues)) exit_expr :
+             SA.loop_exit_info ->
+          { exit; exit_svalues; exit_abs; exit_ctx; exit_expr })
         exits el
     in
     let loop_expr =
@@ -513,6 +514,7 @@ let eval_loop_symbolic (config : config) (span : span)
           loop_expr = loop_body;
           span;
           ctx = entry_loop_ctx;
+          fp_ctx;
         }
     in
     cf_before_loop loop_expr

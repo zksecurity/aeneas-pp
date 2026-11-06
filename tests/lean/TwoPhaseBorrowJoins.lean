@@ -100,35 +100,34 @@ structure Binder where
     Visibility: public -/
 @[rust_loop_body]
 def Binder.bind_loop.body
-  (v : alloc.vec.Vec Std.U32) (lambda : Bool) (t : Terms) (body : Std.U32)
-  (i : Std.Usize) :
-  Result (ControlFlow (Terms × Std.U32 × Std.Usize) (Terms × Std.U32))
+  (lambda : Bool) (b : Binder) (body : Std.U32) (i : Std.Usize) :
+  Result (ControlFlow (Binder × Std.U32 × Std.Usize) (Binder × Std.U32))
   := do
-  let i1 := alloc.vec.Vec.len v
+  let i1 := alloc.vec.Vec.len b.types
   if i < i1
   then
     let ty ←
-      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v i
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+        b.types i
     let n ← if lambda
             then ok (Node.Lam ty body)
             else ok (Node.Pi ty body)
-    let (body1, t1) ← Terms.node t n
+    let (body1, t) ← Terms.node b.t n
     let i2 ← i + 1#usize
-    ok (cont (t1, body1, i2))
-  else ok (done (t, body))
+    ok (cont ({ b with t }, body1, i2))
+  else ok (done (b, body))
 
 /-- [two_phase_borrow_joins::{two_phase_borrow_joins::Binder<'a>}::bind]: loop 0:
     Source: 'tests/src/two-phase-borrow-joins.rs', lines 40:8-48:9
     Visibility: public -/
 @[rust_loop]
 def Binder.bind_loop
-  (t : Terms) (v : alloc.vec.Vec Std.U32) (lambda : Bool) (body : Std.U32)
-  (i : Std.Usize) :
-  Result (Terms × Std.U32)
+  (b : Binder) (lambda : Bool) (body : Std.U32) (i : Std.Usize) :
+  Result (Binder × Std.U32)
   := do
   loop
-    (fun (t1, body1, i1) => Binder.bind_loop.body v lambda t1 body1 i1)
-    (t, body, i)
+    (fun (b1, body1, i1) => Binder.bind_loop.body lambda b1 body1 i1)
+    (b, body, i)
 
 /-- [two_phase_borrow_joins::{two_phase_borrow_joins::Binder<'a>}::bind]:
     Source: 'tests/src/two-phase-borrow-joins.rs', lines 38:4-50:5
@@ -137,9 +136,9 @@ def Binder.bind
   (self : Binder) (lambda : Bool) (body : Std.U32) :
   Result (Std.U32 × Binder × (Binder → Binder))
   := do
-  let (t, body1) ← Binder.bind_loop self.t self.types lambda body 0#usize
-  let back'a := fun (self1 : Binder) => { self with t := self1.t }
-  ok (body1, { self with t }, back'a)
+  let (b, body1) ← Binder.bind_loop self lambda body 0#usize
+  let back'a := fun (self1 : Binder) => { b with t := self1.t }
+  ok (body1, b, back'a)
 
 /-- [two_phase_borrow_joins::test_push_flag]:
     Source: 'tests/src/two-phase-borrow-joins.rs', lines 54:0-59:1

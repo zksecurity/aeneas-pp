@@ -325,28 +325,35 @@ let texpr_remove_fvars_meta (vars : FVarId.Set.t) (e : texpr) : texpr =
         | SymbolicAssignments l ->
             Meta
               ( SymbolicAssignments
-                  (List.filter (fun (x, v) -> not (mentions x || mentions v)) l),
+                  (List.filter
+                     (fun (x, v) -> not (mentions x || mentions v))
+                     l),
                 e )
         | SymbolicPlaces l ->
-            Meta (SymbolicPlaces (List.filter (fun (x, _) -> not (mentions x)) l), e)
+            Meta
+              ( SymbolicPlaces (List.filter (fun (x, _) -> not (mentions x)) l),
+                e )
         | _ -> Meta (m, e)
     end
   in
   visitor#visit_texpr () e
 
-(** Introduce the binders for the output symbolic values [svl] of a join, in the
-    joined context [joined].
+(** Introduce the binders for the symbolic values [svl] output by a join or a
+    loop exit, or input by a loop body, in their context [joined].
 
-    A structure of the joined context whose leaves are all output symbolic
-    values (reading through the borrows) is output as a single value: the
-    branches deliver the structure and the next expression reads its fields,
-    rather than the branches delivering the fields one by one.
+    A structure of the context whose leaves are all output symbolic values
+    (reading through the borrows) is output as a single value: the branches
+    deliver the structure and the next expression reads its fields, rather
+    than the branches delivering the fields one by one.
 
     Return the variables binding the outputs, with the outputs. *)
-let bind_join_outputs (ctx : bs_ctx) (joined : C.eval_ctx)
-    (svl : V.symbolic_value list) : bs_ctx * (fvar * join_output) list =
+let bind_outputs (ctx : bs_ctx) (joined : C.eval_ctx)
+    (svl : V.symbolic_value list) : bs_ctx * (fvar * exit_output) list =
   let span = ctx.span in
-  let out_ids = V.SymbolicValueId.Set.of_list (List.map (fun (sv : V.symbolic_value) -> sv.sv_id) svl) in
+  let out_ids =
+    V.SymbolicValueId.Set.of_list
+      (List.map (fun (sv : V.symbolic_value) -> sv.sv_id) svl)
+  in
   (* The leaves of a structure, if they are all output symbolic values *)
   let rec leaves (v : V.tvalue) : V.symbolic_value list option =
     let v = ValuesUtils.unbox_tvalue span v in
@@ -365,10 +372,17 @@ let bind_join_outputs (ctx : bs_ctx) (joined : C.eval_ctx)
         leaves (InterpBorrowsCore.ctx_lookup_shared_value span joined bid)
     | _ -> None
   in
+  (* The structures whose fields the next expression reads with projections
+     (see {!PureMicroPassesGeneral.simplify_decompose_struct}): the tuples and
+     tuple structures would be destructured with a pattern instead *)
   let is_struct (v : V.tvalue) : bool =
     match (v.value, v.ty) with
-    | VAdt { variant_id = None; _ }, TAdt { builtin = None | Some TTuple; _ } ->
-        true
+    | VAdt { variant_id = None; _ }, TAdt { id; builtin = None; _ } ->
+        not
+          (!Config.dont_use_field_projectors
+          || TypesUtils.type_decl_from_decl_id_is_tuple_struct
+               ctx.type_ctx.type_infos id
+             && not !Config.use_tuple_projectors)
     | _ -> false
   in
   (* Find the maximal structures whose leaves are distinct output symbolic
@@ -419,7 +433,7 @@ let bind_join_outputs (ctx : bs_ctx) (joined : C.eval_ctx)
         match struct_of sv with
         | None ->
             let ctx, var = fresh_var_for_symbolic_value sv ctx in
-            let out = JoinValue (V.SymbolicValueId.Map.find sv.sv_id index) in
+            let out = OutValue (V.SymbolicValueId.Map.find sv.sv_id index) in
             (ctx, (var, out) :: bound, bound_structs)
         | Some i when List.mem i bound_structs -> (ctx, bound, bound_structs)
         | Some i ->
@@ -434,14 +448,14 @@ let bind_join_outputs (ctx : bs_ctx) (joined : C.eval_ctx)
             in
             let e = tvalue_to_texpr ctx joined v in
             let ctx, var = fresh_var None e.ty ctx in
-            (ctx, (var, JoinStruct (e, indices)) :: bound, i :: bound_structs))
+            (ctx, (var, OutStruct (e, indices)) :: bound, i :: bound_structs))
       (ctx, [], []) svl
   in
   (ctx, List.rev bound)
 
-(** Destructure the structures output by a join (see {!bind_join_outputs}) in
+(** Destructure the output structures (see {!bind_outputs}) in
     the next expression *)
-let destructure_join_outputs (ctx : bs_ctx) (outputs : (fvar * join_output) list)
+let destructure_outputs (ctx : bs_ctx) (outputs : (fvar * exit_output) list)
     (next : texpr) : texpr =
   let rec to_pat (e : texpr) : tpat =
     match destruct_apps e with
@@ -454,11 +468,90 @@ let destructure_join_outputs (ctx : bs_ctx) (outputs : (fvar * join_output) list
   List.fold_right
     (fun ((var : fvar), out) next ->
       match out with
-      | JoinValue _ -> next
-      | JoinStruct (e, _) ->
+      | OutValue _ -> next
+      | OutStruct (e, _) ->
           [%add_loc] mk_closed_checked_let ctx false (to_pat e)
             (mk_texpr_from_fvar var) next)
     outputs next
+
+(** Introduce free variables for the output abstractions of a join or a loop
+    exit, or the input abstractions of a loop body, which have a continuation *)
+let bind_output_abs (ctx : bs_ctx) (absl : V.abs list) :
+    bs_ctx * fvar option list =
+  (* Compute the type of the abstractions *)
+  let abs_tys = List.map (abs_to_ty ctx) absl in
+  let abs_tys, ignored =
+    List.partition_map
+      (fun (abs, ty) ->
+        match ty with
+        | Some ty -> Left (abs.V.abs_id, ty)
+        | None -> Right abs.abs_id)
+      (List.combine absl abs_tys)
+  in
+  (* Introduce free variables for the abs *)
+  let ctx, fvars =
+    List.fold_left_map
+      (fun ctx (aid, ty) ->
+        let ctx, fvar = fresh_var (Some "back") ty ctx in
+        (ctx, (aid, fvar)))
+      ctx abs_tys
+  in
+  (* Register the mapping from abs to free variable *)
+  let ctx =
+    let info =
+      List.map
+        (fun (aid, fv) ->
+          (aid, { fvar = mk_texpr_from_fvar fv; can_fail = false }))
+        fvars
+    in
+    {
+      ctx with
+      abs_id_to_info = V.AbsId.Map.add_list info ctx.abs_id_to_info;
+      ignored_abs_ids = V.AbsId.Set.add_list ignored ctx.ignored_abs_ids;
+    }
+  in
+  (ctx, List.map (fun (abs : V.abs) -> List.assoc_opt abs.abs_id fvars) absl)
+
+(** The outputs of a join or of a loop exit, bound by [values] and [absl], which
+    the expression [next] after it reads: return them, and [next] without the
+    meta-information mentioning the others *)
+let select_read_outputs (values : (fvar * exit_output) list)
+    (absl : fvar option list) (next : texpr) :
+    (fvar * exit_output) list * fvar option list * texpr =
+  let used = texpr_get_used_fvars next in
+  let read_values, unread_values =
+    List.partition
+      (fun ((var : fvar), out) ->
+        match out with
+        | OutValue _ -> FVarId.Set.mem var.id used
+        | OutStruct (_, indices) ->
+            FVarId.Map.exists (fun fid _ -> FVarId.Set.mem fid used) indices)
+      values
+  in
+  let read_abs =
+    List.map
+      (fun var ->
+        Option.bind var (fun (var : fvar) ->
+            if FVarId.Set.mem var.id used then Some var else None))
+      absl
+  in
+  let unread =
+    FVarId.Set.of_list
+      (List.concat_map
+         (fun ((var : fvar), out) ->
+           match out with
+           | OutValue _ -> [ var.id ]
+           | OutStruct (_, indices) ->
+               List.map fst (FVarId.Map.bindings indices))
+         unread_values
+      @ List.filter_map
+          (fun (var, read) ->
+            match (var, read) with
+            | Some (var : fvar), None -> Some var.id
+            | _ -> None)
+          (List.combine absl read_abs))
+  in
+  (read_values, read_abs, texpr_remove_fvars_meta unread next)
 
 let rec translate_expr (e : S.expr) (ctx : bs_ctx) : texpr =
   [%ldebug "e:\n" ^ bs_ctx_expr_to_string ctx e];
@@ -2310,48 +2403,23 @@ and translate_loop (loop : S.loop) (ctx0 : bs_ctx) : texpr =
     in
     List.map (tvalue_to_texpr ctx loop.ctx) input_values
   in
-  (* Introduce free variables for the inputs *)
-  let bind_inputs (ctx : bs_ctx) (absl : V.abs list)
-      (values : V.symbolic_value list) : bs_ctx * tpat list * tpat list =
-    let ctx, absl =
-      (* Compute the type of the input abstractions *)
-      let abs_tys = List.map (abs_to_ty ctx) absl in
-      let abs_tys, ignored =
-        List.partition_map
-          (fun (abs, ty) ->
-            match ty with
-            | Some ty -> Left (abs.V.abs_id, ty)
-            | None -> Right abs.abs_id)
-          (List.combine absl abs_tys)
-      in
-      (* Introduce free variables for the abs *)
-      let ctx, fvars =
-        List.fold_left_map
-          (fun ctx (aid, ty) ->
-            let ctx, fvar = fresh_var (Some "back") ty ctx in
-            (ctx, (aid, fvar)))
-          ctx abs_tys
-      in
-      (* Register the mapping from abs to free variable *)
-      let ctx =
-        let fvars =
-          List.map
-            (fun (aid, fv) ->
-              (aid, { fvar = mk_texpr_from_fvar fv; can_fail = false }))
-            fvars
-        in
-        {
-          ctx with
-          abs_id_to_info = V.AbsId.Map.add_list fvars ctx.abs_id_to_info;
-          ignored_abs_ids = V.AbsId.Set.add_list ignored ctx.ignored_abs_ids;
-        }
-      in
-      (* *)
-      (ctx, List.map snd fvars)
-    in
-    let ctx, values = fresh_vars_for_symbolic_values values ctx in
-    let mk_pats = List.map (mk_tpat_from_fvar None) in
-    (ctx, mk_pats absl, mk_pats values)
+  (* Introduce the binders for the inputs of the loop body, which come from
+     the fixed point (see {!bind_outputs}) *)
+  let body_ctx, input_abs_vars = bind_output_abs ctx0 loop.input_abs in
+  let body_ctx, body_input_values =
+    bind_outputs body_ctx loop.fp_ctx loop.input_svalues
+  in
+  let body_inputs =
+    {
+      values = List.map snd body_input_values;
+      abs = List.map Option.is_some input_abs_vars;
+    }
+  in
+  let input_conts =
+    List.map (mk_tpat_from_fvar None) (List.filter_map Fun.id input_abs_vars)
+  in
+  let input_value_pats =
+    List.map (fun (var, _) -> mk_tpat_from_fvar None var) body_input_values
   in
 
   (* Translate the loop input abstractions *)
@@ -2363,7 +2431,15 @@ and translate_loop (loop : S.loop) (ctx0 : bs_ctx) : texpr =
 
   (* Translate the loop input values *)
   let input_values =
-    translate_input_values loop.input_svalues loop.input_value_to_value
+    let values =
+      translate_input_values loop.input_svalues loop.input_value_to_value
+    in
+    List.map
+      (function
+        | OutValue i -> List.nth values i
+        | OutStruct (e, indices) ->
+            texpr_subst_fvars (FVarId.Map.map (List.nth values) indices) e)
+      body_inputs.values
   in
   let inputs = input_abs @ input_values in
   [%ldebug
@@ -2385,22 +2461,37 @@ and translate_loop (loop : S.loop) (ctx0 : bs_ctx) : texpr =
   let exit_outputs =
     List.map
       (fun (exit : S.loop_exit_info) ->
-        let ctx, exit_abs, exit_values =
-          bind_inputs ctx exit.exit_abs exit.exit_svalues
+        let ctx, exit_abs = bind_output_abs ctx exit.exit_abs in
+        let ctx, exit_values =
+          bind_outputs ctx exit.exit_ctx exit.exit_svalues
         in
-        let exit_e = translate_expr exit.exit_expr ctx in
-        ( exit_values @ exit_abs,
-          mk_simpl_tuple_pat (exit_values @ exit_abs),
-          exit_e ))
+        (* The exit only outputs what the expression after it reads *)
+        let exit_values, exit_abs, exit_e =
+          select_read_outputs exit_values exit_abs
+            (translate_expr exit.exit_expr ctx)
+        in
+        let exit_e = destructure_outputs ctx exit_values exit_e in
+        let outputs =
+          {
+            values = List.map snd exit_values;
+            abs = List.map Option.is_some exit_abs;
+          }
+        in
+        let pats =
+          List.map (mk_tpat_from_fvar None)
+            (List.map fst exit_values @ List.filter_map Fun.id exit_abs)
+        in
+        ( pats,
+          mk_simpl_tuple_pat pats,
+          exit_e,
+          (List.length exit_values, outputs) ))
       loop.exits
   in
   let output_tys =
-    List.map (fun (_, (pat : tpat), _) -> pat.ty) exit_outputs
+    List.map (fun (_, (pat : tpat), _, _) -> pat.ty) exit_outputs
   in
   let num_exit_values =
-    List.map
-      (fun (exit : S.loop_exit_info) -> List.length exit.exit_svalues)
-      loop.exits
+    List.map (fun (_, _, _, (n, _)) -> n) exit_outputs
   in
   (* If the loop has several exits, it outputs the sum of the outputs at the
      exits *)
@@ -2409,14 +2500,11 @@ and translate_loop (loop : S.loop) (ctx0 : bs_ctx) : texpr =
   [%ldebug
     "- loop translated outputs:\n"
     ^ String.concat "\n"
-        (List.map (fun (_, pat, _) -> tpat_to_string ctx pat) exit_outputs)];
+        (List.map (fun (_, pat, _, _) -> tpat_to_string ctx pat) exit_outputs)];
 
   (* Translate the body *)
   let loop_body =
-    (* Introduce free variables for the inputs *)
-    let ctx, input_conts, input_values =
-      bind_inputs ctx0 loop.input_abs loop.input_svalues
-    in
+    let ctx = body_ctx in
 
     (* Update [mk_panic], [mk_return] and the exit handlers *)
     let continue_ty = List.map (fun (e : texpr) -> e.ty) inputs in
@@ -2450,15 +2538,32 @@ and translate_loop (loop : S.loop) (ctx0 : bs_ctx) : texpr =
             })
           loop.exits
     in
+    let exit_outputs =
+      ((S.ExitLoopContinue, body_inputs)
+      :: List.map2
+           (fun (exit : S.loop_exit_info) (_, _, _, (_, outputs)) ->
+             (S.ExitLoop exit.exit, outputs))
+           loop.exits exit_outputs)
+      @ ctx.exit_outputs
+    in
     let ctx =
-      { ctx with mk_panic = Some mk_panic; mk_return = None; exit_handlers }
+      {
+        ctx with
+        mk_panic = Some mk_panic;
+        mk_return = None;
+        exit_handlers;
+        exit_outputs;
+      }
     in
 
     (* Translate the body *)
-    let body = translate_expr loop.loop_expr ctx in
+    let body =
+      destructure_outputs ctx body_input_values
+        (translate_expr loop.loop_expr ctx)
+    in
 
     (* Put everything together *)
-    let inputs = input_conts @ input_values in
+    let inputs = input_conts @ input_value_pats in
 
     (* We need to close the binders *)
     let inputs, loop_body = close_binders ctx.span inputs body in
@@ -2472,7 +2577,7 @@ and translate_loop (loop : S.loop) (ctx0 : bs_ctx) : texpr =
       span = loop.span;
       output_tys =
         (match exit_outputs with
-        | [ (outputs, _, _) ] -> List.map (fun (p : tpat) -> p.ty) outputs
+        | [ (outputs, _, _, _) ] -> List.map (fun (p : tpat) -> p.ty) outputs
         | _ -> [ break_ty ]);
       num_output_values =
         (match num_exit_values with
@@ -2495,7 +2600,7 @@ and translate_loop (loop : S.loop) (ctx0 : bs_ctx) : texpr =
 
   (* Create the let-binding, and dispatch the output to the exits *)
   match exit_outputs with
-  | [ (_, output, exit_e) ] ->
+  | [ (_, output, exit_e, _) ] ->
       [%add_loc] mk_closed_checked_let ctx true output loop_e exit_e
   | _ ->
       let ctx, x = fresh_var None break_ty ctx in
@@ -2503,23 +2608,14 @@ and translate_loop (loop : S.loop) (ctx0 : bs_ctx) : texpr =
         (mk_tpat_from_fvar None x)
         loop_e
         (mk_sums_match ctx (mk_texpr_from_fvar x)
-           (List.map (fun (_, pat, exit_e) -> (pat, exit_e)) exit_outputs))
+           (List.map (fun (_, pat, exit_e, _) -> (pat, exit_e)) exit_outputs))
 
 and translate_continue_break (ctx : bs_ctx) (target : S.exit_target)
     (ectx : C.eval_ctx) (_loop_id : V.loop_id) (input_values : V.tvalue list)
     (input_abs : V.abs list) : texpr =
-  [%ldebug
-    "- input_values:\n"
-    ^ String.concat "\n" (List.map (tvalue_to_string ctx) input_values)
-    ^ "\n- input_abs:\n"
-    ^ String.concat "\n\n" (List.map (abs_to_string ctx) input_abs)];
-  let conts = List.filter_map (translate_abs_to_cont ctx ectx) input_abs in
-  let values = List.map (tvalue_to_texpr ctx ectx) input_values in
-  [%ldebug
-    "- translated values:\n"
-    ^ String.concat "\n" (List.map (texpr_to_string ctx) values)
-    ^ "\n- translated abs:\n"
-    ^ String.concat "\n\n" (List.map (texpr_to_string ctx) conts)];
+  let values, conts =
+    translate_exit_outputs ctx target ectx input_values input_abs
+  in
   (* Note that the order between the values and the continuations is not the same
      depending on whether we reach a break or a continue *)
   let outputs =
@@ -2533,96 +2629,18 @@ and translate_continue_break (ctx : bs_ctx) (target : S.exit_target)
 and translate_let (ctx0 : bs_ctx) (lete : S.let_expr) : texpr =
   let ctx = ctx0 in
 
-  (* Introduce free variables for the output abstractions which have a
-     continuation *)
-  let bind_output_abs (ctx : bs_ctx) (absl : V.abs list) :
-      bs_ctx * fvar option list =
-    let ctx, fvars =
-      (* Compute the type of the break abstractions *)
-      let abs_tys = List.map (abs_to_ty ctx) absl in
-      let abs_tys, ignored =
-        List.partition_map
-          (fun (abs, ty) ->
-            match ty with
-            | Some ty -> Left (abs.V.abs_id, ty)
-            | None -> Right abs.abs_id)
-          (List.combine absl abs_tys)
-      in
-      (* Introduce free variables for the abs *)
-      let ctx, fvars =
-        List.fold_left_map
-          (fun ctx (aid, ty) ->
-            let ctx, fvar = fresh_var (Some "back") ty ctx in
-            (ctx, (aid, fvar)))
-          ctx abs_tys
-      in
-      (* Register the mapping from abs to free variable *)
-      let ctx =
-        let fvars =
-          List.map
-            (fun (aid, fv) ->
-              (aid, { fvar = mk_texpr_from_fvar fv; can_fail = false }))
-            fvars
-        in
-        {
-          ctx with
-          abs_id_to_info = V.AbsId.Map.add_list fvars ctx.abs_id_to_info;
-          ignored_abs_ids = V.AbsId.Set.add_list ignored ctx.ignored_abs_ids;
-        }
-      in
-      (* *)
-      (ctx, fvars)
-    in
-    ( ctx,
-      List.map
-        (fun (abs : V.abs) -> List.assoc_opt abs.abs_id fvars)
-        absl )
-  in
-
   (* Introduce the binders for the outputs *)
-  let ctx, out_values =
-    bind_join_outputs ctx lete.joined_ctx lete.out_svalues
-  in
   let ctx, out_abs = bind_output_abs ctx lete.out_abs in
+  let ctx, out_values = bind_outputs ctx lete.joined_ctx lete.out_svalues in
 
   (* Translate the next expression: the branches only deliver the outputs it
      reads *)
   let next_e = translate_expr lete.next_expr ctx in
-  let used = texpr_get_used_fvars next_e in
-  let all_out_values, all_out_abs = (out_values, out_abs) in
-  let out_values =
-    List.filter
-      (fun ((var : fvar), out) ->
-        match out with
-        | JoinValue _ -> FVarId.Set.mem var.id used
-        | JoinStruct (_, indices) ->
-            FVarId.Map.exists (fun fid _ -> FVarId.Set.mem fid used) indices)
-      out_values
+  let out_values, out_abs, next_e =
+    select_read_outputs out_values out_abs next_e
   in
-  let out_abs =
-    List.map
-      (fun var ->
-        Option.bind var (fun (var : fvar) ->
-            if FVarId.Set.mem var.id used then Some var else None))
-      out_abs
-  in
-  let next_e =
-    let dropped =
-      FVarId.Set.diff
-        (FVarId.Set.of_list
-           (List.concat_map
-              (fun ((var : fvar), out) ->
-                match out with
-                | JoinValue _ -> [ var.id ]
-                | JoinStruct (_, indices) -> List.map fst (FVarId.Map.bindings indices))
-              all_out_values
-           @ List.filter_map (Option.map (fun (var : fvar) -> var.id)) all_out_abs))
-        used
-    in
-    texpr_remove_fvars_meta dropped next_e
-  in
-  let next_e = destructure_join_outputs ctx out_values next_e in
-  let join_outputs =
+  let next_e = destructure_outputs ctx out_values next_e in
+  let own_outputs =
     { values = List.map snd out_values; abs = List.map Option.is_some out_abs }
   in
   let outputs =
@@ -2696,8 +2714,7 @@ and translate_let (ctx0 : bs_ctx) (lete : S.let_expr) : texpr =
         mk_return =
           (if List.mem S.ExitReturn lete.exits then ctx.mk_return else None);
         exit_handlers = own_handler :: exit_handlers;
-        join_outputs =
-          S.SymbolicExprId.Map.add lete.join_id join_outputs ctx.join_outputs;
+        exit_outputs = (own, own_outputs) :: ctx.exit_outputs;
       }
     in
 
@@ -2728,12 +2745,25 @@ and translate_let (ctx0 : bs_ctx) (lete : S.let_expr) : texpr =
 and translate_join (ctx : bs_ctx) (join_id : S.symbolic_expr_id)
     (ectx : C.eval_ctx) (input_values : V.tvalue list) (input_abs : V.abs list)
     : texpr =
+  let target = S.ExitJoin join_id in
+  let values, conts =
+    translate_exit_outputs ctx target ectx input_values input_abs
+  in
+  let output = mk_simpl_tuple_texpr ctx.span (values @ conts) in
+  deliver_exit ctx target output
+
+(** Translate the symbolic values and the abstractions delivered to an exit
+    target into the values and the continuations it outputs (see
+    {!bind_outputs}) *)
+and translate_exit_outputs (ctx : bs_ctx) (target : S.exit_target)
+    (ectx : C.eval_ctx) (input_values : V.tvalue list) (input_abs : V.abs list)
+    : texpr list * texpr list =
   [%ldebug
     "- input_values:\n"
     ^ String.concat "\n" (List.map (tvalue_to_string ctx) input_values)
     ^ "\n- input_abs:\n"
     ^ String.concat "\n\n" (List.map (abs_to_string ctx) input_abs)];
-  let outputs = S.SymbolicExprId.Map.find join_id ctx.join_outputs in
+  let outputs = List.assoc target ctx.exit_outputs in
   let conts =
     List.filter_map
       (fun (abs, output) ->
@@ -2749,18 +2779,12 @@ and translate_join (ctx : bs_ctx) (join_id : S.symbolic_expr_id)
   let values =
     List.map
       (function
-        | JoinValue i -> List.nth values i
-        | JoinStruct (e, indices) ->
-            texpr_subst_fvars
-              (FVarId.Map.map (List.nth values) indices)
-              e)
+        | OutValue i -> List.nth values i
+        | OutStruct (e, indices) ->
+            texpr_subst_fvars (FVarId.Map.map (List.nth values) indices) e)
       outputs.values
   in
-  (* Note that the order between the values and the continuations is not the same
-     depending on whether we reach a break or a continue *)
-  let outputs = values @ conts in
-  let output = mk_simpl_tuple_texpr ctx.span outputs in
-  deliver_exit ctx (ExitJoin join_id) output
+  (values, conts)
 
 (** Deliver a value to an exit target from the current position *)
 and deliver_exit (ctx : bs_ctx) (target : S.exit_target) (v : texpr) : texpr =

@@ -63,12 +63,9 @@ def first_quote_loop.body
       (core.option.Option.Insts.CoreCmpPartialEqOption
       (core.cmp.PartialEqShared core.cmp.PartialEqU8)) o (some 34#u8)
   let s : _root_.Sum Std.Usize (_root_.Sum ((Slice Std.U8) × Std.Usize)
-    ((core.result.Result Std.U32 Unit) × (Slice Std.U8) × Std.Usize × (Option
-    Std.U8))) ←
+    ((core.result.Result Std.U32 Unit) × Std.Usize)) ←
     if b
-    then
-      ok (Sum.inr (Sum.inr (core.result.Result.Err (), bytes, cursor, some
-        34#u8)))
+    then ok (Sum.inr (Sum.inr (core.result.Result.Err (), cursor)))
     else
       do
       let cursor1 ← cursor + 1#usize
@@ -81,7 +78,7 @@ def first_quote_loop.body
     match s1 with
     | Sum.inl p => let (s2, i) := p
                    ok (cont (s2, i))
-    | Sum.inr t => let (r, _, i, _) := t
+    | Sum.inr p => let (r, i) := p
                    ok (done (r, i))
 
 /-- [loop_promoted_shared_refs::first_quote]: loop 0:

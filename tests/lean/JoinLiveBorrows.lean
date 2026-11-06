@@ -47,18 +47,16 @@ inductive Value where
 def field_loop.body
   (fields : alloc.vec.Vec (Std.U32 × Value)) (k : Std.U32)
   (iter : core.slice.iter.Iter (Std.U32 × Value)) :
-  Result (ControlFlow (core.slice.iter.Iter (Std.U32 × Value)) (_root_.Sum
-    ((alloc.vec.Vec (Std.U32 × Value)) × Std.U32 × (core.slice.iter.Iter
-    (Std.U32 × Value)) × (Option (Std.U32 × Value))) (Value × (alloc.vec.Vec
-    (Std.U32 × Value)) × Std.U32 × (Option (Std.U32 × Value)))))
+  Result (ControlFlow (core.slice.iter.Iter (Std.U32 × Value)) (_root_.Sum Unit
+    (Value × (alloc.vec.Vec (Std.U32 × Value)))))
   := do
   let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
   match o with
-  | none => ok (done (Sum.inl (fields, k, iter1, o)))
+  | none => ok (done (Sum.inl ()))
   | some p =>
     let (key, val) := p
     if key = k
-    then ok (done (Sum.inr (val, fields, k, o)))
+    then ok (done (Sum.inr (val, fields)))
     else ok (cont iter1)
 
 /-- [join_live_borrows::field]: loop 0:
@@ -68,10 +66,7 @@ def field_loop.body
 def field_loop
   (iter : core.slice.iter.Iter (Std.U32 × Value))
   (fields : alloc.vec.Vec (Std.U32 × Value)) (k : Std.U32) :
-  Result (_root_.Sum ((alloc.vec.Vec (Std.U32 × Value)) × Std.U32 ×
-    (core.slice.iter.Iter (Std.U32 × Value)) × (Option (Std.U32 × Value)))
-    (Value × (alloc.vec.Vec (Std.U32 × Value)) × Std.U32 × (Option (Std.U32 ×
-    Value))))
+  Result (_root_.Sum Unit (Value × (alloc.vec.Vec (Std.U32 × Value))))
   := do
   loop
     (fun iter1 => field_loop.body fields k iter1)
@@ -88,14 +83,11 @@ def field
     let iter ←
       SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter
         alloc.alloc.Global fields
-    let s : _root_.Sum ((alloc.vec.Vec (Std.U32 × Value)) × Std.U32 ×
-      (core.slice.iter.Iter (Std.U32 × Value)) × (Option (Std.U32 × Value)))
-      (Value × (alloc.vec.Vec (Std.U32 × Value)) × Std.U32 × (Option (Std.U32 ×
-      Value))) ←
+    let s : _root_.Sum Unit (Value × (alloc.vec.Vec (Std.U32 × Value))) ←
       field_loop iter fields k
     match s with
     | Sum.inl _ => ok (core.result.Result.Err 0#u32)
-    | Sum.inr t => let (v1, _, _, _) := t
+    | Sum.inr p => let (v1, _) := p
                    ok (core.result.Result.Ok v1)
 
 /-- [join_live_borrows::field_at]: loop body 0:
@@ -105,8 +97,7 @@ def field
 def field_at_loop.body
   (fields : alloc.vec.Vec (Std.U32 × Value)) (k : Std.U32) (i : Std.Usize) :
   Result (ControlFlow Std.Usize (_root_.Sum (Value × (alloc.vec.Vec (Std.U32 ×
-    Value)) × Std.U32 × (Std.U32 × Value)) ((alloc.vec.Vec (Std.U32 × Value)) ×
-    Std.U32 × Std.Usize)))
+    Value))) Unit))
   := do
   let i1 := alloc.vec.Vec.len fields
   if i < i1
@@ -115,10 +106,10 @@ def field_at_loop.body
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Std.U32 ×
         Value)) fields i
     if key = k
-    then ok (done (Sum.inl (val, fields, k, (key, val))))
+    then ok (done (Sum.inl (val, fields)))
     else let i2 ← i + 1#usize
          ok (cont i2)
-  else ok (done (Sum.inr (fields, k, i)))
+  else ok (done (Sum.inr ()))
 
 /-- [join_live_borrows::field_at]: loop 0:
     Source: 'tests/src/join-live-borrows.rs', lines 35:12-46:1
@@ -126,9 +117,7 @@ def field_at_loop.body
 @[rust_loop]
 def field_at_loop
   (fields : alloc.vec.Vec (Std.U32 × Value)) (k : Std.U32) (i : Std.Usize) :
-  Result (_root_.Sum (Value × (alloc.vec.Vec (Std.U32 × Value)) × Std.U32 ×
-    (Std.U32 × Value)) ((alloc.vec.Vec (Std.U32 × Value)) × Std.U32 ×
-    Std.Usize))
+  Result (_root_.Sum (Value × (alloc.vec.Vec (Std.U32 × Value))) Unit)
   := do
   loop
     (fun i1 => field_at_loop.body fields k i1)
@@ -142,12 +131,10 @@ def field_at
   match v with
   | Value.Num _ => ok (core.result.Result.Err 1#u32)
   | Value.Obj fields =>
-    let s : _root_.Sum (Value × (alloc.vec.Vec (Std.U32 × Value)) × Std.U32 ×
-      (Std.U32 × Value)) ((alloc.vec.Vec (Std.U32 × Value)) × Std.U32 ×
-      Std.Usize) ←
+    let s : _root_.Sum (Value × (alloc.vec.Vec (Std.U32 × Value))) Unit ←
       field_at_loop fields k 0#usize
     match s with
-    | Sum.inl t => let (v1, _, _, _) := t
+    | Sum.inl p => let (v1, _) := p
                    ok (core.result.Result.Ok v1)
     | Sum.inr _ => ok (core.result.Result.Err 0#u32)
 

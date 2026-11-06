@@ -434,11 +434,9 @@ def struct_calls
     Visibility: public -/
 @[rust_loop_body]
 def inner_loop_loop.body
-  (b : Bool) (n : Std.U32) (i : Std.U32) :
-  Result (ControlFlow Std.U32 (Bool × Std.U32 × Std.U32))
-  := do
+  (n : Std.U32) (i : Std.U32) : Result (ControlFlow Std.U32 Std.U32) := do
   if i >= n
-  then ok (done (b, n, i))
+  then ok (done i)
   else let i1 ← i + 1#u32
        ok (cont i1)
 
@@ -447,23 +445,18 @@ def inner_loop_loop.body
     Visibility: public -/
 @[rust_loop]
 def inner_loop_loop
-  (b : Bool) (n : Std.U32) (i : Std.U32) :
-  Result (Bool × Std.U32 × Std.U32)
-  := do
+  (b : Bool) (n : Std.U32) (i : Std.U32) : Result Std.U32 := do
   loop
-    (fun i1 => inner_loop_loop.body b n i1)
+    (fun i1 => inner_loop_loop.body n i1)
     i
 
 /-- [switch_early_returns::inner_loop]:
     Source: 'tests/src/switch-early-returns.rs', lines 113:0-127:1
     Visibility: public -/
 def inner_loop (b : Bool) (n : Std.U32) : Result Std.U32 := do
-  let x ←
-    if b
-    then do
-         let (_, _, x1) ← inner_loop_loop b n 0#u32
-         ok x1
-    else n + 1#u32
+  let x ← if b
+          then inner_loop_loop b n 0#u32
+          else n + 1#u32
   x * 2#u32
 
 /-- [switch_early_returns::test_chain]:

@@ -42,8 +42,7 @@ def f
 @[rust_loop_body]
 def the_loop_loop.body
   (s : S) (next_in : Slice Std.U8) :
-  Result (ControlFlow (S × (Slice Std.U8)) (Std.U8 × (Array Std.U8 4#usize) ×
-    (Slice Std.U8) × Bool))
+  Result (ControlFlow (S × (Slice Std.U8)) (S × (Slice Std.U8) × Bool))
   := do
   let (s1, to_slice_mut_back) ← lift (Array.to_slice_mut s.y)
   let ((done1, n), i, s2) ← f s.x next_in s1
@@ -52,13 +51,15 @@ def the_loop_loop.body
       (core.slice.index.SliceIndexRangeFromUsizeSlice Std.U8) next_in
       { start := n }
   if done1
-  then let a := to_slice_mut_back s2
-       ok (done (i, a, next_in1, done1))
+  then
+    let a := to_slice_mut_back s2
+    ok (done ({ x := i, y := a }, next_in1, done1))
   else
     let b ← core.slice.Slice.is_empty next_in1
     if b
-    then let a := to_slice_mut_back s2
-         ok (done (i, a, next_in1, done1))
+    then
+      let a := to_slice_mut_back s2
+      ok (done ({ x := i, y := a }, next_in1, done1))
     else let a := to_slice_mut_back s2
          ok (cont ({ x := i, y := a }, next_in1))
 
@@ -67,9 +68,7 @@ def the_loop_loop.body
     Visibility: public -/
 @[rust_loop]
 def the_loop_loop
-  (s : S) (next_in : Slice Std.U8) :
-  Result (Std.U8 × (Array Std.U8 4#usize) × (Slice Std.U8) × Bool)
-  := do
+  (s : S) (next_in : Slice Std.U8) : Result (S × (Slice Std.U8) × Bool) := do
   loop
     (fun (s1, next_in1) => the_loop_loop.body s1 next_in1)
     (s, next_in)
@@ -79,7 +78,7 @@ def the_loop_loop
     Visibility: public -/
 def the_loop
   (s : S) (next_in : Slice Std.U8) : Result (Bool × S × (Slice Std.U8)) := do
-  let (i, a, next_in1, done1) ← the_loop_loop s next_in
-  ok (done1, { x := i, y := a }, next_in1)
+  let (s1, next_in1, done1) ← the_loop_loop s next_in
+  ok (done1, s1, next_in1)
 
 end issue_789_loop_ctx_match

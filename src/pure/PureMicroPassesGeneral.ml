@@ -222,7 +222,9 @@ let simplify_decompose_struct_visitor (ctx : ctx) (def : fun_decl) =
         ( mk_tpat_from_fvar None fv,
           mk_opened_let false pat (mk_texpr_from_fvar fv) )
     | PAdt { variant_id; fields }, TAdt (TTuple, _) ->
-        let fields, lets = List.split (List.map (lift_struct_pats true) fields) in
+        let fields, lets =
+          List.split (List.map (lift_struct_pats true) fields)
+        in
         ( { pat with pat = PAdt { variant_id; fields } },
           fun e -> List.fold_right (fun f e -> f e) lets e )
     | _ -> (pat, Fun.id)
@@ -2242,7 +2244,8 @@ let merge_identical_match_branches_visitor (_ctx : ctx) (def : fun_decl) =
     let visitor =
       object
         inherit [_] map_expr
-        method! visit_PBound _ (v : var) _ = PBound ({ v with basename = None }, None)
+        method! visit_PBound _ (v : var) _ =
+          PBound ({ v with basename = None }, None)
       end
     in
     visitor#visit_texpr () (close_all_texpr span e)
@@ -2275,7 +2278,9 @@ let merge_identical_match_branches_visitor (_ctx : ctx) (def : fun_decl) =
           let keys =
             List.map
               (fun ({ pat; branch } : match_branch) ->
-                if FVarId.Set.disjoint (tpat_get_fvars pat) (texpr_get_fvars branch)
+                if
+                  FVarId.Set.disjoint (tpat_get_fvars pat)
+                    (texpr_get_fvars branch)
                 then Some (normalize branch)
                 else None)
               branches

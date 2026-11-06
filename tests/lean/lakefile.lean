@@ -106,6 +106,7 @@ package «tests» {}
 @[default_target] lean_lib Joins
 @[default_target] lean_lib JoinSharedBorrowInstances
 @[default_target] lean_lib JoinSharedProjections
+@[default_target] lean_lib JoinStructOutputs
 @[default_target] lean_lib JoinTargetSharedBorrows
 @[default_target] lean_lib LeanKeywords
 @[default_target] lean_lib LeanKeywordsClash

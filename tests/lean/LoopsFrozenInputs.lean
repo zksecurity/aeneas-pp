@@ -44,21 +44,20 @@ def Table.get_loop.body
   let (k, v1) ←
     alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Std.U64 ×
       Std.U32)) v i1
-  let s : _root_.Sum ((Option Std.U32) × Std.U64 × Std.U32) ((alloc.vec.Vec
-    (Std.U64 × Std.U32)) × Std.Usize × Std.U64 × Std.Usize × Std.Usize) ←
+  let s : _root_.Sum (Option Std.U32) ((alloc.vec.Vec (Std.U64 × Std.U32)) ×
+    Std.Usize × Std.U64 × Std.Usize × Std.Usize) ←
     if k = key
-    then ok (Sum.inl (some v1, k, v1))
+    then ok (Sum.inl (some v1))
     else
       if k = EMPTY
-      then ok (Sum.inl (none, k, v1))
+      then ok (Sum.inl none)
       else
         do
         let i2 ← i1 + 1#usize
         let i3 ← lift (i2 &&& mask)
         ok (Sum.inr (v, i, key, mask, i3))
   match s with
-  | Sum.inl t => let (o, _, _) := t
-                 ok (done o)
+  | Sum.inl o => ok (done o)
   | Sum.inr t => let (v2, i2, i3, i4, i5) := t
                  ok (cont (v2, i2, i3, i4, i5))
 

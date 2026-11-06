@@ -277,6 +277,8 @@ type expr =
 and loop = {
   ctx : (Contexts.eval_ctx[@opaque]);
       (** The evaluation context just before the loop *)
+  fp_ctx : (Contexts.eval_ctx[@opaque]);
+      (** The fixed-point context, in which the loop body is evaluated *)
   loop_id : loop_id;
   input_svalues : symbolic_value list;
       (** The input symbolic values, properly ordered *)
@@ -366,6 +368,9 @@ and loop_exit_info = {
   exit_abs : abs list;
       (** The abstractions introduced in the environment at the exit (those are
           output by the loop) *)
+  exit_ctx : (Contexts.eval_ctx[@opaque]);
+      (** The environment at the exit, in which the expression after the exit
+          is evaluated *)
   exit_expr : expr;  (** The expression for what happens after the exit *)
 }
 

@@ -457,34 +457,34 @@ def id_hidden_static_mut
     Source: 'tests/src/static.rs', lines 286:4-290:5 -/
 @[rust_loop_body]
 def loop_hidden_static_mut_loop.body
-  (n : Std.U32) (back : Std.U32 → Std.U32) (i : Std.U32) (i1 : Std.U32) :
-  Result (ControlFlow ((Std.U32 → Std.U32) × Std.U32 × Std.U32) Std.U32)
+  (n : Std.U32) (back : Std.U32 → Std.U32) (sm : StaticMut) (i : Std.U32) :
+  Result (ControlFlow ((Std.U32 → Std.U32) × StaticMut × Std.U32) Std.U32)
   := do
-  if i1 < n
+  if i < n
   then
-    let (sm, id_hidden_static_mut_back) ← id_hidden_static_mut { x := i }
-    let i2 ← sm.x + 1#u32
-    let i3 ← i1 + 1#u32
-    ok (cont (fun i4 => back (id_hidden_static_mut_back { x := i4 }).x, i2,
-      i3))
-  else ok (done (back i))
+    let (sm1, id_hidden_static_mut_back) ← id_hidden_static_mut sm
+    let i1 ← sm1.x + 1#u32
+    let i2 ← i + 1#u32
+    ok (cont (fun i3 => back (id_hidden_static_mut_back { x := i3 }).x,
+      { x := i1 }, i2))
+  else ok (done (back sm.x))
 
 /-- [static::loop_hidden_static_mut]: loop 0:
     Source: 'tests/src/static.rs', lines 286:4-290:5 -/
 @[rust_loop]
 def loop_hidden_static_mut_loop
-  (back : Std.U32 → Std.U32) (n : Std.U32) (i : Std.U32) (i1 : Std.U32) :
+  (back : Std.U32 → Std.U32) (n : Std.U32) (sm : StaticMut) (i : Std.U32) :
   Result Std.U32
   := do
   loop
-    (fun (back1, i2, i3) => loop_hidden_static_mut_loop.body n back1 i2 i3)
-    (back, i, i1)
+    (fun (back1, sm1, i1) => loop_hidden_static_mut_loop.body n back1 sm1 i1)
+    (back, sm, i)
 
 /-- [static::loop_hidden_static_mut]:
     Source: 'tests/src/static.rs', lines 283:0-291:1 -/
 def loop_hidden_static_mut
   (s : StaticMut) (n : Std.U32) : Result StaticMut := do
-  let back ← loop_hidden_static_mut_loop (fun i => i) n s.x 0#u32
+  let back ← loop_hidden_static_mut_loop (fun i => i) n s 0#u32
   ok { x := back }
 
 /-- [static::loop_hidden_static_mut1]: loop body 0:
@@ -538,31 +538,32 @@ def branch_hidden_static_mut
     Source: 'tests/src/static.rs', lines 312:4-316:5 -/
 @[rust_loop_body]
 def loop_hidden_static_ref_loop.body
-  (n : Std.U32) (i : Std.U32) (i1 : Std.U32) (acc : Std.U32) :
-  Result (ControlFlow (Std.U32 × Std.U32 × Std.U32) Std.U32)
+  (n : Std.U32) (sr : StaticRef) (i : Std.U32) (acc : Std.U32) :
+  Result (ControlFlow (StaticRef × Std.U32 × Std.U32) Std.U32)
   := do
-  if i1 < n
-  then let acc1 ← acc + GLOBAL
-       let i2 ← i1 + 1#u32
-       ok (cont (GLOBAL, i2, acc1))
+  if i < n
+  then
+    let acc1 ← acc + GLOBAL
+    let i1 ← i + 1#u32
+    ok (cont ({ x := GLOBAL }, i1, acc1))
   else ok (done acc)
 
 /-- [static::loop_hidden_static_ref]: loop 0:
     Source: 'tests/src/static.rs', lines 312:4-316:5 -/
 @[rust_loop]
 def loop_hidden_static_ref_loop
-  (n : Std.U32) (i : Std.U32) (i1 : Std.U32) (acc : Std.U32) :
+  (n : Std.U32) (sr : StaticRef) (i : Std.U32) (acc : Std.U32) :
   Result Std.U32
   := do
   loop
-    (fun (i2, i3, acc1) => loop_hidden_static_ref_loop.body n i2 i3 acc1)
-    (i, i1, acc)
+    (fun (sr1, i1, acc1) => loop_hidden_static_ref_loop.body n sr1 i1 acc1)
+    (sr, i, acc)
 
 /-- [static::loop_hidden_static_ref]:
     Source: 'tests/src/static.rs', lines 308:0-318:1 -/
 @[reducible]
 def loop_hidden_static_ref (n : Std.U32) : Result Std.U32 := do
-  loop_hidden_static_ref_loop n GLOBAL 0#u32 0#u32
+  loop_hidden_static_ref_loop n { x := GLOBAL } 0#u32 0#u32
 
 /-- [static::read_opt_static]:
     Source: 'tests/src/static.rs', lines 322:0-327:1 -/
@@ -770,32 +771,32 @@ def dup_copy_static_ref
     Source: 'tests/src/static.rs', lines 459:4-462:5 -/
 @[rust_loop_body]
 def loop_copy_static_ref_loop.body
-  (i : Std.U32) (n : Std.U32) (i1 : Std.U32) (acc : Std.U32) :
+  (csr : CopyStaticRef) (n : Std.U32) (i : Std.U32) (acc : Std.U32) :
   Result (ControlFlow (Std.U32 × Std.U32) Std.U32)
   := do
-  if i1 < n
-  then let acc1 ← acc + i
-       let i2 ← i1 + 1#u32
-       ok (cont (i2, acc1))
+  if i < n
+  then let acc1 ← acc + csr.x
+       let i1 ← i + 1#u32
+       ok (cont (i1, acc1))
   else ok (done acc)
 
 /-- [static::loop_copy_static_ref]: loop 0:
     Source: 'tests/src/static.rs', lines 459:4-462:5 -/
 @[rust_loop]
 def loop_copy_static_ref_loop
-  (i : Std.U32) (n : Std.U32) (i1 : Std.U32) (acc : Std.U32) :
+  (csr : CopyStaticRef) (n : Std.U32) (i : Std.U32) (acc : Std.U32) :
   Result Std.U32
   := do
   loop
-    (fun (i2, acc1) => loop_copy_static_ref_loop.body i n i2 acc1)
-    (i1, acc)
+    (fun (i1, acc1) => loop_copy_static_ref_loop.body csr n i1 acc1)
+    (i, acc)
 
 /-- [static::loop_copy_static_ref]:
     Source: 'tests/src/static.rs', lines 456:0-464:1 -/
 @[reducible]
 def loop_copy_static_ref
   (s : CopyStaticRef) (n : Std.U32) : Result Std.U32 := do
-  loop_copy_static_ref_loop s.x n 0#u32 0#u32
+  loop_copy_static_ref_loop s n 0#u32 0#u32
 
 /-- [static::join_concrete_static_ref]:
     Source: 'tests/src/static.rs', lines 467:0-477:1 -/

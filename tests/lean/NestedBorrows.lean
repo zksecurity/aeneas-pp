@@ -393,33 +393,33 @@ def MutBorrow.store
     Visibility: public -/
 @[rust_loop_body]
 def use_mut_borrow_loop.body
-  (n : Std.Usize) (back : Std.U32 → Std.U32) (i : Std.U32) (i1 : Std.Usize) :
-  Result (ControlFlow ((Std.U32 → Std.U32) × Std.U32 × Std.Usize) Std.U32)
+  (n : Std.Usize) (back : Std.U32 → Std.U32) (mb : MutBorrow) (i : Std.Usize) :
+  Result (ControlFlow ((Std.U32 → Std.U32) × MutBorrow × Std.Usize) Std.U32)
   := do
-  if i1 < n
+  if i < n
   then
-    let (b, store_back) ← MutBorrow.store { p := i } 0#u32
-    let i2 ← i1 + 1#usize
-    ok (cont (fun i3 => back (store_back { p := i3 }).p, b.p, i2))
-  else ok (done (back i))
+    let (b, store_back) ← MutBorrow.store mb 0#u32
+    let i1 ← i + 1#usize
+    ok (cont (fun i2 => back (store_back { p := i2 }).p, b, i1))
+  else ok (done (back mb.p))
 
 /-- [nested_borrows::use_mut_borrow]: loop 0:
     Source: 'tests/src/nested-borrows.rs', lines 176:4-179:5
     Visibility: public -/
 @[rust_loop]
 def use_mut_borrow_loop
-  (back : Std.U32 → Std.U32) (i : Std.U32) (n : Std.Usize) (i1 : Std.Usize) :
+  (back : Std.U32 → Std.U32) (mb : MutBorrow) (n : Std.Usize) (i : Std.Usize) :
   Result Std.U32
   := do
   loop
-    (fun (back1, i2, i3) => use_mut_borrow_loop.body n back1 i2 i3)
-    (back, i, i1)
+    (fun (back1, mb1, i1) => use_mut_borrow_loop.body n back1 mb1 i1)
+    (back, mb, i)
 
 /-- [nested_borrows::use_mut_borrow]:
     Source: 'tests/src/nested-borrows.rs', lines 174:0-180:1
     Visibility: public -/
 def use_mut_borrow (b : MutBorrow) (n : Std.Usize) : Result MutBorrow := do
-  let back ← use_mut_borrow_loop (fun i => i) b.p n 0#usize
+  let back ← use_mut_borrow_loop (fun i => i) b n 0#usize
   ok { p := back }
 
 end nested_borrows
