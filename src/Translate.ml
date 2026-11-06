@@ -1216,14 +1216,13 @@ let export_trait_decl (fmt : Format.formatter) (_config : gen_config)
 let export_trait_impl (fmt : Format.formatter) (_config : gen_config)
     (ctx : gen_ctx) ~(is_rec : bool) (trait_impl_id : Pure.trait_impl_id) : unit
     =
-  (* Lookup the definition *)
-  let trait_impl =
-    [%silent_unwrap_opt_span] None
-      (TraitImplId.Map.find_opt trait_impl_id ctx.trans_trait_impls)
-  in
-  if not (trait_impl_is_builtin ctx trait_impl_id) then (
-    Extract.extract_trait_impl ctx fmt ~is_rec trait_impl;
-    EmitJson.record_trait_impl_if_enabled ctx trait_impl)
+  (* Lookup the definition: it is missing if its translation failed (the
+     error was reported then) *)
+  match TraitImplId.Map.find_opt trait_impl_id ctx.trans_trait_impls with
+  | Some trait_impl when not (trait_impl_is_builtin ctx trait_impl_id) ->
+      Extract.extract_trait_impl ctx fmt ~is_rec trait_impl;
+      EmitJson.record_trait_impl_if_enabled ctx trait_impl
+  | _ -> ()
 
 (** A generic utility to generate the extracted definitions: as we may want to
     split the definitions between different files (or not), we can control what

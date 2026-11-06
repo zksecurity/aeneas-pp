@@ -449,15 +449,9 @@ let rec translate_fwd_ty (span : Meta.span option) (decls_ctx : C.decls_ctx)
           in
           let sigs = translate_fun_sigs_from_decl decls_ctx fdecl in
           let sg = sigs.sg in
-          (* Check that the function lives in the expected effect - otherwise we
-                 have to lift it *)
-          [%cassert_opt_span] span sg.fwd_info.effect_info.can_fail
-            "Unimplemented";
-          [%cassert_opt_span] span
-            (RegionGroupId.Map.for_all
-               (fun _ (e : fun_effect_info) -> not e.can_fail)
-               sg.back_effect_info)
-            "Unimplemented";
+          (* A function item is its function: its type is the type of the
+             function, with its effects (the function items are only called
+             directly, by the methods of their [Fn*] implementations) *)
           (* Substitute *)
           let subst = make_subst_from_generics sg.generics generics in
           ty_substitute subst sigs.ty
