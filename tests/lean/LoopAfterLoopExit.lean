@@ -54,15 +54,16 @@ def steps_loop0_loop0.body
   (x : Std.U32) :
   Result (ControlFlow ((core.ops.range.Range Std.U32) × (Engine → Std.U32) ×
     Engine × Std.U32) (_root_.Sum (Std.U32 × Std.U32 × Std.U32 × Std.U32 ×
-    Std.U32 × (core.ops.range.Range Std.U32) × Std.U32 × Std.U32 × (Std.U32 →
-    Std.U32)) ((core.result.Result Std.U32 Unit) × Engine × Std.U32 × Std.U32 ×
-    Std.U32 × Std.U32 × Std.U32 × (Engine → Std.U32))))
+    Std.U32 × (core.ops.range.Range Std.U32) × Std.U32 × Std.U32 × Std.U32 ×
+    (Std.U32 → Std.U32)) ((core.result.Result Std.U32 Unit) × Engine × Std.U32
+    × Std.U32 × Std.U32 × Std.U32 × Std.U32 × Std.U32 × (core.result.Result
+    Std.U32 Unit) × Std.U32 × (Engine → Std.U32))))
   := do
   let (o, iter1) ←
     core.iter.range.IteratorRange.next core.iter.range.StepU32 iter
   match o with
   | none =>
-    ok (done (Sum.inl (e.total, e.bound, k, i, x, iter1, i1, i2,
+    ok (done (Sum.inl (e.total, e.bound, k, i, x, iter1, i1, i2, e.bound,
       fun i3 => back { e with total := i3 })))
   | some _ =>
     let (r, e1, step_back) ← step e x
@@ -75,7 +76,7 @@ def steps_loop0_loop0.body
       let r1 ←
         core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
           Std.U32 (core.convert.FromSame Unit) residual
-      ok (done (Sum.inr (r1, e1, k, i, x, i1, i2,
+      ok (done (Sum.inr (r1, e1, k, i, x, i1, i2, x, r, e.bound,
         fun e2 => back { e with total := (step_back e2).total })))
 
 /-- [loop_after_loop_exit::steps]: loop 1:
@@ -86,9 +87,10 @@ def steps_loop0_loop0
   (iter : core.ops.range.Range Std.U32) (back : Engine → Std.U32) (e : Engine)
   (k : Std.U32) (i : Std.U32) (x : Std.U32) (i1 : Std.U32) (i2 : Std.U32) :
   Result (_root_.Sum (Std.U32 × Std.U32 × Std.U32 × Std.U32 × Std.U32 ×
-    (core.ops.range.Range Std.U32) × Std.U32 × Std.U32 × (Std.U32 → Std.U32))
-    ((core.result.Result Std.U32 Unit) × Engine × Std.U32 × Std.U32 × Std.U32 ×
-    Std.U32 × Std.U32 × (Engine → Std.U32)))
+    (core.ops.range.Range Std.U32) × Std.U32 × Std.U32 × Std.U32 × (Std.U32 →
+    Std.U32)) ((core.result.Result Std.U32 Unit) × Engine × Std.U32 × Std.U32 ×
+    Std.U32 × Std.U32 × Std.U32 × Std.U32 × (core.result.Result Std.U32 Unit) ×
+    Std.U32 × (Engine → Std.U32)))
   := do
   loop
     (fun (iter1, back1, e1, x1) => steps_loop0_loop0.body k i i1 i2 iter1 back1
@@ -116,18 +118,19 @@ def steps_loop0.body
     | none =>
       do
       let s1 : _root_.Sum (Std.U32 × Std.U32 × Std.U32 × Std.U32 × Std.U32 ×
-        (core.ops.range.Range Std.U32) × Std.U32 × Std.U32 × (Std.U32 →
-        Std.U32)) ((core.result.Result Std.U32 Unit) × Engine × Std.U32 ×
-        Std.U32 × Std.U32 × Std.U32 × Std.U32 × (Engine → Std.U32)) ←
+        (core.ops.range.Range Std.U32) × Std.U32 × Std.U32 × Std.U32 × (Std.U32
+        → Std.U32)) ((core.result.Result Std.U32 Unit) × Engine × Std.U32 ×
+        Std.U32 × Std.U32 × Std.U32 × Std.U32 × Std.U32 × (core.result.Result
+        Std.U32 Unit) × Std.U32 × (Engine → Std.U32)) ←
         steps_loop0_loop0 { start := 0#u32, «end» := i }
           (fun (e1 : Engine) => let ⟨ i2, _ ⟩ := e1
                                 i2) e k i x i1 e.bound
       match s1 with
       | Sum.inl t =>
-        let (i2, i3, _, _, x1, _, _, _, back1) := t
+        let (i2, i3, _, _, x1, _, _, _, _, back1) := t
         ok (Sum.inr (Sum.inr (x1, i2, i3, back1)))
       | Sum.inr t =>
-        let (r, e1, _, _, i2, _, _, back1) := t
+        let (r, e1, _, _, i2, _, _, _, _, _, back1) := t
         ok (Sum.inl (r, e1, i2, back1))
     | some _ =>
       do

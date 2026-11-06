@@ -451,6 +451,77 @@ let reborrow_ashared_loans_symbolic_borrows_no_synth (span : Meta.span)
     (reborrow_ashared_loans_symbolic_borrows span (Some loop_id) ~with_abs_conts
        ctx)
 
+(** The symbolic values of the meta-values which the abstraction continuations
+    of a context consume (see {!Values.menv}), in the order of the environment.
+
+    The translation reads the meta-values of the inputs of the continuations
+    (for instance, to rebuild the ignored parts of the value given back to a
+    function call abstraction), and so do the values given back to the inner
+    borrows of the outputs ([EEndedIgnoredMutBorrow]), which become inputs when
+    the abstraction is merged. The children of the loans and borrows are not
+    read. We ignore the values the outputs bind (the values given back by
+    ending the borrows). *)
+let ctx_cont_meta_symbolic_values (ctx : eval_ctx) : symbolic_value list =
+  let found = ref SymbolicValueId.Set.empty in
+  let ordered = ref [] in
+  let produced = ref SymbolicValueId.Set.empty in
+  let collector =
+    object (self)
+      inherit [_] iter_eval_ctx
+
+      method! visit_symbolic_value _ sv =
+        if not (SymbolicValueId.Set.mem sv.sv_id !found) then (
+          found := SymbolicValueId.Set.add sv.sv_id !found;
+          ordered := sv :: !ordered)
+
+      method! visit_mvalue env v = self#visit_tvalue env v
+    end
+  in
+  let collect (menv : env) (mv : mvalue) =
+    collector#visit_env () menv;
+    collector#visit_mvalue () mv
+  in
+  let reads =
+    object
+      inherit [_] iter_eval_ctx
+      method! visit_EValue _ menv mv = collect menv mv
+
+      method! visit_EIgnored _ mv =
+        Option.iter (fun (menv, mv) -> collect menv mv) mv
+
+      method! visit_EEndedMutLoan _ l = collect [] l.given_back_meta
+      method! visit_EMutLoan _ _ _ _ = ()
+      method! visit_EMutBorrow _ _ _ _ = ()
+    end
+  in
+  let outputs =
+    object
+      inherit [_] iter_eval_ctx
+
+      method! visit_EEndedIgnoredMutBorrow _ b =
+        reads#visit_tevalue () b.given_back
+
+      method! visit_EEndedMutBorrow _ meta _ =
+        produced := SymbolicValueId.Set.add meta.given_back.sv_id !produced
+
+      method! visit_EEndedProjBorrows _ b =
+        produced :=
+          SymbolicValueId.Set.add b.mvalues.given_back.sv_id !produced
+    end
+  in
+  List.iter
+    (fun (e : env_elem) ->
+      match e with
+      | EAbs { cont = Some cont; _ } ->
+          Option.iter (reads#visit_tevalue ()) cont.input;
+          Option.iter (outputs#visit_tevalue ()) cont.output
+      | EAbs _ | EBinding _ | EFrame -> ())
+    (List.rev ctx.env);
+  List.filter
+    (fun (sv : symbolic_value) ->
+      not (SymbolicValueId.Set.mem sv.sv_id !produced))
+    (List.rev !ordered)
+
 (* TODO: this could be drastically simplified. *)
 let compute_ctx_fresh_ordered_symbolic_values (span : Meta.span)
     ~(only_modified_svalues : bool) (ctx : eval_ctx) (fp_ctx : eval_ctx) :
@@ -596,6 +667,26 @@ let compute_ctx_fresh_ordered_symbolic_values (span : Meta.span)
       (List.rev !ordered_sids)
   in
 
+  (* The translation of the continuations reads the meta-values of their
+     inputs (see {!ctx_cont_meta_symbolic_values}): the fresh ones which appear
+     nowhere else are outputs too. *)
+  let input_svalues =
+    let old_meta_ids =
+      SymbolicValueId.Set.of_list
+        (List.map
+           (fun (sv : symbolic_value) -> sv.sv_id)
+           (ctx_cont_meta_symbolic_values ctx))
+    in
+    input_svalues
+    @ List.filter
+        (fun (sv : symbolic_value) ->
+          not
+            (SymbolicValueId.Set.mem sv.sv_id old_ids.sids
+            || SymbolicValueId.Set.mem sv.sv_id old_meta_ids
+            || SymbolicValueId.Set.mem sv.sv_id fp_ids.sids))
+        (ctx_cont_meta_symbolic_values fp_ctx)
+  in
+
   [%ltrace
     "- src context:\n"
     ^ eval_ctx_to_string ~span:(Some span) ~filter:false ctx
@@ -609,7 +700,8 @@ let compute_ctx_fresh_ordered_symbolic_values (span : Meta.span)
 
   input_svalues
 
-(** Find a symbolic value in a context, from its id *)
+(** Find a symbolic value in a context (including its meta-values) from its
+    id *)
 let ctx_find_symbolic_value (ctx : eval_ctx) (sid : SymbolicValueId.id) :
     symbolic_value option =
   let found = ref None in
@@ -622,7 +714,12 @@ let ctx_find_symbolic_value (ctx : eval_ctx) (sid : SymbolicValueId.id) :
     end
   in
   visitor#visit_eval_ctx () ctx;
-  !found
+  match !found with
+  | Some sv -> Some sv
+  | None ->
+      List.find_opt
+        (fun (sv : symbolic_value) -> sv.sv_id = sid)
+        (ctx_cont_meta_symbolic_values ctx)
 
 let refresh_non_fixed_abs_ids (_span : Meta.span) (fixed_aids : AbsId.Set.t)
     (ctx : eval_ctx) : eval_ctx * abs_id AbsId.Map.t =

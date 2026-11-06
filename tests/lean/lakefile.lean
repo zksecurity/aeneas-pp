@@ -112,6 +112,7 @@ package «tests» {}
 @[default_target] lean_lib ListBorrows
 @[default_target] lean_lib LoopAfterLoopExit
 @[default_target] lean_lib LoopPromotedSharedRefs
+@[default_target] lean_lib LoopReturnContMetaValues
 @[default_target] lean_lib Loops
 @[default_target] lean_lib LoopsAdts
 @[default_target] lean_lib LoopsFrozenInputs

@@ -676,9 +676,10 @@ def overlapping_outputs_loop0_loop0.body
   (a : Slice Std.U32) (k : Std.U32) (total : Std.U32) (j : Std.U32)
   (i : Std.Usize) (s : Std.U32) :
   Result (ControlFlow (Std.Usize × Std.U32) (_root_.Sum ((Slice Std.U32) ×
-    Std.U32 × Std.U32 × Std.U32 × Std.U32) (_root_.Sum ((Slice Std.U32) ×
-    Std.U32 × Std.U32 × Std.U32 × Std.U32 × Std.U32 × Std.U32 × Std.U32)
-    ((Slice Std.U32) × Std.U32 × Std.U32 × Std.U32 × Std.Usize × Std.U32))))
+    Std.U32 × Std.U32 × Std.U32 × Std.U32 × Std.U32) (_root_.Sum ((Slice
+    Std.U32) × Std.U32 × Std.U32 × Std.U32 × Std.U32 × Std.U32 × Std.U32 ×
+    Std.U32 × Std.U32 × Std.U32 × Std.U32) ((Slice Std.U32) × Std.U32 × Std.U32
+    × Std.U32 × Std.Usize × Std.U32))))
   := do
   let i1 := Slice.len a
   if i < i1
@@ -687,10 +688,12 @@ def overlapping_outputs_loop0_loop0.body
     let i3 ← k + j
     if i2 = i3
     then let total1 ← total + s
-         ok (done (Sum.inl (a, k, total1, j, i2)))
+         ok (done (Sum.inl (a, k, total1, j, i2, i2)))
     else
       if i2 > 100#u32
-      then ok (done (Sum.inr (Sum.inl (a, k, total, i2, j, i2, i2, i2))))
+      then
+        ok (done (Sum.inr (Sum.inl (a, k, total, i2, j, i2, i2, i2, i2, i2,
+          i2))))
       else let s1 ← s + i2
            let i4 ← i + 1#usize
            ok (cont (i4, s1))
@@ -703,10 +706,10 @@ def overlapping_outputs_loop0_loop0.body
 def overlapping_outputs_loop0_loop0
   (a : Slice Std.U32) (k : Std.U32) (total : Std.U32) (j : Std.U32)
   (i : Std.Usize) (s : Std.U32) :
-  Result (_root_.Sum ((Slice Std.U32) × Std.U32 × Std.U32 × Std.U32 × Std.U32)
-    (_root_.Sum ((Slice Std.U32) × Std.U32 × Std.U32 × Std.U32 × Std.U32 ×
-    Std.U32 × Std.U32 × Std.U32) ((Slice Std.U32) × Std.U32 × Std.U32 × Std.U32
-    × Std.Usize × Std.U32)))
+  Result (_root_.Sum ((Slice Std.U32) × Std.U32 × Std.U32 × Std.U32 × Std.U32 ×
+    Std.U32) (_root_.Sum ((Slice Std.U32) × Std.U32 × Std.U32 × Std.U32 ×
+    Std.U32 × Std.U32 × Std.U32 × Std.U32 × Std.U32 × Std.U32 × Std.U32)
+    ((Slice Std.U32) × Std.U32 × Std.U32 × Std.U32 × Std.Usize × Std.U32)))
   := do
   loop
     (fun (i1, s1) => overlapping_outputs_loop0_loop0.body a k total j i1 s1)
@@ -728,17 +731,19 @@ def overlapping_outputs_loop0.body
       do
       let j1 ← j + 1#u32
       let s1 : _root_.Sum ((Slice Std.U32) × Std.U32 × Std.U32 × Std.U32 ×
-        Std.U32) (_root_.Sum ((Slice Std.U32) × Std.U32 × Std.U32 × Std.U32 ×
-        Std.U32 × Std.U32 × Std.U32 × Std.U32) ((Slice Std.U32) × Std.U32 ×
-        Std.U32 × Std.U32 × Std.Usize × Std.U32)) ←
+        Std.U32 × Std.U32) (_root_.Sum ((Slice Std.U32) × Std.U32 × Std.U32 ×
+        Std.U32 × Std.U32 × Std.U32 × Std.U32 × Std.U32 × Std.U32 × Std.U32 ×
+        Std.U32) ((Slice Std.U32) × Std.U32 × Std.U32 × Std.U32 × Std.Usize ×
+        Std.U32)) ←
         overlapping_outputs_loop0_loop0 a k total j1 0#usize 0#u32
       match s1 with
-      | Sum.inl t => let (s2, i, i1, i2, _) := t
-                     ok (Sum.inr (s2, i, i1, i2))
+      | Sum.inl t =>
+        let (s2, i, i1, i2, _, _) := t
+        ok (Sum.inr (s2, i, i1, i2))
       | Sum.inr s2 =>
         match s2 with
         | Sum.inl t =>
-          let (_, _, _, t1, j2, _, _, _) := t
+          let (_, _, _, t1, j2, _, _, _, _, _, _) := t
           ok (Sum.inl (t1, j2))
         | Sum.inr t =>
           let (a1, k1, total1, j2, i, _) := t
@@ -1056,18 +1061,19 @@ def two_searches_loop0_loop0.body
   (j : Std.Usize) :
   Result (ControlFlow ((Slice Std.U32) × Std.U32 × Std.U32 × Std.Usize ×
     Std.Usize) (_root_.Sum ((Slice Std.U32) × Std.U32 × Std.U32 × Std.Usize ×
-    Std.Usize) ((Slice Std.U32) × Std.U32 × Std.U32 × Std.Usize × Std.U32)))
+    Std.Usize) ((Slice Std.U32) × Std.U32 × Std.U32 × Std.Usize × Std.U32 ×
+    Std.U32)))
   := do
   let i1 := Slice.len a
   let s : _root_.Sum Unit (_root_.Sum ((Slice Std.U32) × Std.U32 × Std.U32 ×
     Std.Usize × Std.Usize) ((Slice Std.U32) × Std.U32 × Std.U32 × Std.Usize ×
-    Std.U32)) ←
+    Std.U32 × Std.U32)) ←
     if j < i1
     then
       do
       let i2 ← Slice.index_usize a j
       if i2 = y
-      then ok (Sum.inr (Sum.inr (a, x, y, i, i2)))
+      then ok (Sum.inr (Sum.inr (a, x, y, i, i2, i2)))
       else
         if i2 > 60#u32
         then ok (Sum.inl ())
@@ -1090,7 +1096,8 @@ def two_searches_loop0_loop0
   (a : Slice Std.U32) (x : Std.U32) (y : Std.U32) (i : Std.Usize)
   (j : Std.Usize) :
   Result (_root_.Sum ((Slice Std.U32) × Std.U32 × Std.U32 × Std.Usize ×
-    Std.Usize) ((Slice Std.U32) × Std.U32 × Std.U32 × Std.Usize × Std.U32))
+    Std.Usize) ((Slice Std.U32) × Std.U32 × Std.U32 × Std.Usize × Std.U32 ×
+    Std.U32))
   := do
   loop
     (fun (a1, x1, y1, i1, j1) => two_searches_loop0_loop0.body a1 x1 y1 i1 j1)
@@ -1126,8 +1133,8 @@ def two_searches_loop0.body
     | Sum.inl _ =>
       do
       let s2 : _root_.Sum ((Slice Std.U32) × Std.U32 × Std.U32 × Std.Usize ×
-        Std.Usize) ((Slice Std.U32) × Std.U32 × Std.U32 × Std.Usize × Std.U32)
-        ←
+        Std.Usize) ((Slice Std.U32) × Std.U32 × Std.U32 × Std.Usize × Std.U32 ×
+        Std.U32) ←
         two_searches_loop0_loop0 a x y i 0#usize
       match s2 with
       | Sum.inl t =>
