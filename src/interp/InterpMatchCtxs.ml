@@ -824,8 +824,8 @@ module MakeJoinMatcher (S : MatchJoinState) : PrimMatcher = struct
       let cont : abs_cont option =
         if S.with_abs_conts then
           if
-            TypesUtils.ty_has_mut_borrows ctx0.type_ctx.type_infos
-              ty_with_regions
+            ty_has_mut_borrow_for_region_in_set ctx0.type_ctx.type_infos
+              regions ty_with_regions
           then
             (* We used to generate a continuation of the following shape:
                {[
@@ -2525,6 +2525,57 @@ let match_ctxs (span : Meta.span) ~(check_equiv : bool)
     AbsId.Set.filter (fun aid -> ctx_lookup_abs_opt ctx aid <> None)
   in
 
+  (* The projectors of an abstraction are ordered by the ids of their symbolic
+     values, which the contexts may have allocated in different orders: we pair
+     the projectors over symbolic values the matching already related (the
+     variables are matched before the abstractions), and the other values in
+     order. *)
+  let align_projectors (avalues0 : tavalue list) (avalues1 : tavalue list) :
+      tavalue list option =
+    let proj_key (v : tavalue) =
+      match v.value with
+      | ASymbolic (_, AProjLoans { proj; _ }) -> Some (true, proj.sv_id)
+      | ASymbolic (_, AProjBorrows { proj; _ }) -> Some (false, proj.sv_id)
+      | _ -> None
+    in
+    let mapped_sid (sid : symbolic_value_id) =
+      match SymbolicValueId.InjSubst.find_opt sid !sid_map with
+      | Some sid1 -> Some sid1
+      | None -> (
+          match SymbolicValueId.Map.find_opt sid !sid_to_value_map with
+          | Some { value = VSymbolic sv1; _ } -> Some sv1.sv_id
+          | _ -> None)
+    in
+    let mapped_key (v : tavalue) =
+      Option.bind (proj_key v) (fun (is_loan, sid) ->
+          Option.map (fun sid1 -> (is_loan, sid1)) (mapped_sid sid))
+    in
+    let targets = List.filter_map mapped_key avalues0 in
+    let rec pick p = function
+      | [] -> None
+      | v :: vs ->
+          if p v then Some (v, vs)
+          else Option.map (fun (v', vs') -> (v', v :: vs')) (pick p vs)
+    in
+    let rec align avalues0 avalues1 =
+      match avalues0 with
+      | [] -> Some []
+      | v0 :: avalues0 ->
+          let p =
+            match mapped_key v0 with
+            | Some key -> fun v1 -> proj_key v1 = Some key
+            | None -> (
+                fun v1 ->
+                  match proj_key v1 with
+                  | Some key -> not (List.mem key targets)
+                  | None -> true)
+          in
+          Option.bind (pick p avalues1) (fun (v1, avalues1) ->
+              Option.map (fun vs -> v1 :: vs) (align avalues0 avalues1))
+    in
+    align avalues0 avalues1
+  in
+
   (* Rem.: this function raises exceptions of type [Distinct] or [RFailure]
      (in the latter case: if [recover] is true) *)
   let match_abstractions ~(recover : bool) (abs0 : abs) (abs1 : abs) : unit =
@@ -2599,6 +2650,11 @@ let match_ctxs (span : Meta.span) ~(check_equiv : bool)
       if List.length avalues0 <> List.length avalues1 then
         raise_distinct "Region abstractions with not the same number of values"
       else
+        let avalues1 =
+          match align_projectors avalues0 avalues1 with
+          | Some avalues1 -> avalues1
+          | None -> raise_distinct "match_abstractions: projectors"
+        in
         List.map
           (fun (v0, v1) -> match_tavalues ctx0 ctx1 v0 v1)
           (List.combine avalues0 avalues1)

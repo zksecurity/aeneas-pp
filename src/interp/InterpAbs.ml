@@ -372,15 +372,24 @@ let convert_value_to_output_avalues (span : Meta.span) (ctx : eval_ctx)
           let proj : symbolic_proj = { sv_id = sv.sv_id; proj_ty } in
           let nv = ASymbolic (pm, AProjBorrows { proj; loans = [] }) in
           let nv : tavalue = { value = nv; ty = proj_ty } in
-          (* Abstraction expression *)
+          (* Abstraction expression: as for the shared borrows, nothing is
+             given back through the projection if it projects no mutable
+             borrows *)
           let output =
-            ESymbolic
-              ( pm,
-                EProjBorrows
-                  { proj = { sv_id = sv.sv_id; proj_ty }; loans = [] } )
+            if
+              ty_has_mut_borrow_for_region_in_set ctx.type_ctx.type_infos
+                regions proj_ty
+            then
+              {
+                value =
+                  ESymbolic
+                    ( pm,
+                      EProjBorrows
+                        { proj = { sv_id = sv.sv_id; proj_ty }; loans = [] } );
+                ty = proj_ty;
+              }
+            else mk_eignored (Some (ctx.env, v)) proj_ty
           in
-          let output = { value = output; ty = proj_ty } in
-          (* *)
           ([ nv ], output)
         else ([], mk_eignored (Some (ctx.env, v)) proj_ty)
     | _ -> [%internal_error] span

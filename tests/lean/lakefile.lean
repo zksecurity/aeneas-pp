@@ -34,6 +34,7 @@ package «tests» {}
 @[default_target] lean_lib ClosureRegionRequirements
 @[default_target] lean_lib Closures
 @[default_target] lean_lib ClosuresFnmutArgs
+@[default_target] lean_lib ClosureSharedCapturesLoop
 @[default_target] lean_lib ClosuresMutArgs
 @[default_target] lean_lib ClosuresMutCaptures
 @[default_target] lean_lib ClosuresMutCapturesNames
@@ -93,7 +94,9 @@ package «tests» {}
 @[default_target] lean_lib Iterators
 @[default_target] lean_lib IteratorsArray
 @[default_target] lean_lib IteratorsScalar
+@[default_target] lean_lib JoinCallAbsParents
 @[default_target] lean_lib JoinCommonCalls
+@[default_target] lean_lib JoinCommonDummies
 @[default_target] lean_lib JoinDeadLocals
 @[default_target] lean_lib JoinDuplicate
 @[default_target] lean_lib JoinInnerLoans
