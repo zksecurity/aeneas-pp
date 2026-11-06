@@ -45,10 +45,9 @@ inductive Value where
     Visibility: public -/
 @[rust_loop_body]
 def field_loop.body
-  (fields : alloc.vec.Vec (Std.U32 × Value)) (k : Std.U32)
-  (iter : core.slice.iter.Iter (Std.U32 × Value)) :
+  (k : Std.U32) (iter : core.slice.iter.Iter (Std.U32 × Value)) :
   Result (ControlFlow (core.slice.iter.Iter (Std.U32 × Value)) (_root_.Sum Unit
-    (Value × (alloc.vec.Vec (Std.U32 × Value)))))
+    Value))
   := do
   let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
   match o with
@@ -56,7 +55,7 @@ def field_loop.body
   | some p =>
     let (key, val) := p
     if key = k
-    then ok (done (Sum.inr (val, fields)))
+    then ok (done (Sum.inr val))
     else ok (cont iter1)
 
 /-- [join_live_borrows::field]: loop 0:
@@ -64,12 +63,11 @@ def field_loop.body
     Visibility: public -/
 @[rust_loop]
 def field_loop
-  (iter : core.slice.iter.Iter (Std.U32 × Value))
-  (fields : alloc.vec.Vec (Std.U32 × Value)) (k : Std.U32) :
-  Result (_root_.Sum Unit (Value × (alloc.vec.Vec (Std.U32 × Value))))
+  (iter : core.slice.iter.Iter (Std.U32 × Value)) (k : Std.U32) :
+  Result (_root_.Sum Unit Value)
   := do
   loop
-    (fun iter1 => field_loop.body fields k iter1)
+    (fun iter1 => field_loop.body k iter1)
     iter
 
 /-- [join_live_borrows::field]:
@@ -83,12 +81,10 @@ def field
     let iter ←
       SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter
         alloc.alloc.Global fields
-    let s : _root_.Sum Unit (Value × (alloc.vec.Vec (Std.U32 × Value))) ←
-      field_loop iter fields k
+    let s : _root_.Sum Unit Value ← field_loop iter k
     match s with
     | Sum.inl _ => ok (core.result.Result.Err 0#u32)
-    | Sum.inr p => let (v1, _) := p
-                   ok (core.result.Result.Ok v1)
+    | Sum.inr v1 => ok (core.result.Result.Ok v1)
 
 /-- [join_live_borrows::field_at]: loop body 0:
     Source: 'tests/src/join-live-borrows.rs', lines 35:12-46:1
@@ -96,8 +92,7 @@ def field
 @[rust_loop_body]
 def field_at_loop.body
   (fields : alloc.vec.Vec (Std.U32 × Value)) (k : Std.U32) (i : Std.Usize) :
-  Result (ControlFlow Std.Usize (_root_.Sum (Value × (alloc.vec.Vec (Std.U32 ×
-    Value))) Unit))
+  Result (ControlFlow Std.Usize (_root_.Sum Value Unit))
   := do
   let i1 := alloc.vec.Vec.len fields
   if i < i1
@@ -106,7 +101,7 @@ def field_at_loop.body
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Std.U32 ×
         Value)) fields i
     if key = k
-    then ok (done (Sum.inl (val, fields)))
+    then ok (done (Sum.inl val))
     else let i2 ← i + 1#usize
          ok (cont i2)
   else ok (done (Sum.inr ()))
@@ -117,7 +112,7 @@ def field_at_loop.body
 @[rust_loop]
 def field_at_loop
   (fields : alloc.vec.Vec (Std.U32 × Value)) (k : Std.U32) (i : Std.Usize) :
-  Result (_root_.Sum (Value × (alloc.vec.Vec (Std.U32 × Value))) Unit)
+  Result (_root_.Sum Value Unit)
   := do
   loop
     (fun i1 => field_at_loop.body fields k i1)
@@ -131,11 +126,9 @@ def field_at
   match v with
   | Value.Num _ => ok (core.result.Result.Err 1#u32)
   | Value.Obj fields =>
-    let s : _root_.Sum (Value × (alloc.vec.Vec (Std.U32 × Value))) Unit ←
-      field_at_loop fields k 0#usize
+    let s : _root_.Sum Value Unit ← field_at_loop fields k 0#usize
     match s with
-    | Sum.inl p => let (v1, _) := p
-                   ok (core.result.Result.Ok v1)
+    | Sum.inl v1 => ok (core.result.Result.Ok v1)
     | Sum.inr _ => ok (core.result.Result.Err 0#u32)
 
 /-- [join_live_borrows::number]:
@@ -193,14 +186,12 @@ def test_field_at_number : Result Unit := do
       | _ => ok false
   massert b1
   let r2 ← field_at_number (Value.Num 5#u64) 1#u32
-  let b2 ←
-    match r2 with
-    | core.result.Result.Ok _ => ok false
-    | core.result.Result.Err i =>
-      match i with
-      | 1#uscalar => ok true
-      | _ => ok false
-  massert b2
+  match r2 with
+  | core.result.Result.Ok _ => fail panic
+  | core.result.Result.Err i =>
+    match i with
+    | 1#uscalar => ok ()
+    | _ => fail panic
 
 /- Unit test for [join_live_borrows::test_field_at_number] -/
 #guard (test_field_at_number).reducesTo ()
@@ -301,14 +292,16 @@ def Engine.both_nat
   let b ←
     Engine.both_nat.closure.Insts.CoreOpsFunctionFnPairShared2EngineUsizeBool.call
       () (self, x)
-  let b1 ←
-    if b
-    then
+  if b
+  then
+    let b1 ←
       Engine.both_nat.closure.Insts.CoreOpsFunctionFnPairShared2EngineUsizeBool.call
         () (self, y)
-    else ok false
-  let back'a := fun (self1 : Engine) => { self with s := self1.s }
-  ok (b1, self, back'a)
+    let back'a := fun (self1 : Engine) => { self with s := self1.s }
+    ok (b1, self, back'a)
+  else
+    let back'a := fun (self1 : Engine) => { self with s := self1.s }
+    ok (false, self, back'a)
 
 /-- [join_live_borrows::nat_or_zero]:
     Source: 'tests/src/join-live-borrows.rs', lines 134:0-139:1

@@ -921,7 +921,7 @@ inductive AList (T : Type _) where
     Source: 'tests/src/loops-rec.rs', lines 1:0-530:5 -/
 @[rust_loop]
 def insert_in_list_loop
-  {T : Type _} (key : Std.Usize) (value : T) (ls : AList T) :
+  {T : Type _} (value : T) (key : Std.Usize) (ls : AList T) :
   Result (Bool × (AList T))
   := do
   match ls with
@@ -929,7 +929,7 @@ def insert_in_list_loop
     if ckey = key
     then ok (false, AList.Cons ckey value tl)
     else
-      let (b, back) ← insert_in_list_loop key value tl
+      let (b, back) ← insert_in_list_loop value key tl
       let back1 := AList.Cons ckey cvalue back
       ok (b, back1)
   | AList.Nil => ok (true, AList.Cons key value AList.Nil)
@@ -942,7 +942,7 @@ def insert_in_list
   {T : Type _} (key : Std.Usize) (value : T) (ls : AList T) :
   Result (Bool × (AList T))
   := do
-  insert_in_list_loop key value ls
+  insert_in_list_loop value key ls
 
 /-- [loops_rec::reborrow_const::reborrow]:
     Source: 'tests/src/loops-rec.rs', lines 536:4-540:5 -/

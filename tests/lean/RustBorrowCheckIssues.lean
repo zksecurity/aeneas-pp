@@ -53,9 +53,10 @@ def unnecessary_error_2 (b0 : Bool) (b1 : Bool) : Result Unit := do
           else ok 1#u32
   if b1
   then core.mem.drop 2#u32
-  else ok ()
-  let _ ← 2#u32 + 1#u32
-  core.mem.drop i
+       let _ ← 2#u32 + 1#u32
+       core.mem.drop i
+  else let _ ← 2#u32 + 1#u32
+       core.mem.drop i
 
 /-- [rust_borrow_check_issues::X]
     Source: 'tests/src/rust-borrow-check-issues.rs', lines 58:0-60:1 -/

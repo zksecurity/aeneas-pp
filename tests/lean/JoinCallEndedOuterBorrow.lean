@@ -133,71 +133,51 @@ def verify
       verify.closure.Insts.CoreOpsFunctionFnMutTupleShared2Shared0DeclBool i
       actual
   let r ← core.option.Option.ok_or o (toStr "unexpected")
-  let s : _root_.Sum (core.result.Result Std.U32 String) _ ←
-    match r with
-    | core.result.Result.Ok val =>
-      do
-      let s1 ←
-        match actual.kind with
-        | Kind.Rec ar ak =>
-          match val.kind with
-          | Kind.Rec er ek =>
-            do
-            let b ←
-              core.cmp.impls.PartialEqShared.ne core.cmp.PartialEqBool ak ek
-            let s2 : _root_.Sum _ (_root_.Sum (core.result.Result Std.U32
-              String) (core.result.Result Std.U32 String)) ←
-              if b
-              then ok (Sum.inl ())
-              else
-                let i1 := alloc.vec.Vec.len ar
-                let i2 := alloc.vec.Vec.len er
-                if i1 != i2
-                then ok (Sum.inl ())
-                else
-                  if val.ty = actual.ty
-                  then ok (Sum.inr (Sum.inr (core.result.Result.Ok val.name)))
-                  else
-                    do
-                    let s3 ←
-                      core.convert.IntoFrom.into
-                        alloc.string.String.Insts.CoreConvertFromShared0Str
-                        (toStr "type")
-                    ok (Sum.inr (Sum.inl (core.result.Result.Err s3)))
-            let s3 : _root_.Sum (core.result.Result Std.U32 String) _ ←
-              match s2 with
-              | Sum.inl _ =>
-                do
-                let s4 ←
-                  core.convert.IntoFrom.into
-                    alloc.string.String.Insts.CoreConvertFromShared0Str (toStr
-                    "metadata")
-                ok (Sum.inl (core.result.Result.Err s4))
-              | Sum.inr s4 =>
-                match s4 with
-                | Sum.inl r1 => ok (Sum.inr r1)
-                | Sum.inr r1 => ok (Sum.inl r1)
-            match s3 with
-            | Sum.inl r1 => ok (Sum.inr (Sum.inr r1))
-            | Sum.inr r1 => ok (Sum.inr (Sum.inl r1))
-          | Kind.Other => ok (Sum.inl ())
-        | Kind.Other => ok (Sum.inl ())
-      match s1 with
-      | Sum.inl _ =>
-        let s2 ←
+  match r with
+  | core.result.Result.Ok val =>
+    match actual.kind with
+    | Kind.Rec ar ak =>
+      match val.kind with
+      | Kind.Rec er ek =>
+        let b ← core.cmp.impls.PartialEqShared.ne core.cmp.PartialEqBool ak ek
+        if b
+        then
+          let s ←
+            core.convert.IntoFrom.into
+              alloc.string.String.Insts.CoreConvertFromShared0Str (toStr
+              "metadata")
+          ok (core.result.Result.Err s)
+        else
+          let i1 := alloc.vec.Vec.len ar
+          let i2 := alloc.vec.Vec.len er
+          if i1 != i2
+          then
+            let s ←
+              core.convert.IntoFrom.into
+                alloc.string.String.Insts.CoreConvertFromShared0Str (toStr
+                "metadata")
+            ok (core.result.Result.Err s)
+          else
+            if val.ty = actual.ty
+            then ok (core.result.Result.Ok val.name)
+            else
+              let s ←
+                core.convert.IntoFrom.into
+                  alloc.string.String.Insts.CoreConvertFromShared0Str (toStr
+                  "type")
+              ok (core.result.Result.Err s)
+      | Kind.Other =>
+        let s ←
           core.convert.IntoFrom.into
             alloc.string.String.Insts.CoreConvertFromShared0Str (toStr "kind")
-        ok (Sum.inl (core.result.Result.Err s2))
-      | Sum.inr s2 =>
-        match s2 with
-        | Sum.inl r1 => ok (Sum.inr r1)
-        | Sum.inr r1 => ok (Sum.inl r1)
-    | core.result.Result.Err e =>
-      do
-      let e1 ← alloc.string.String.Insts.CoreConvertFromShared0Str.«from» e
-      ok (Sum.inl (core.result.Result.Err e1))
-  match s with
-  | Sum.inl r1 => ok r1
-  | Sum.inr r1 => ok r1
+        ok (core.result.Result.Err s)
+    | Kind.Other =>
+      let s ←
+        core.convert.IntoFrom.into
+          alloc.string.String.Insts.CoreConvertFromShared0Str (toStr "kind")
+      ok (core.result.Result.Err s)
+  | core.result.Result.Err e =>
+    let e1 ← alloc.string.String.Insts.CoreConvertFromShared0Str.«from» e
+    ok (core.result.Result.Err e1)
 
 end join_call_ended_outer_borrow

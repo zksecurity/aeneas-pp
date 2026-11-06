@@ -30,12 +30,11 @@ def decl (e : Std.U32) : Result (Option Std.U32) := do
     Source: 'tests/src/nested-shared-call-joins.rs', lines 13:0-16:1
     Visibility: public -/
 def known (e : Std.U32) (b : Bool) : Result Std.U32 := do
-  let x ← if b
-          then ok 0#u32
-          else do
-               let o ← decl e
-               core.option.Option.unwrap o
-  x + 1#u32
+  if b
+  then 0#u32 + 1#u32
+  else let o ← decl e
+       let x ← core.option.Option.unwrap o
+       x + 1#u32
 
 /-- [nested_shared_call_joins::Engine]
     Source: 'tests/src/nested-shared-call-joins.rs', lines 18:0-21:1
@@ -57,16 +56,19 @@ def Engine.peel
   (self : Engine) (e : Std.Usize) (b : Bool) :
   Result (Std.U32 × Engine × (Engine → Engine))
   := do
-  let x ←
-    if b
-    then ok 0#u32
-    else do
-         let o ← Engine.node self e
-         core.option.Option.unwrap o
-  let v ← alloc.vec.Vec.push self.log x
-  let i ← x + 1#u32
-  let back'a := fun (self1 : Engine) => { self with log := self1.log }
-  ok (i, { self with log := v }, back'a)
+  if b
+  then
+    let v ← alloc.vec.Vec.push self.log 0#u32
+    let i ← 0#u32 + 1#u32
+    let back'a := fun (self1 : Engine) => { self with log := self1.log }
+    ok (i, { self with log := v }, back'a)
+  else
+    let o ← Engine.node self e
+    let x ← core.option.Option.unwrap o
+    let v ← alloc.vec.Vec.push self.log x
+    let i ← x + 1#u32
+    let back'a := fun (self1 : Engine) => { self with log := self1.log }
+    ok (i, { self with log := v }, back'a)
 
 /-- [nested_shared_call_joins::{nested_shared_call_joins::Engine<'a>}::peel_mut]:
     Source: 'tests/src/nested-shared-call-joins.rs', lines 36:4-45:5
@@ -75,19 +77,18 @@ def Engine.peel_mut
   (self : Engine) (e : Std.Usize) (b : Bool) :
   Result (Std.U32 × Engine × (Engine → Engine))
   := do
-  let (v, x) ←
-    if b
-    then do
-         let v1 ← alloc.vec.Vec.push self.log 1#u32
-         ok (v1, 0#u32)
-    else
-      do
-      let o ← Engine.node self e
-      let x1 ← core.option.Option.unwrap o
-      ok (self.log, x1)
-  let v1 ← alloc.vec.Vec.push v x
-  let back'a := fun (self1 : Engine) => { self with log := self1.log }
-  ok (x, { self with log := v1 }, back'a)
+  if b
+  then
+    let v ← alloc.vec.Vec.push self.log 1#u32
+    let v1 ← alloc.vec.Vec.push v 0#u32
+    let back'a := fun (self1 : Engine) => { self with log := self1.log }
+    ok (0#u32, { self with log := v1 }, back'a)
+  else
+    let o ← Engine.node self e
+    let x ← core.option.Option.unwrap o
+    let v ← alloc.vec.Vec.push self.log x
+    let back'a := fun (self1 : Engine) => { self with log := self1.log }
+    ok (x, { self with log := v }, back'a)
 
 /-- [nested_shared_call_joins::{nested_shared_call_joins::Engine<'a>}::pick]:
     Source: 'tests/src/nested-shared-call-joins.rs', lines 48:4-56:5

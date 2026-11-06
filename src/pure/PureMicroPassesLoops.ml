@@ -396,7 +396,10 @@ let simplify_loop_output_conts (ctx : ctx) (def : fun_decl) =
 
              We detect this by doing a flow analysis.
           *)
-          if expr_chains_loop_conts span ctx all_loop_outputs e then (
+          if
+            FVarId.Set.subset (texpr_get_fvars e) all_loop_outputs
+            && expr_chains_loop_conts span ctx all_loop_outputs e
+          then (
             (* It is a subset: introduce a fresh output var *)
             [%ldebug
               "Simplifying output:\n" ^ texpr_to_string ctx e ^ "\n- ty: "

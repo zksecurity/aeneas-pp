@@ -110,10 +110,9 @@ def test_get : Result Unit := do
                 | _ => ok false
   massert b1
   let o2 ← Table.get { slots := slots3, len := 3#usize } 3#u64
-  let b2 ← match o2 with
-           | none => ok true
-           | some _ => ok false
-  massert b2
+  match o2 with
+  | none => ok ()
+  | some _ => fail panic
 
 /- Unit test for [loops_frozen_inputs::test_get] -/
 #guard (test_get).reducesTo ()

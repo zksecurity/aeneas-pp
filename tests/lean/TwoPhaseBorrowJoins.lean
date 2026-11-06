@@ -40,10 +40,9 @@ def push_flag
   let b1 ← match b with
            | none => ok false
            | some _ => ok true
-  let i ← if b1
-          then ok 1#u32
-          else ok 0#u32
-  alloc.vec.Vec.push v i
+  if b1
+  then alloc.vec.Vec.push v 1#u32
+  else alloc.vec.Vec.push v 0#u32
 
 /-- [two_phase_borrow_joins::Node]
     Source: 'tests/src/two-phase-borrow-joins.rs', lines 14:0-17:1
@@ -175,16 +174,14 @@ def test_bind : Result Unit := do
   let n ←
     alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Node)
       (bind_back b).t.nodes 1#usize
-  let b1 ←
-    match n with
-    | Node.Lam i1 i2 =>
-      match i1 with
-      | 8#uscalar => match i2 with
-                     | 1#uscalar => ok true
-                     | _ => ok false
-      | _ => ok false
-    | Node.Pi _ _ => ok false
-  massert b1
+  match n with
+  | Node.Lam i1 i2 =>
+    match i1 with
+    | 8#uscalar => match i2 with
+                   | 1#uscalar => ok ()
+                   | _ => fail panic
+    | _ => fail panic
+  | Node.Pi _ _ => fail panic
 
 /- Unit test for [two_phase_borrow_joins::test_bind] -/
 #guard (test_bind).reducesTo ()

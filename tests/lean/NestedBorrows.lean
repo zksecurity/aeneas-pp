@@ -125,37 +125,37 @@ def call_iter_mut_next_u32
     Source: 'tests/src/nested-borrows.rs', lines 86:4-86:36 -/
 @[rust_loop_body]
 def iter_mut_loop_loop.body
-  {T : Type _} (back : IterMut T → Option T) (it : IterMut T) :
-  Result (ControlFlow ((IterMut T → Option T) × (IterMut T)) (Option T))
+  {T : Type _} (it : IterMut T) (back : IterMut T → Option T) :
+  Result (ControlFlow ((IterMut T) × (IterMut T → Option T)) (Option T))
   := do
   let (o, it1, next_back) ← IterMut.next it
   match o with
   | none => ok (done (back (next_back it1 none)))
-  | some _ => ok (cont (fun im => back (next_back im o), it1))
+  | some _ => ok (cont (it1, fun im => back (next_back im o)))
 
 /-- [nested_borrows::iter_mut_loop]: loop 0:
     Source: 'tests/src/nested-borrows.rs', lines 86:4-86:36 -/
 @[rust_loop]
 def iter_mut_loop_loop
-  {T : Type _} (back : IterMut T → Option T) (it : IterMut T) :
+  {T : Type _} (it : IterMut T) (back : IterMut T → Option T) :
   Result (Option T)
   := do
   loop
-    (fun (back1, it1) => iter_mut_loop_loop.body back1 it1)
-    (back, it)
+    (fun (it1, back1) => iter_mut_loop_loop.body it1 back1)
+    (it, back)
 
 /-- [nested_borrows::iter_mut_loop]:
     Source: 'tests/src/nested-borrows.rs', lines 85:0-87:1 -/
 def iter_mut_loop {T : Type _} (it : IterMut T) : Result (IterMut T) := do
-  let back ← iter_mut_loop_loop (fun (im : IterMut T) => im.v) it
+  let back ← iter_mut_loop_loop it (fun (im : IterMut T) => im.v)
   ok { v := back }
 
 /-- [nested_borrows::iter_mut_incr]: loop body 0:
     Source: 'tests/src/nested-borrows.rs', lines 90:4-92:5 -/
 @[rust_loop_body]
 def iter_mut_incr_loop.body
-  (back : IterMut Std.U32 → Option Std.U32) (it : IterMut Std.U32) :
-  Result (ControlFlow ((IterMut Std.U32 → Option Std.U32) × (IterMut Std.U32))
+  (it : IterMut Std.U32) (back : IterMut Std.U32 → Option Std.U32) :
+  Result (ControlFlow ((IterMut Std.U32) × (IterMut Std.U32 → Option Std.U32))
     (Option Std.U32))
   := do
   let (o, it1, next_back) ← IterMut.next it
@@ -163,24 +163,24 @@ def iter_mut_incr_loop.body
   | none => ok (done (back (next_back it1 none)))
   | some x =>
     let x1 ← x + 1#u32
-    ok (cont (fun im => back (next_back im (some x1)), it1))
+    ok (cont (it1, fun im => back (next_back im (some x1))))
 
 /-- [nested_borrows::iter_mut_incr]: loop 0:
     Source: 'tests/src/nested-borrows.rs', lines 90:4-92:5 -/
 @[rust_loop]
 def iter_mut_incr_loop
-  (back : IterMut Std.U32 → Option Std.U32) (it : IterMut Std.U32) :
+  (it : IterMut Std.U32) (back : IterMut Std.U32 → Option Std.U32) :
   Result (Option Std.U32)
   := do
   loop
-    (fun (back1, it1) => iter_mut_incr_loop.body back1 it1)
-    (back, it)
+    (fun (it1, back1) => iter_mut_incr_loop.body it1 back1)
+    (it, back)
 
 /-- [nested_borrows::iter_mut_incr]:
     Source: 'tests/src/nested-borrows.rs', lines 89:0-93:1 -/
 def iter_mut_incr
   (T : Type _) (it : IterMut Std.U32) : Result (IterMut Std.U32) := do
-  let back ← iter_mut_incr_loop (fun (im : IterMut Std.U32) => im.v) it
+  let back ← iter_mut_incr_loop it (fun (im : IterMut Std.U32) => im.v)
   ok { v := back }
 
 /-- [nested_borrows::List]
@@ -256,35 +256,35 @@ def ListIterMut.next
     Source: 'tests/src/nested-borrows.rs', lines 132:4-134:5 -/
 @[rust_loop_body]
 def incr_list_loop.body
-  (back : ListIterMut Std.U32 → Option (List Std.U32))
-  (it : ListIterMut Std.U32) :
-  Result (ControlFlow ((ListIterMut Std.U32 → Option (List Std.U32)) ×
-    (ListIterMut Std.U32)) (Option (List Std.U32)))
+  (it : ListIterMut Std.U32)
+  (back : ListIterMut Std.U32 → Option (List Std.U32)) :
+  Result (ControlFlow ((ListIterMut Std.U32) × (ListIterMut Std.U32 → Option
+    (List Std.U32))) (Option (List Std.U32)))
   := do
   let (o, it1, next_back) ← ListIterMut.next it
   match o with
   | none => ok (done (back (next_back it1 none)))
   | some x =>
     let x1 ← x + 1#u32
-    ok (cont (fun lim => back (next_back lim (some x1)), it1))
+    ok (cont (it1, fun lim => back (next_back lim (some x1))))
 
 /-- [nested_borrows::incr_list]: loop 0:
     Source: 'tests/src/nested-borrows.rs', lines 132:4-134:5 -/
 @[rust_loop]
 def incr_list_loop
-  (back : ListIterMut Std.U32 → Option (List Std.U32))
-  (it : ListIterMut Std.U32) :
+  (it : ListIterMut Std.U32)
+  (back : ListIterMut Std.U32 → Option (List Std.U32)) :
   Result (Option (List Std.U32))
   := do
   loop
-    (fun (back1, it1) => incr_list_loop.body back1 it1)
-    (back, it)
+    (fun (it1, back1) => incr_list_loop.body it1 back1)
+    (it, back)
 
 /-- [nested_borrows::incr_list]:
     Source: 'tests/src/nested-borrows.rs', lines 130:0-135:1 -/
 def incr_list (l : List Std.U32) : Result (List Std.U32) := do
   let (it, iter_mut_back) ← List.iter_mut l
-  let back ← incr_list_loop (fun (lim : ListIterMut Std.U32) => lim.current) it
+  let back ← incr_list_loop it (fun (lim : ListIterMut Std.U32) => lim.current)
   ok (iter_mut_back { current := back })
 
 /-- [nested_borrows::next1]:
@@ -367,11 +367,13 @@ def BitReader.refill (self : BitReader) : Result BitReader := do
     Visibility: public -/
 def BitReader.peek
   (self : BitReader) (b : Bool) : Result (Std.U64 × BitReader) := do
-  let br ← if b
-           then BitReader.refill self
-           else ok self
-  let i ← lift (br.bit_buf &&& 1#u64)
-  ok (i, br)
+  if b
+  then
+    let self1 ← BitReader.refill self
+    let i ← lift (self1.bit_buf &&& 1#u64)
+    ok (i, self1)
+  else let i ← lift (self.bit_buf &&& 1#u64)
+       ok (i, self)
 
 /-- [nested_borrows::MutBorrow]
     Source: 'tests/src/nested-borrows.rs', lines 164:0-166:1

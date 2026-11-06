@@ -76,17 +76,21 @@ def read_then_push (e : Eng) : Result (Std.Usize × Eng × (Eng → Eng)) := do
     Source: 'tests/src/frozen-mut-borrows.rs', lines 41:0-45:1
     Visibility: public -/
 def two_views (e : Eng) (b : Bool) : Result Std.U32 := do
-  let a ←
-    if b
-    then
+  if b
+  then
+    let a ←
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) 
         e.t 0#usize
-    else
+    let i := alloc.vec.Vec.len e.t
+    let i1 ← lift (UScalar.cast .U32 i)
+    a + i1
+  else
+    let a ←
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) 
         e.t 1#usize
-  let i := alloc.vec.Vec.len e.t
-  let i1 ← lift (UScalar.cast .U32 i)
-  a + i1
+    let i := alloc.vec.Vec.len e.t
+    let i1 ← lift (UScalar.cast .U32 i)
+    a + i1
 
 /-- [frozen_mut_borrows::{frozen_mut_borrows::Eng<'a>}::decl]:
     Source: 'tests/src/frozen-mut-borrows.rs', lines 48:4-50:5 -/
@@ -110,11 +114,13 @@ def Eng.kc
   Result ((core.result.Result (Option Std.U32) Std.U32) × Eng × (Eng → Eng))
   := do
   let v ← alloc.vec.Vec.push self.t x
-  let o ← if x > 5#u32
-          then ok (some x)
-          else ok none
-  let back'a := fun (self1 : Eng) => { self with t := self1.t }
-  ok (core.result.Result.Ok o, { self with t := v }, back'a)
+  if x > 5#u32
+  then
+    let back'a := fun (self1 : Eng) => { self with t := self1.t }
+    ok (core.result.Result.Ok (some x), { self with t := v }, back'a)
+  else
+    let back'a := fun (self1 : Eng) => { self with t := self1.t }
+    ok (core.result.Result.Ok none, { self with t := v }, back'a)
 
 /-- [frozen_mut_borrows::{frozen_mut_borrows::Eng<'a>}::iota]:
     Source: 'tests/src/frozen-mut-borrows.rs', lines 59:4-69:5
@@ -124,44 +130,31 @@ def Eng.iota
   Result ((core.result.Result (Option Std.U32) Std.U32) × Eng × (Eng → Eng))
   := do
   let r ← Eng.decl self n
-  let s : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) × Eng ×
-    (Eng → alloc.vec.Vec Std.U32)) ((core.result.Result (Option Std.U32)
-    Std.U32) × _ × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)) ←
-    match r with
-    | core.result.Result.Ok val =>
-      do
-      let s1 : _root_.Sum (_ × _ × (Eng → alloc.vec.Vec Std.U32)) (_ × _ × (Eng
-        → alloc.vec.Vec Std.U32)) ←
-        if k
-        then
-          do
-          let (r1, self1, kc_back) ← Eng.kc self val
-          match r1 with
-          | core.result.Result.Ok val1 =>
-            match val1 with
-            | none => ok (Sum.inr (r1, self1, fun e => (kc_back e).t))
-            | some c => ok (Sum.inl (self1, c, fun e => (kc_back e).t))
-          | core.result.Result.Err _ =>
-            ok (Sum.inr (r1, self1, fun e => (kc_back e).t))
-        else ok (Sum.inl (self, val, fun (e : Eng) => e.t))
-      match s1 with
-      | Sum.inl t =>
-        let (self1, major, back) := t
-        let i ← major + val
-        ok (Sum.inr (core.result.Result.Ok (some i), self1,
-          fun v => back { self1 with t := v }))
-      | Sum.inr t => ok (Sum.inl t)
-    | core.result.Result.Err e =>
-      ok (Sum.inl (core.result.Result.Err e, self, fun (e1 : Eng) => e1.t))
-  let (r1, e, back) ←
-    match s with
-    | Sum.inl t =>
-      let (r2, self1, back1) := t
-      ok (r2, self1, fun v => back1 { self1 with t := v })
-    | Sum.inr t => ok t
-  let back'a := fun (self1 : Eng) => let v := back self1.t
-                                     { self with t := v }
-  ok (r1, e, back'a)
+  match r with
+  | core.result.Result.Ok val =>
+    if k
+    then
+      let (r1, self1, kc_back) ← Eng.kc self val
+      match r1 with
+      | core.result.Result.Ok val1 =>
+        match val1 with
+        | none =>
+          let back'a := fun self2 => { self with t := (kc_back self2).t }
+          ok (r1, self1, back'a)
+        | some c =>
+          let i ← c + val
+          let back'a := fun self2 => { self with t := (kc_back self2).t }
+          ok (core.result.Result.Ok (some i), self1, back'a)
+      | core.result.Result.Err _ =>
+        let back'a := fun self2 => { self with t := (kc_back self2).t }
+        ok (r1, self1, back'a)
+    else
+      let i ← val + val
+      let back'a := fun (self1 : Eng) => { self with t := self1.t }
+      ok (core.result.Result.Ok (some i), self, back'a)
+  | core.result.Result.Err e =>
+    let back'a := fun (self1 : Eng) => { self with t := self1.t }
+    ok (core.result.Result.Err e, self, back'a)
 
 /-- [frozen_mut_borrows::Store]
     Source: 'tests/src/frozen-mut-borrows.rs', lines 72:0-74:1
@@ -211,11 +204,13 @@ def Eval.kc
   Result ((core.result.Result (Option Std.U32) Std.U32) × Eval × (Eval → Eval))
   := do
   let v ← alloc.vec.Vec.push self.t x
-  let o ← if x > 5#u32
-          then ok (some x)
-          else ok none
-  let back'a := fun self1 => { self1 with env := self.env }
-  ok (core.result.Result.Ok o, { self with t := v }, back'a)
+  if x > 5#u32
+  then
+    let back'a := fun self1 => { self1 with env := self.env }
+    ok (core.result.Result.Ok (some x), { self with t := v }, back'a)
+  else
+    let back'a := fun self1 => { self1 with env := self.env }
+    ok (core.result.Result.Ok none, { self with t := v }, back'a)
 
 /-- [frozen_mut_borrows::{frozen_mut_borrows::Eval<'a>}::eta]:
     Source: 'tests/src/frozen-mut-borrows.rs', lines 97:4-100:5 -/
@@ -235,12 +230,13 @@ def Eval.whnf
   Result ((core.result.Result Std.U32 Std.U32) × Eval × (Eval → Eval))
   := do
   let v ← alloc.vec.Vec.push self.t x
-  let r ←
-    if x > 100#u32
-    then ok (core.result.Result.Err x)
-    else ok (core.result.Result.Ok x)
-  let back'a := fun self1 => { self1 with env := self.env }
-  ok (r, { self with t := v }, back'a)
+  if x > 100#u32
+  then
+    let back'a := fun self1 => { self1 with env := self.env }
+    ok (core.result.Result.Err x, { self with t := v }, back'a)
+  else
+    let back'a := fun self1 => { self1 with env := self.env }
+    ok (core.result.Result.Ok x, { self with t := v }, back'a)
 
 /-- [frozen_mut_borrows::{frozen_mut_borrows::Eval<'a>}::iota::{closure}]
     Source: 'tests/src/frozen-mut-borrows.rs', lines 118:26-118:60 -/
@@ -263,112 +259,82 @@ def Eval.iota
   Result ((core.result.Result (Option Std.U32) Std.U32) × Eval × (Eval → Eval))
   := do
   let r ← Eval.decl self n
-  let (r1, self1, back) ←
-    match r with
-    | core.result.Result.Ok val =>
-      do
-      let s : _root_.Sum (Eval × Std.U32 × (Eval → ((alloc.vec.Vec Std.U32) ×
-        Store))) (_ × _ × (alloc.vec.Vec Std.U32 → Store → ((alloc.vec.Vec
-        Std.U32) × Store))) ←
-        if k
-        then
+  match r with
+  | core.result.Result.Ok val =>
+    let s : _root_.Sum (_ × _ × (Eval → ((alloc.vec.Vec Std.U32) × Store))) _ ←
+      if k
+      then
+        do
+        let (r1, self1, kc_back) ← Eval.kc self val
+        match r1 with
+        | core.result.Result.Ok val1 =>
+          match val1 with
+          | none =>
+            let back'a :=
+              fun self2 => let e := kc_back self2
+                           { e with env := self.env }
+            ok (Sum.inr (r1, self1, back'a))
+          | some c =>
+            ok (Sum.inl (self1, c, fun e => let e1 := kc_back e
+                                            (e1.t, e1.s)))
+        | core.result.Result.Err _ =>
+          let back'a :=
+            fun self2 => let e := kc_back self2
+                         { e with env := self.env }
+          ok (Sum.inr (r1, self1, back'a))
+      else ok (Sum.inl (self, val, fun (e : Eval) => (e.t, e.s)))
+    match s with
+    | Sum.inl t =>
+      let (self1, major, back) := t
+      let b ←
+        Eval.iota.closure.Insts.CoreOpsFunctionFnPairShared2EvalU32Bool.call ()
+          (self1, major)
+      let s1 : _root_.Sum (_ × _ × (Eval → ((alloc.vec.Vec Std.U32) × Store)))
+        ((core.result.Result (Option Std.U32) Std.U32) × _ × _) ←
+        if b
+        then ok (Sum.inl (self1, major, fun (e : Eval) => (e.t, e.s)))
+        else
           do
-          let (r2, self2, kc_back) ← Eval.kc self val
-          let s1 : _root_.Sum (_ × _ × (Eval → ((alloc.vec.Vec Std.U32) ×
-            Store))) (_ × _ × (Eval → ((alloc.vec.Vec Std.U32) × Store))) ←
-            match r2 with
-            | core.result.Result.Ok val1 =>
-              match val1 with
-              | none =>
-                ok (Sum.inl (r2, self2,
-                  fun e => let e1 := kc_back e
-                           (e1.t, e1.s)))
-              | some c =>
-                ok (Sum.inr (self2, c,
-                  fun e => let e1 := kc_back e
-                           (e1.t, e1.s)))
-            | core.result.Result.Err _ =>
-              ok (Sum.inl (r2, self2,
-                fun e => let e1 := kc_back e
-                         (e1.t, e1.s)))
-          match s1 with
-          | Sum.inl t =>
-            let (r3, self3, back1) := t
-            ok (Sum.inr (r3, self3,
-              fun v s2 => back1 { self3 with t := v, s := s2 }))
-          | Sum.inr t => ok (Sum.inl t)
-        else ok (Sum.inl (self, val, fun (e : Eval) => (e.t, e.s)))
-      let s1 : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) × Eval
-        × (alloc.vec.Vec Std.U32 → Store → ((alloc.vec.Vec Std.U32) × Store)))
-        _ ←
-        match s with
-        | Sum.inl t =>
-          do
-          let (self2, major, back1) := t
-          let b ←
-            Eval.iota.closure.Insts.CoreOpsFunctionFnPairShared2EvalU32Bool.call
-              () (self2, major)
-          let s2 : _root_.Sum (_ × _ × (Eval → ((alloc.vec.Vec Std.U32) ×
-            Store))) ((core.result.Result (Option Std.U32) Std.U32) × _ × (Eval
-            → ((alloc.vec.Vec Std.U32) × Store))) ←
-            if b
-            then ok (Sum.inl (self2, major, fun (e : Eval) => (e.t, e.s)))
-            else
-              do
-              let (r2, self3, eta_back) ← Eval.eta self2 major
-              match r2 with
-              | core.result.Result.Ok val1 =>
-                ok (Sum.inl (self3, val1,
-                  fun e => let e1 := eta_back e
-                           (e1.t, e1.s)))
-              | core.result.Result.Err e =>
-                ok (Sum.inr (core.result.Result.Err e, self3,
-                  fun e1 => let e2 := eta_back e1
-                            (e2.t, e2.s)))
-          let s3 : _root_.Sum ((core.result.Result (Option Std.U32) Std.U32) ×
-            Eval × (Eval → ((alloc.vec.Vec Std.U32) × Store)))
-            ((core.result.Result (Option Std.U32) Std.U32) × _ × (Eval →
-            ((alloc.vec.Vec Std.U32) × Store))) ←
-            match s2 with
-            | Sum.inl t1 =>
-              do
-              let (self3, major1, back2) := t1
-              let (r2, self4, whnf_back) ← Eval.whnf self3 major1
-              match r2 with
-              | core.result.Result.Ok val1 =>
-                let i ← val1 + val
-                ok (Sum.inr (core.result.Result.Ok (some i), self4,
-                  fun e =>
-                    let e1 := whnf_back e
-                    let (v, s4) := back2 { e1 with env := self3.env }
-                    back1 { self2 with t := v, s := s4 }))
-              | core.result.Result.Err e =>
-                ok (Sum.inl (core.result.Result.Err e, self4,
-                  fun e1 =>
-                    let e2 := whnf_back e1
-                    back2 { e2 with env := self3.env }))
-            | Sum.inr t1 => ok (Sum.inl t1)
-          match s3 with
-          | Sum.inl t1 =>
-            let (r2, self3, back2) := t1
-            ok (Sum.inl (r2, self3,
-              fun v s4 =>
-                let (v1, s5) := back2 { self3 with t := v, s := s4 }
-                back1 { self2 with t := v1, s := s5 }))
-          | Sum.inr t1 => ok (Sum.inr t1)
-        | Sum.inr t => ok (Sum.inl t)
+          let (r1, self2, eta_back) ← Eval.eta self1 major
+          match r1 with
+          | core.result.Result.Ok val1 =>
+            ok (Sum.inl (self2, val1,
+              fun e => let e1 := eta_back e
+                       (e1.t, e1.s)))
+          | core.result.Result.Err e =>
+            let back'a :=
+              fun self3 =>
+                let e1 := eta_back self3
+                let (v, s2) := back { e1 with env := self1.env }
+                { self with t := v, s := s2 }
+            ok (Sum.inr (core.result.Result.Err e, self2, back'a))
       match s1 with
-      | Sum.inl t =>
-        let (r2, e, back1) := t
-        ok (r2, e, fun (e1 : Eval) => back1 e1.t e1.s)
-      | Sum.inr t => ok t
-    | core.result.Result.Err e =>
-      ok (core.result.Result.Err e, self, fun (e1 : Eval) => (e1.t, e1.s))
-  let back'a :=
-    fun self2 =>
-      let (v, s) := back { self2 with env := self1.env }
-      { self with t := v, s }
-  ok (r1, self1, back'a)
+      | Sum.inl t1 =>
+        let (self2, major1, back1) := t1
+        let (r1, self3, whnf_back) ← Eval.whnf self2 major1
+        match r1 with
+        | core.result.Result.Ok val1 =>
+          let i ← val1 + val
+          let back'a :=
+            fun self4 =>
+              let e := whnf_back self4
+              let (v, s2) := back1 { e with env := self2.env }
+              let (v1, s3) := back { self1 with t := v, s := s2 }
+              { self with t := v1, s := s3 }
+          ok (core.result.Result.Ok (some i), self3, back'a)
+        | core.result.Result.Err e =>
+          let back'a :=
+            fun self4 =>
+              let e1 := whnf_back self4
+              let (v, s2) := back1 { e1 with env := self2.env }
+              let (v1, s3) := back { self1 with t := v, s := s2 }
+              { self with t := v1, s := s3 }
+          ok (core.result.Result.Err e, self3, back'a)
+      | Sum.inr t1 => ok t1
+    | Sum.inr t => ok t
+  | core.result.Result.Err e =>
+    let back'a := fun self1 => { self1 with env := self.env }
+    ok (core.result.Result.Err e, self, back'a)
 
 /-- [frozen_mut_borrows::run_eval_iota]:
     Source: 'tests/src/frozen-mut-borrows.rs', lines 128:0-143:1
@@ -380,22 +346,34 @@ def run_eval_iota
   := do
   let decls ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.U32) 7#u32
   let decls1 ← alloc.vec.Vec.push decls 2#u32
-  let s ←
-    if fill
-    then
-      do
-      let v ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.U32) 1#u32
-      let v1 ← alloc.vec.Vec.push v 2#u32
-      let v2 ← alloc.vec.Vec.push v1 3#u32
-      ok ({ vals := v2 } : Store)
-    else ok ({ vals := (alloc.vec.Vec.new Std.U32) } : Store)
-  let (r, e, iota_back) ←
-    Eval.iota
-      { t := (alloc.vec.Vec.new Std.U32), env := { decls := decls1 }, s } n k
-  let e1 := iota_back e
-  let i := alloc.vec.Vec.len e1.t
-  let i1 := alloc.vec.Vec.len e1.s.vals
-  ok (r, i, i1)
+  if fill
+  then
+    let v ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.U32) 1#u32
+    let v1 ← alloc.vec.Vec.push v 2#u32
+    let v2 ← alloc.vec.Vec.push v1 3#u32
+    let (r, e, iota_back) ←
+      Eval.iota
+        {
+          t := (alloc.vec.Vec.new Std.U32),
+          env := { decls := decls1 },
+          s := { vals := v2 }
+        } n k
+    let e1 := iota_back e
+    let i := alloc.vec.Vec.len e1.t
+    let i1 := alloc.vec.Vec.len e1.s.vals
+    ok (r, i, i1)
+  else
+    let (r, e, iota_back) ←
+      Eval.iota
+        {
+          t := (alloc.vec.Vec.new Std.U32),
+          env := { decls := decls1 },
+          s := { vals := (alloc.vec.Vec.new Std.U32) }
+        } n k
+    let e1 := iota_back e
+    let i := alloc.vec.Vec.len e1.t
+    let i1 := alloc.vec.Vec.len e1.s.vals
+    ok (r, i, i1)
 
 /-- [frozen_mut_borrows::Pair]
     Source: 'tests/src/frozen-mut-borrows.rs', lines 147:0-149:1
@@ -619,14 +597,12 @@ def test_eval_iota : Result Unit := do
   massert (t2 = 1#usize)
   massert (s2 = 0#usize)
   let (r3, _, _) ← run_eval_iota 5#usize true false
-  let b3 ←
-    match r3 with
-    | core.result.Result.Ok _ => ok false
-    | core.result.Result.Err i =>
-      match i with
-      | 0#uscalar => ok true
-      | _ => ok false
-  massert b3
+  match r3 with
+  | core.result.Result.Ok _ => fail panic
+  | core.result.Result.Err i =>
+    match i with
+    | 0#uscalar => ok ()
+    | _ => fail panic
 
 /- Unit test for [frozen_mut_borrows::test_eval_iota] -/
 #guard (test_eval_iota).reducesTo ()

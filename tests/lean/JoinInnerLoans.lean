@@ -32,28 +32,19 @@ structure Table where
 @[rust_loop_body]
 def Table.contains_loop.body
   (self : Table) (key : Std.U64) (i : Std.Usize) :
-  Result (ControlFlow (Table × Std.U64 × Std.Usize) Bool)
+  Result (ControlFlow Std.Usize Bool)
   := do
   let i1 := alloc.vec.Vec.len self.keys
-  let s ←
-    if i < i1
-    then
-      do
-      let i2 ←
-        alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U64)
-          self.keys i
-      if i2 = key
-      then ok (Sum.inl ())
-      else let i3 ← i + 1#usize
-           ok (Sum.inr (Sum.inl (self, key, i3)))
-    else ok (Sum.inr (Sum.inr false))
-  match s with
-  | Sum.inl _ => ok (done true)
-  | Sum.inr s1 =>
-    match s1 with
-    | Sum.inl t => let (t1, i2, i3) := t
-                   ok (cont (t1, i2, i3))
-    | Sum.inr b => ok (done b)
+  if i < i1
+  then
+    let i2 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U64)
+        self.keys i
+    if i2 = key
+    then ok (done true)
+    else let i3 ← i + 1#usize
+         ok (cont i3)
+  else ok (done false)
 
 /-- [join_inner_loans::{join_inner_loans::Table}::contains]: loop 0:
     Source: 'tests/src/join-inner-loans.rs', lines 16:14-23:5
@@ -62,8 +53,8 @@ def Table.contains_loop.body
 def Table.contains_loop
   (self : Table) (key : Std.U64) (i : Std.Usize) : Result Bool := do
   loop
-    (fun (self1, key1, i1) => Table.contains_loop.body self1 key1 i1)
-    (self, key, i)
+    (fun i1 => Table.contains_loop.body self key i1)
+    i
 
 /-- [join_inner_loans::{join_inner_loans::Table}::contains]:
     Source: 'tests/src/join-inner-loans.rs', lines 14:4-23:5
@@ -99,15 +90,18 @@ def Engine.step
   (self : Engine) (x : Std.U32) (y : Std.U32) :
   Result ((core.result.Result Bool Std.U32) × Engine × (Engine → Engine))
   := do
-  let r ←
-    if x > 100#u32
-    then ok (core.result.Result.Err x)
+  if x > 100#u32
+  then
+    let back'a := fun (self1 : Engine) => { self with s := self1.s }
+    ok (core.result.Result.Err x, self, back'a)
+  else
+    if x = y
+    then
+      let back'a := fun (self1 : Engine) => { self with s := self1.s }
+      ok (core.result.Result.Ok true, self, back'a)
     else
-      if x = y
-      then ok (core.result.Result.Ok true)
-      else ok (core.result.Result.Ok false)
-  let back'a := fun (self1 : Engine) => { self with s := self1.s }
-  ok (r, self, back'a)
+      let back'a := fun (self1 : Engine) => { self with s := self1.s }
+      ok (core.result.Result.Ok false, self, back'a)
 
 /-- [join_inner_loans::{join_inner_loans::Engine<'a>}::equal]:
     Source: 'tests/src/join-inner-loans.rs', lines 53:4-69:5
@@ -120,37 +114,40 @@ def Engine.equal
   let eager ← lift (core.convert.num.FromUsizeBool.from self.eager)
   let t ← Array.index_usize self.s.equal eager
   let b ← Table.contains t key
-  let (r, self1, back) ←
-    if b
-    then ok (core.result.Result.Ok true, self, fun (e : Engine) => e.s)
-    else
-      do
-      let (r1, self2, step_back) ← Engine.step self x y
-      match r1 with
-      | core.result.Result.Ok r2 =>
-        if r2
+  if b
+  then
+    let back'a := fun (self1 : Engine) => { self with s := self1.s }
+    ok (core.result.Result.Ok true, self, back'a)
+  else
+    let (r, self1, step_back) ← Engine.step self x y
+    match r with
+    | core.result.Result.Ok r1 =>
+      if r1
+      then
+        let (t1, index_mut_back) ← Array.index_mut_usize self1.s.equal eager
+        let t2 ← Table.insert t1 key
+        let a := index_mut_back t2
+        let back'a :=
+          fun (self2 : Engine) =>
+            { self with s := (step_back { self1 with s := self2.s }).s }
+        ok (r, { self1 with s := { self1.s with equal := a } }, back'a)
+      else
+        if budget > 0#u32
         then
-          let (t1, index_mut_back) ← Array.index_mut_usize self2.s.equal eager
+          let (t1, index_mut_back) ←
+            Array.index_mut_usize self1.s.unequal eager
           let t2 ← Table.insert t1 key
           let a := index_mut_back t2
-          ok (r1, { self2 with s := { self2.s with equal := a } },
-            fun (e : Engine) => (step_back { self2 with s := e.s }).s)
+          let back'a :=
+            fun (self2 : Engine) =>
+              { self with s := (step_back { self1 with s := self2.s }).s }
+          ok (r, { self1 with s := { self1.s with unequal := a } }, back'a)
         else
-          if budget > 0#u32
-          then
-            let (t1, index_mut_back) ←
-              Array.index_mut_usize self2.s.unequal eager
-            let t2 ← Table.insert t1 key
-            let a := index_mut_back t2
-            ok (r1, { self2 with s := { self2.s with unequal := a } },
-              fun (e : Engine) => (step_back { self2 with s := e.s }).s)
-          else ok (r1, self2, fun e => (step_back e).s)
-      | core.result.Result.Err _ => ok (r1, self2, fun e => (step_back e).s)
-  let back'a :=
-    fun (self2 : Engine) =>
-      let s := back { self1 with s := self2.s }
-      { self with s }
-  ok (r, self1, back'a)
+          let back'a := fun self2 => { self with s := (step_back self2).s }
+          ok (r, self1, back'a)
+    | core.result.Result.Err _ =>
+      let back'a := fun self2 => { self with s := (step_back self2).s }
+      ok (r, self1, back'a)
 
 /-- [join_inner_loans::test_equal]:
     Source: 'tests/src/join-inner-loans.rs', lines 73:0-84:1

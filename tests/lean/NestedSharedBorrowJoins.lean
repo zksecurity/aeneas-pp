@@ -46,10 +46,9 @@ def str_eq_then_branch (a : Str) (c : Bool) : Result Std.U32 := do
   let e ← if b
           then ok 10#u32
           else ok 20#u32
-  let r ← if c
-          then ok 1#u32
-          else ok 2#u32
-  r + e
+  if c
+  then 1#u32 + e
+  else 2#u32 + e
 
 /-- [nested_shared_borrow_joins::str_match_then_branches]:
     Source: 'tests/src/nested-shared-borrow-joins.rs', lines 20:0-32:1
@@ -83,11 +82,12 @@ def str_match_then_branches
     let extra ← if count = 2#i32
                 then ok n
                 else ok 0#u32
-    let scaled ← if n > 10#u32
-                 then base * 2#u32
-                 else ok base
-    let i ← scaled + extra
-    ok (some i)
+    if n > 10#u32
+    then let scaled ← base * 2#u32
+         let i ← scaled + extra
+         ok (some i)
+    else let i ← base + extra
+         ok (some i)
   | Sum.inr o => ok o
 
 /-- [nested_shared_borrow_joins::ref_eq_then_branch]:
@@ -99,10 +99,9 @@ def ref_eq_then_branch
   let e ← if b1
           then ok 10#u32
           else ok 20#u32
-  let r ← if c
-          then ok 1#u32
-          else ok 2#u32
-  r + e
+  if c
+  then 1#u32 + e
+  else 2#u32 + e
 
 /-- [nested_shared_borrow_joins::get]:
     Source: 'tests/src/nested-shared-borrow-joins.rs', lines 45:0-47:1 -/
@@ -148,16 +147,13 @@ def update_across_join
     Source: 'tests/src/nested-shared-borrow-joins.rs', lines 85:0-92:1
     Visibility: public -/
 def eq_in_branch (a : Std.U32) (b : Std.U32) (c : Bool) : Result Std.U32 := do
-  let e ←
-    if c
-    then
-      do
-      let b1 ← lift (core.cmp.impls.PartialEqU32.eq a b)
-      if b1
-      then ok 1#u32
-      else ok 2#u32
-    else ok 3#u32
-  e + 1#u32
+  if c
+  then
+    let b1 ← lift (core.cmp.impls.PartialEqU32.eq a b)
+    if b1
+    then 1#u32 + 1#u32
+    else 2#u32 + 1#u32
+  else 3#u32 + 1#u32
 
 /-- [nested_shared_borrow_joins::Holder]
     Source: 'tests/src/nested-shared-borrow-joins.rs', lines 98:0-100:1
@@ -173,10 +169,9 @@ def holder_branch
   let x ← if c
           then ok h.r
           else ok other
-  let y ← if x > 3#u32
-          then ok 1#u32
-          else ok 0#u32
-  x + y
+  if x > 3#u32
+  then x + 1#u32
+  else x + 0#u32
 
 /-- [nested_shared_borrow_joins::Kind]
     Source: 'tests/src/nested-shared-borrow-joins.rs', lines 114:0-117:1
@@ -217,7 +212,7 @@ def frame_kept_by_branches
     match val.kind with
     | Kind.Ind ctors =>
       let b ← Str.Insts.CoreCmpPartialEqStr.eq k (toStr "a")
-      let y ←
+      let x ←
         if b
         then ok 1#u32
         else
@@ -226,16 +221,21 @@ def frame_kept_by_branches
           if b1
           then ok 2#u32
           else ok 3#u32
-      let y1 ←
-        if c
-        then let i := alloc.vec.Vec.len ctors
-             ok (UScalar.cast .U32 i)
-        else ok y
-      let i ← y1 + y
-      let i1 := alloc.vec.Vec.len val.params
-      let i2 ← lift (UScalar.cast .U32 i1)
-      let i3 ← i + i2
-      ok (some i3)
+      if c
+      then
+        let i := alloc.vec.Vec.len ctors
+        let y ← lift (UScalar.cast .U32 i)
+        let i1 ← y + x
+        let i2 := alloc.vec.Vec.len val.params
+        let i3 ← lift (UScalar.cast .U32 i2)
+        let i4 ← i1 + i3
+        ok (some i4)
+      else
+        let i ← x + x
+        let i1 := alloc.vec.Vec.len val.params
+        let i2 ← lift (UScalar.cast .U32 i1)
+        let i3 ← i + i2
+        ok (some i3)
     | Kind.Other => ok none
   | none => ok none
 
@@ -253,19 +253,17 @@ def join_different_referents
     Visibility: public -/
 def ended_outer_live_inner (a : Std.U32) (c : Bool) : Result Std.U32 := do
   let inner ← get a
-  let r ← if c
-          then ok 1#u32
-          else ok 2#u32
-  inner + r
+  if c
+  then inner + 1#u32
+  else inner + 2#u32
 
 /-- [nested_shared_borrow_joins::one_branch_reborrow]:
     Source: 'tests/src/nested-shared-borrow-joins.rs', lines 170:0-180:1
     Visibility: public -/
 def one_branch_reborrow (s : Std.U32) (b : Bool) : Result Std.U32 := do
-  let n ← if b
-          then ok s
-          else ok 0#u32
-  n + s
+  if b
+  then s + s
+  else 0#u32 + s
 
 /-- [nested_shared_borrow_joins::test_ref_eq_then_branch]:
     Source: 'tests/src/nested-shared-borrow-joins.rs', lines 183:0-187:1

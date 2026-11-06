@@ -126,6 +126,10 @@ let passes :
       "inline_useless_var_assignments (pass 3)",
       inline_useless_var_assignments ~inline_named:true ~inline_const:true
         ~inline_pure:true ~inline_identity:true ~inline_loop_back_calls:true );
+    (* Simplify the aggregated ADTs (see below): the loop inputs and outputs
+       which rebuild a structure from its fields become the structure itself,
+       before [filter_loop_useless_inputs_outputs] substitutes them *)
+    (None, "simplify_aggregates (pass 0)", simplify_aggregates);
     (* Filter the useless loop inputs and outputs.
 
        For now we do not filter the constant inputs: we will do this after

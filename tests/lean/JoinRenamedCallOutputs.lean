@@ -78,44 +78,25 @@ def Input.reach.closure.Insts.CoreOpsFunctionFnMutTupleU32Tuple.call_mut
     Visibility: public -/
 def Input.reach
   (self : Input) : Result ((core.result.Result Std.U32 Unit) × Input) := do
-  let s : _root_.Sum ((core.result.Result Std.U32 Unit) × _) (_ × _ × (Std.U32
-    → Std.U32)) ←
-    match self.node with
-    | Node.One a =>
-      do
-      let (_, visit, call_mut_back, call_mut_back1) ←
-        Input.reach.closure.Insts.CoreOpsFunctionFnMutTupleU32Tuple.call_mut
-          (self.seen, 0#u32) a
-      let (i, i1) := visit
-      let (i2, _) := call_mut_back visit
-      ok (Sum.inr ({ self with seen := i2 }, i1,
-        fun i3 => let (_, i4) := call_mut_back1 (i, i3)
-                  i4))
-    | Node.Name n =>
-      do
-      let r ← Input.get self n
-      match r with
-      | core.result.Result.Ok _ => ok (Sum.inr (self, 0#u32, fun i => i))
-      | core.result.Result.Err e =>
-        ok (Sum.inl (core.result.Result.Err e, self))
-    | Node.Lit =>
-      do
-      let (r, self1) ← Input.literal self
-      match r with
-      | core.result.Result.Ok _ => ok (Sum.inr (self1, 0#u32, fun i => i))
-      | core.result.Result.Err e =>
-        ok (Sum.inl (core.result.Result.Err e, self1))
-    | Node.Leaf => ok (Sum.inr (self, 0#u32, fun i => i))
-  let s1 ←
-    match s with
-    | Sum.inl p => ok (Sum.inr p)
-    | Sum.inr t => ok (Sum.inl t)
-  match s1 with
-  | Sum.inl t =>
-    let (self1, i, back) := t
-    let todo := back i
-    ok (core.result.Result.Ok todo, self1)
-  | Sum.inr p => ok p
+  match self.node with
+  | Node.One a =>
+    let (_, visit, call_mut_back, call_mut_back1) ←
+      Input.reach.closure.Insts.CoreOpsFunctionFnMutTupleU32Tuple.call_mut
+        (self.seen, 0#u32) a
+    let (_, todo) := call_mut_back1 visit
+    let (i, _) := call_mut_back visit
+    ok (core.result.Result.Ok todo, { self with seen := i })
+  | Node.Name n =>
+    let r ← Input.get self n
+    match r with
+    | core.result.Result.Ok _ => ok (core.result.Result.Ok 0#u32, self)
+    | core.result.Result.Err e => ok (core.result.Result.Err e, self)
+  | Node.Lit =>
+    let (r, self1) ← Input.literal self
+    match r with
+    | core.result.Result.Ok _ => ok (core.result.Result.Ok 0#u32, self1)
+    | core.result.Result.Err e => ok (core.result.Result.Err e, self1)
+  | Node.Leaf => ok (core.result.Result.Ok 0#u32, self)
 
 /-- [join_renamed_call_outputs::test_reach]:
     Source: 'tests/src/join-renamed-call-outputs.rs', lines 47:0-59:1 -/
@@ -150,15 +131,12 @@ def test_reach : Result Unit := do
     | core.result.Result.Err _ => ok true
   massert b2
   let (r3, w) ← Input.reach { node := Node.Lit, seen := 0#u32, names := 2#u32 }
-  let b3 ←
-    match r3 with
-    | core.result.Result.Ok i =>
-      match i with
-      | 0#uscalar => ok true
-      | _ => ok false
-    | core.result.Result.Err _ => ok false
-  massert b3
-  massert (w.names = 3#u32)
+  match r3 with
+  | core.result.Result.Ok i =>
+    match i with
+    | 0#uscalar => massert (w.names = 3#u32)
+    | _ => fail panic
+  | core.result.Result.Err _ => fail panic
 
 /- Unit test for [join_renamed_call_outputs::test_reach] -/
 #guard (test_reach).reducesTo ()

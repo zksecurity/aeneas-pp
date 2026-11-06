@@ -532,6 +532,75 @@ let bind_output_abs (ctx : bs_ctx) (absl : V.abs list) :
   in
   (ctx, List.map (fun (abs : V.abs) -> List.assoc_opt abs.abs_id fvars) absl)
 
+(** The outputs of the exits of a loop which are inputs the loop doesn't modify:
+    every iteration continues with the input itself, and every break to the exit
+    outputs it. The exit outputs the value the loop receives.
+
+    Return, for every exit, the map from the indices of those outputs to the
+    indices of the inputs. *)
+let loop_invariant_exit_values (loop : S.loop) :
+    (S.loop_exit * int Collections.IntMap.t) list =
+  let continues = ref [] in
+  let breaks = ref [] in
+  let visitor =
+    object
+      inherit [_] S.iter_expr as super
+
+      method! visit_LoopContinue env ectx loop_id values absl =
+        if loop_id = loop.loop_id then continues := values :: !continues;
+        super#visit_LoopContinue env ectx loop_id values absl
+
+      method! visit_LoopBreak env ectx loop_id exit values absl =
+        if loop_id = loop.loop_id then breaks := (exit, values) :: !breaks;
+        super#visit_LoopBreak env ectx loop_id exit values absl
+    end
+  in
+  visitor#visit_expr () loop.loop_expr;
+  let sv_id (v : V.tvalue) : V.SymbolicValueId.id option =
+    match v.value with
+    | VSymbolic sv -> Some sv.sv_id
+    | _ -> None
+  in
+  let invariant_inputs =
+    V.SymbolicValueId.Map.of_list
+      (List.filter_map
+         (fun (j, (sv : V.symbolic_value)) ->
+           if
+             List.for_all
+               (fun values -> sv_id (List.nth values j) = Some sv.sv_id)
+               !continues
+           then Some (sv.sv_id, j)
+           else None)
+         (List.mapi (fun j sv -> (j, sv)) loop.input_svalues))
+  in
+  List.map
+    (fun (exit : S.loop_exit_info) ->
+      let breaks =
+        List.filter_map
+          (fun (e, values) -> if e = exit.exit then Some values else None)
+          !breaks
+      in
+      let outputs =
+        List.filter_map
+          (fun k ->
+            match breaks with
+            | [] -> None
+            | values :: _ ->
+                Option.bind (sv_id (List.nth values k)) (fun id ->
+                    match
+                      V.SymbolicValueId.Map.find_opt id invariant_inputs
+                    with
+                    | Some j
+                      when List.for_all
+                             (fun values -> sv_id (List.nth values k) = Some id)
+                             breaks ->
+                        Some (k, j)
+                    | _ -> None))
+          (List.init (List.length exit.exit_svalues) Fun.id)
+      in
+      (exit.exit, Collections.IntMap.of_list outputs))
+    loop.exits
+
 (** The outputs of a join or of a loop exit, bound by [values] and [absl], which
     the expression [next] after it reads: return them, and [next] without the
     meta-information mentioning the others *)
@@ -2450,14 +2519,15 @@ and translate_loop (loop : S.loop) (ctx0 : bs_ctx) : texpr =
   in
 
   (* Translate the loop input values *)
+  let input_svalue_values =
+    translate_input_values loop.input_svalues loop.input_value_to_value
+  in
   let input_values =
-    let values =
-      translate_input_values loop.input_svalues loop.input_value_to_value
-    in
     List.map
       (function
-        | OutValue i -> List.nth values i
-        | OutStruct (var, e, indices) -> out_struct_value var e indices values)
+        | OutValue i -> List.nth input_svalue_values i
+        | OutStruct (var, e, indices) ->
+            out_struct_value var e indices input_svalue_values)
       body_inputs.values
   in
   let inputs = input_abs @ input_values in
@@ -2477,6 +2547,7 @@ and translate_loop (loop : S.loop) (ctx0 : bs_ctx) : texpr =
      translate the expression following the exit. Every exit starts from the
      context before the loop: the exits may share symbolic values (the values
      the loop doesn't modify), which each exit binds to its own outputs. *)
+  let invariant_exit_values = loop_invariant_exit_values loop in
   let exit_outputs =
     List.map
       (fun (exit : S.loop_exit_info) ->
@@ -2484,10 +2555,27 @@ and translate_loop (loop : S.loop) (ctx0 : bs_ctx) : texpr =
         let ctx, exit_values =
           bind_outputs ctx exit.exit_ctx exit.exit_svalues
         in
+        (* The outputs which are inputs the loop doesn't modify are the values
+           the loop receives *)
+        let invariant = List.assoc exit.exit invariant_exit_values in
+        let invariant_values, exit_values =
+          List.partition_map
+            (fun ((var : fvar), out) ->
+              match out with
+              | OutValue k when Collections.IntMap.mem k invariant ->
+                  let j = Collections.IntMap.find k invariant in
+                  Left (var.id, List.nth input_svalue_values j)
+              | _ -> Right (var, out))
+            exit_values
+        in
+        let exit_e =
+          texpr_subst_fvars
+            (FVarId.Map.of_list invariant_values)
+            (translate_expr exit.exit_expr ctx)
+        in
         (* The exit only outputs what the expression after it reads *)
         let exit_values, exit_abs, exit_e =
-          select_read_outputs exit_values exit_abs
-            (translate_expr exit.exit_expr ctx)
+          select_read_outputs exit_values exit_abs exit_e
         in
         let exit_e = destructure_outputs ctx exit_values exit_e in
         let outputs =

@@ -54,6 +54,7 @@ package «tests» {}
 @[default_target] lean_lib DropBug
 @[default_target] lean_lib Dyn
 @[default_target] lean_lib DynamicSize
+@[default_target] lean_lib EarlyReturns
 @[default_target] lean_lib FnItemsLateBound
 @[default_target] lean_lib FnPtrGeneric
 @[default_target] lean_lib ForwardScopeAlignedJoins

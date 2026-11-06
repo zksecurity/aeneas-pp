@@ -30,19 +30,12 @@ def all_nonzero_loop.body
     Unit))
   := do
   let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
-  let s : _root_.Sum _ (_root_.Sum _ (core.result.Result Unit Unit)) ←
-    match o with
-    | none => ok (Sum.inr (Sum.inr (core.result.Result.Ok ())))
-    | some x =>
-      if x = 0#u32
-      then ok (Sum.inl ())
-      else ok (Sum.inr (Sum.inl iter1))
-  match s with
-  | Sum.inl _ => ok (done (core.result.Result.Err ()))
-  | Sum.inr s1 =>
-    match s1 with
-    | Sum.inl i => ok (cont i)
-    | Sum.inr r => ok (done r)
+  match o with
+  | none => ok (done (core.result.Result.Ok ()))
+  | some x =>
+    if x = 0#u32
+    then ok (done (core.result.Result.Err ()))
+    else ok (cont iter1)
 
 /-- [shared_borrows_in_shared_values::all_nonzero]: loop 0:
     Source: 'tests/src/shared-borrows-in-shared-values.rs', lines 10:13-16:1
@@ -110,11 +103,9 @@ def test_all_nonzero : Result Unit := do
   massert b
   let s1 ← lift (Array.to_slice (Array.make 2#usize [ 3#u32, 0#u32 ]))
   let r1 ← all_nonzero s1
-  let b1 ←
-    match r1 with
-    | core.result.Result.Ok _ => ok false
-    | core.result.Result.Err _ => ok true
-  massert b1
+  match r1 with
+  | core.result.Result.Ok _ => fail panic
+  | core.result.Result.Err _ => ok ()
 
 /- Unit test for [shared_borrows_in_shared_values::test_all_nonzero] -/
 #guard (test_all_nonzero).reducesTo ()

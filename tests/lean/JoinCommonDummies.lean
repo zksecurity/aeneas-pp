@@ -33,14 +33,11 @@ def infer
   (ck : Checker) :
   Result ((core.result.Result Unit Unit) × Checker × (Checker → Checker))
   := do
-  let (r, c) ←
-    if ck.t > 10#u32
-    then ok (core.result.Result.Err (), ck)
-    else
-      do
-      let i ← ck.t + 1#u32
-      ok (core.result.Result.Ok (), ({ t := i } : Checker))
-  ok (r, c, fun ck1 => ck1)
+  if ck.t > 10#u32
+  then ok (core.result.Result.Err (), ck, fun ck1 => ck1)
+  else
+    let i ← ck.t + 1#u32
+    ok (core.result.Result.Ok (), { t := i }, fun ck1 => ck1)
 
 /-- [join_common_dummies::verify]:
     Source: 'tests/src/join-common-dummies.rs', lines 22:0-29:1
@@ -49,35 +46,25 @@ def verify
   (t : Std.U32) (b : Bool) :
   Result ((core.result.Result Unit Unit) × Std.U32)
   := do
-  let s : _root_.Sum (Checker × (Checker → Std.U32)) (_ × _ × (Checker →
-    Std.U32)) ←
+  let s : _root_.Sum (Checker × (Checker → Std.U32)) (_ × Std.U32) ←
     if b
     then
       do
       let (r, ck, infer_back) ← infer { t }
       match r with
       | core.result.Result.Ok _ => ok (Sum.inl (ck, fun c => (infer_back c).t))
-      | core.result.Result.Err _ =>
-        ok (Sum.inr (r, ck, fun c => (infer_back c).t))
+      | core.result.Result.Err _ => ok (Sum.inr (r, (infer_back ck).t))
     else ok (Sum.inl (({ t } : Checker), fun (c : Checker) => c.t))
-  let s1 : _root_.Sum ((core.result.Result Unit Unit) × Checker × (Checker →
-    Std.U32)) ((core.result.Result Unit Unit) × _) ←
-    match s with
-    | Sum.inl p =>
-      do
-      let (ck, back) := p
-      let (r, ck1, infer_back) ← infer ck
-      match r with
-      | core.result.Result.Ok _ =>
-        let t1 := back (infer_back ck1)
-        ok (Sum.inr (core.result.Result.Ok (), t1))
-      | core.result.Result.Err _ =>
-        ok (Sum.inl (r, ck1, fun c => back (infer_back c)))
-    | Sum.inr t1 => ok (Sum.inl t1)
-  match s1 with
-  | Sum.inl t1 => let (r, ck, back) := t1
-                  let t2 := back ck
-                  ok (r, t2)
+  match s with
+  | Sum.inl p =>
+    let (ck, back) := p
+    let (r, c, infer_back) ← infer ck
+    match r with
+    | core.result.Result.Ok _ =>
+      let t1 := back (infer_back c)
+      ok (core.result.Result.Ok (), t1)
+    | core.result.Result.Err _ => let t1 := back (infer_back c)
+                                  ok (r, t1)
   | Sum.inr p => ok p
 
 /-- [join_common_dummies::test_verify]:
@@ -105,13 +92,10 @@ def test_verify : Result Unit := do
     | core.result.Result.Err _ => ok true
   massert b2
   massert (i1 = 11#u32)
-  let (r3, i2) ← verify 10#u32 true
-  let b3 ←
-    match r3 with
-    | core.result.Result.Ok _ => ok false
-    | core.result.Result.Err _ => ok true
-  massert b3
-  massert (i2 = 11#u32)
+  let (r3, t1) ← verify 10#u32 true
+  match r3 with
+  | core.result.Result.Ok _ => fail panic
+  | core.result.Result.Err _ => massert (t1 = 11#u32)
 
 /- Unit test for [join_common_dummies::test_verify] -/
 #guard (test_verify).reducesTo ()

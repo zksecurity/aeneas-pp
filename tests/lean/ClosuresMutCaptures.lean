@@ -103,50 +103,33 @@ def Eng.consecutive.closure_1 := Eng.consecutive.closure × Eng
 def Eng.telescope_loop.body
   {T1 : Type _} (coreopsfunctionFnMutT1PairMutEngU32ResultBoolTupleInst :
   core.ops.function.FnMut T1 (Eng × Std.U32) ((core.result.Result Bool Unit) ×
-  Eng × (Eng → Eng))) (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)
-  (e : Eng) (n : Std.U32) (next : T1) (i : Std.U32) (c : Std.U32) :
+  Eng × (Eng → Eng))) (n : Std.U32)
+  (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) (e : Eng) (next : T1)
+  (i : Std.U32) (c : Std.U32) :
   Result (ControlFlow ((alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) × Eng ×
-    Std.U32 × T1 × Std.U32 × Std.U32) ((core.result.Result Std.U32 Unit) × Eng
-    × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)))
+    T1 × Std.U32 × Std.U32) ((core.result.Result Std.U32 Unit) × Eng × (Eng →
+    alloc.vec.Vec Std.U32)))
   := do
-  let s : _root_.Sum ((core.result.Result Std.U32 Unit) × _ × (Eng →
-    alloc.vec.Vec Std.U32)) (_root_.Sum ((alloc.vec.Vec Std.U32 → alloc.vec.Vec
-    Std.U32) × _ × _ × _ × _ × _) ((core.result.Result Std.U32 Unit) × _ × _))
-    ←
-    if i < n
-    then
-      do
-      let ((r, self, call_mut_back), next1) ←
-        coreopsfunctionFnMutT1PairMutEngU32ResultBoolTupleInst.call_mut next
-          (e, i)
-      match r with
-      | core.result.Result.Ok val =>
-        let (c1, back1) ←
-          if val
-          then do
-               let c2 ← c + 1#u32
-               ok (c2, fun e1 => (call_mut_back e1).t)
-          else ok (c, fun e1 => (call_mut_back e1).t)
-        let i1 ← i + 1#u32
-        ok (Sum.inr (Sum.inl
-          (fun v => let v1 := back1 { self with t := v }
-                    back v1, self, n, next1, i1, c1)))
-      | core.result.Result.Err e1 =>
-        ok (Sum.inl (core.result.Result.Err e1, self,
-          fun e2 => (call_mut_back e2).t))
-    else ok (Sum.inr (Sum.inr (core.result.Result.Ok c, e, back)))
-  match s with
-  | Sum.inl t =>
-    let (r, self, back1) := t
-    ok (done (r, self, fun v => let v1 := back1 { self with t := v }
-                                back v1))
-  | Sum.inr s1 =>
-    match s1 with
-    | Sum.inl t =>
-      let (f, e1, i1, t1, i2, i3) := t
-      ok (cont (f, e1, i1, t1, i2, i3))
-    | Sum.inr t => let (r, e1, f) := t
-                   ok (done (r, e1, f))
+  if i < n
+  then
+    let ((r, self, call_mut_back), next1) ←
+      coreopsfunctionFnMutT1PairMutEngU32ResultBoolTupleInst.call_mut next (e,
+        i)
+    match r with
+    | core.result.Result.Ok val =>
+      let (c1, back1) ←
+        if val
+        then do
+             let c2 ← c + 1#u32
+             ok (c2, fun e1 => (call_mut_back e1).t)
+        else ok (c, fun e1 => (call_mut_back e1).t)
+      let i1 ← i + 1#u32
+      ok (cont (fun v => let v1 := back1 { self with t := v }
+                         back v1, self, next1, i1, c1))
+    | core.result.Result.Err e1 =>
+      ok (done (core.result.Result.Err e1, self,
+        fun e2 => back (call_mut_back e2).t))
+  else ok (done (core.result.Result.Ok c, e, fun (e1 : Eng) => back e1.t))
 
 /-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::telescope]: loop 0:
     Source: 'tests/src/closures-mut-captures.rs', lines 21:8-28:5 -/
@@ -156,14 +139,14 @@ def Eng.telescope_loop
   core.ops.function.FnMut T1 (Eng × Std.U32) ((core.result.Result Bool Unit) ×
   Eng × (Eng → Eng))) (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)
   (e : Eng) (n : Std.U32) (next : T1) (i : Std.U32) (c : Std.U32) :
-  Result ((core.result.Result Std.U32 Unit) × Eng × (alloc.vec.Vec Std.U32 →
-    alloc.vec.Vec Std.U32))
+  Result ((core.result.Result Std.U32 Unit) × Eng × (Eng → alloc.vec.Vec
+    Std.U32))
   := do
   loop
-    (fun (back1, e1, n1, next1, i1, c1) => Eng.telescope_loop.body
-      coreopsfunctionFnMutT1PairMutEngU32ResultBoolTupleInst back1 e1 n1 next1
+    (fun (back1, e1, next1, i1, c1) => Eng.telescope_loop.body
+      coreopsfunctionFnMutT1PairMutEngU32ResultBoolTupleInst n back1 e1 next1
       i1 c1)
-    (back, e, n, next, i, c)
+    (back, e, next, i, c)
 
 /-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::telescope]:
     Source: 'tests/src/closures-mut-captures.rs', lines 14:4-28:5 -/
@@ -176,8 +159,10 @@ def Eng.telescope
   let (r, e, back) ←
     Eng.telescope_loop coreopsfunctionFnMutT1PairMutAEngU32ResultBoolTupleInst
       (fun v => v) self n next 0#u32 0#u32
-  let back'a := fun (self1 : Eng) => let v := back self1.t
-                                     { self with t := v }
+  let back'a :=
+    fun (self1 : Eng) =>
+      let v := back { e with t := self1.t }
+      { self with t := v }
   ok (r, e, back'a)
 
 /-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::count::{impl core::ops::function::FnMut<(&'_4 mut closures_mut_captures::Eng<'_2>, u32), core::result::Result<bool, ()>> for closures_mut_captures::{closures_mut_captures::Eng<'a>}::count::{closure}<'a, '_1, '_2, '_3>}::call_mut]:
@@ -190,72 +175,59 @@ def
   := do
   let (e, i) := tupled_args
   let v ← alloc.vec.Vec.push e.t i
-  let b ← if i = 2#u32
-          then ok true
-          else ok c
-  let i1 ← i % 2#u32
-  let back := fun (tupled_args1 : Eng) => { e with t := tupled_args1.t }
-  let back1 := fun c1 => c1
-  ok (core.result.Result.Ok (decide (i1 = 0#u32)), b, { e with t := v }, back,
-    back1)
+  if i = 2#u32
+  then
+    let i1 ← i % 2#u32
+    let back := fun (tupled_args1 : Eng) => { e with t := tupled_args1.t }
+    let back1 := fun c1 => c1
+    ok (core.result.Result.Ok (decide (i1 = 0#u32)), true, { e with t := v },
+      back, back1)
+  else
+    let i1 ← i % 2#u32
+    let back := fun (tupled_args1 : Eng) => { e with t := tupled_args1.t }
+    let back1 := fun c1 => c1
+    ok (core.result.Result.Ok (decide (i1 = 0#u32)), c, { e with t := v },
+      back, back1)
 
 /-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::telescope::<_, _, closures_mut_captures::{closures_mut_captures::Eng<'a>}::count::{closure}<_, _, _, _>>]: loop body 0:
     Source: 'tests/src/closures-mut-captures.rs', lines 21:8-28:5 -/
 @[rust_loop_body]
 def Eng.telescope01countclosure_loop.body
-  (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) (back1 : Bool → Bool)
-  (e : Eng) (n : Std.U32) (b : Bool) (i : Std.U32) (c : Std.U32) :
+  (n : Std.U32) (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)
+  (back1 : Bool → Bool) (e : Eng) (b : Bool) (i : Std.U32) (c : Std.U32) :
   Result (ControlFlow ((alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) × (Bool
-    → Bool) × Eng × Std.U32 × Bool × Std.U32 × Std.U32) ((core.result.Result
-    Std.U32 Unit) × Eng × Bool × (alloc.vec.Vec Std.U32 → alloc.vec.Vec
-    Std.U32)))
+    → Bool) × Eng × Bool × Std.U32 × Std.U32) ((core.result.Result Std.U32
+    Unit) × Eng × (Eng → alloc.vec.Vec Std.U32) × Bool))
   := do
-  let s : _root_.Sum ((core.result.Result Std.U32 Unit) × _ × _ ×
-    (Eng.count.closure → Bool) × (Eng → alloc.vec.Vec Std.U32)) (_root_.Sum
-    ((alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) × (Bool → Bool) × _ × _ ×
-    _ × _ × _) ((core.result.Result Std.U32 Unit) × _ × _ × _ × _)) ←
-    if i < n
-    then
-      do
-      let (r, next, self, call_mut_back, call_mut_back1) ←
-        Eng.count.closure.Insts.CoreOpsFunctionFnMutPairMut3EngU32ResultBoolTuple.call_mut
-          b (e, i)
-      match r with
-      | core.result.Result.Ok val =>
-        let (c1, back2, back3) ←
-          if val
-          then
-            do
-            let c2 ← c + 1#u32
-            ok (c2, fun c3 => let b1 := call_mut_back1 c3
-                              b1, fun e1 => (call_mut_back e1).t)
-          else
-            ok (c, fun c2 => let b1 := call_mut_back1 c2
-                             b1, fun e1 => (call_mut_back e1).t)
-        let i1 ← i + 1#u32
-        ok (Sum.inr (Sum.inl
-          (fun v => let v1 := back3 { self with t := v }
-                    back v1, fun b1 => let b2 := back2 b1
-                                       back1 b2, self, n, next, i1, c1)))
-      | core.result.Result.Err e1 =>
-        ok (Sum.inl (core.result.Result.Err e1, self, next,
-          fun c1 => let b1 := call_mut_back1 c1
-                    b1, fun e2 => (call_mut_back e2).t))
-    else ok (Sum.inr (Sum.inr (core.result.Result.Ok c, e, b, back, back1)))
-  match s with
-  | Sum.inl t =>
-    let (r, self, next, back2, back3) := t
-    ok (done (r, self, let b1 := back2 next
-                       back1 b1,
-      fun v => let v1 := back3 { self with t := v }
-               back v1))
-  | Sum.inr s1 =>
-    match s1 with
-    | Sum.inl t =>
-      let (f, f1, e1, i1, b1, i2, i3) := t
-      ok (cont (f, f1, e1, i1, b1, i2, i3))
-    | Sum.inr t => let (r, e1, b1, f, f1) := t
-                   ok (done (r, e1, f1 b1, f))
+  if i < n
+  then
+    let (r, next, self, call_mut_back, call_mut_back1) ←
+      Eng.count.closure.Insts.CoreOpsFunctionFnMutPairMut3EngU32ResultBoolTuple.call_mut
+        b (e, i)
+    match r with
+    | core.result.Result.Ok val =>
+      let (c1, back2, back3) ←
+        if val
+        then
+          do
+          let c2 ← c + 1#u32
+          ok (c2, fun c3 => let b1 := call_mut_back1 c3
+                            b1, fun e1 => (call_mut_back e1).t)
+        else
+          ok (c, fun c2 => let b1 := call_mut_back1 c2
+                           b1, fun e1 => (call_mut_back e1).t)
+      let i1 ← i + 1#u32
+      ok (cont (fun v => let v1 := back3 { self with t := v }
+                         back v1, fun b1 => let b2 := back2 b1
+                                            back1 b2, self, next, i1, c1))
+    | core.result.Result.Err e1 =>
+      ok (done (core.result.Result.Err e1, self,
+        fun e2 => back (call_mut_back e2).t,
+        let b1 := call_mut_back1 next
+        back1 b1))
+  else
+    ok (done (core.result.Result.Ok c, e, fun (e1 : Eng) => back e1.t, back1
+      b))
 
 /-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::telescope::<_, _, closures_mut_captures::{closures_mut_captures::Eng<'a>}::count::{closure}<_, _, _, _>>]: loop 0:
     Source: 'tests/src/closures-mut-captures.rs', lines 21:8-28:5 -/
@@ -263,13 +235,13 @@ def Eng.telescope01countclosure_loop.body
 def Eng.telescope01countclosure_loop
   (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) (back1 : Bool → Bool)
   (e : Eng) (n : Std.U32) (b : Bool) (i : Std.U32) (c : Std.U32) :
-  Result ((core.result.Result Std.U32 Unit) × Eng × Bool × (alloc.vec.Vec
-    Std.U32 → alloc.vec.Vec Std.U32))
+  Result ((core.result.Result Std.U32 Unit) × Eng × (Eng → alloc.vec.Vec
+    Std.U32) × Bool)
   := do
   loop
-    (fun (back2, back3, e1, n1, b1, i1, c1) =>
-      Eng.telescope01countclosure_loop.body back2 back3 e1 n1 b1 i1 c1)
-    (back, back1, e, n, b, i, c)
+    (fun (back2, back3, e1, b1, i1, c1) =>
+      Eng.telescope01countclosure_loop.body n back2 back3 e1 b1 i1 c1)
+    (back, back1, e, b, i, c)
 
 /-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::telescope::<_, _, closures_mut_captures::{closures_mut_captures::Eng<'a>}::count::{closure}<_, _, _, _>>]:
     Source: 'tests/src/closures-mut-captures.rs', lines 14:4-28:5 -/
@@ -281,9 +253,11 @@ def Eng.telescope01countclosure
   let (r, e, back, back1) ←
     Eng.telescope01countclosure_loop (fun v => v) (fun b => b) self n next
       0#u32 0#u32
-  let back2 := fun (self1 : Eng) => let v := back1 self1.t
-                                    { self with t := v }
-  ok (r, e, back2, back)
+  let back2 :=
+    fun (self1 : Eng) =>
+      let v := back { e with t := self1.t }
+      { self with t := v }
+  ok (r, e, back2, back1)
 
 /-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::count]:
     Source: 'tests/src/closures-mut-captures.rs', lines 31:4-41:5
@@ -293,17 +267,13 @@ def Eng.count
   Result ((core.result.Result (Std.U32 × Bool) Unit) × Eng × (Eng → Eng))
   := do
   let (r, self1, telescope_back, c) ← Eng.telescope01countclosure self n false
-  let (r1, back) ←
-    match r with
-    | core.result.Result.Ok val =>
-      ok (core.result.Result.Ok (val, c), fun e => (telescope_back e).t)
-    | core.result.Result.Err e =>
-      ok (core.result.Result.Err e, fun e1 => (telescope_back e1).t)
-  let back'a :=
-    fun (self2 : Eng) =>
-      let v := back { self1 with t := self2.t }
-      { self with t := v }
-  ok (r1, self1, back'a)
+  match r with
+  | core.result.Result.Ok val =>
+    let back'a := fun self2 => { self with t := (telescope_back self2).t }
+    ok (core.result.Result.Ok (val, c), self1, back'a)
+  | core.result.Result.Err e =>
+    let back'a := fun self2 => { self with t := (telescope_back self2).t }
+    ok (core.result.Result.Err e, self1, back'a)
 
 /-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::consecutive::{impl core::ops::function::Fn<(&'_3 closures_mut_captures::Eng<'_2>, u32), u32> for closures_mut_captures::{closures_mut_captures::Eng<'a>}::consecutive::{closure}<'a, '_1, '_2>}::call]:
     Source: 'tests/src/closures-mut-captures.rs', lines 45:20-45:46 -/
@@ -422,23 +392,21 @@ def Eng.shifted_below
   (self : Eng) (a : Std.U32) (b : Std.U32) :
   Result (Bool × Eng × (Eng → Eng))
   := do
-  let (b1, self1, back) ←
-    if a < 9#u32
-    then
-      do
-      let (b2, _, c, all_back) ←
-        core.iter.traits.iterator.Iterator.all0T0shifted_belowclosureU32.default
-          (core.iter.traits.iterator.IteratorRange core.iter.range.StepU32)
-          { start := 0#u32, «end» := 2#u32 } (self, a, b)
-      let (self2, _, _) := c
-      ok (b2, self2, fun e => let (⟨ v, _ ⟩, _, _) := all_back (e, a, b)
-                              v)
-    else ok (false, self, fun (e : Eng) => e.t)
-  let back'a :=
-    fun (self2 : Eng) =>
-      let v := back { self1 with t := self2.t }
-      { self with t := v }
-  ok (b1, self1, back'a)
+  if a < 9#u32
+  then
+    let (b1, _, c, all_back) ←
+      core.iter.traits.iterator.Iterator.all0T0shifted_belowclosureU32.default
+        (core.iter.traits.iterator.IteratorRange core.iter.range.StepU32)
+        { start := 0#u32, «end» := 2#u32 } (self, a, b)
+    let (self1, _, _) := c
+    let back'a :=
+      fun self2 =>
+        let (⟨ v, _ ⟩, _, _) := all_back (self2, a, b)
+        { self with t := v }
+    ok (b1, self1, back'a)
+  else
+    let back'a := fun (self1 : Eng) => { self with t := self1.t }
+    ok (false, self, back'a)
 
 /-- [closures_mut_captures::{closures_mut_captures::Eng<'a>}::shifted_below::{impl core::ops::function::FnMut<(u32,), bool> for closures_mut_captures::{closures_mut_captures::Eng<'a>}::shifted_below::{closure}<'a, '_1, '_2, '_3, '_4, '_5>}::call_mut]:
     Source: 'tests/src/closures-mut-captures.rs', lines 62:28-62:57 -/
@@ -734,22 +702,17 @@ def test_count : Result Unit := do
     | core.result.Result.Err _ => ok (false, fun e1 => (count_back e1).t)
   massert b
   let (r1, e1, count_back1) ← Eng.count e 4#u32
-  let (b1, back1) ←
-    match r1 with
-    | core.result.Result.Ok p =>
-      let (i, b2) := p
-      match i with
-      | 2#uscalar =>
-        if b2
-        then ok (true, fun e2 => (count_back1 e2).t)
-        else ok (false, fun e2 => (count_back1 e2).t)
-      | _ => ok (false, fun e2 => (count_back1 e2).t)
-    | core.result.Result.Err _ => ok (false, fun e2 => (count_back1 e2).t)
-  massert b1
-  let v := back1 e1
-  let t := back { e with t := v }
-  let i := alloc.vec.Vec.len t
-  massert (i = 6#usize)
+  match r1 with
+  | core.result.Result.Ok p =>
+    let (i, b1) := p
+    match i with
+    | 2#uscalar =>
+      massert b1
+      let t := back { e with t := (count_back1 e1).t }
+      let i1 := alloc.vec.Vec.len t
+      massert (i1 = 6#usize)
+    | _ => fail panic
+  | core.result.Result.Err _ => fail panic
 
 /- Unit test for [closures_mut_captures::test_count] -/
 #guard (test_count).reducesTo ()

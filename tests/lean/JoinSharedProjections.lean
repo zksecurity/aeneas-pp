@@ -32,11 +32,9 @@ inductive Number where
     Source: 'tests/src/join-shared-projections.rs', lines 14:0-20:1
     Visibility: public -/
 def decode (x : Std.U32) (owned : Bool) : Result (Option Number) := do
-  let n ←
-    if owned
-    then ok (Number.Owned (alloc.vec.Vec.new Std.U32))
-    else ok (Number.Borrowed x)
-  ok (some n)
+  if owned
+  then ok (some (Number.Owned (alloc.vec.Vec.new Std.U32)))
+  else ok (some (Number.Borrowed x))
 
 /-- [join_shared_projections::value]:
     Source: 'tests/src/join-shared-projections.rs', lines 22:0-27:1
@@ -52,22 +50,16 @@ def value (n : Number) : Result Std.U32 := do
 def sum
   (x : Std.U32) (y : Std.U32) (owned : Bool) : Result (Option Std.U32) := do
   let o ← decode x owned
-  let s : _root_.Sum _ (Option Std.U32) ←
-    match o with
-    | none => ok (Sum.inl ())
-    | some a =>
-      do
-      let o1 ← decode y owned
-      match o1 with
-      | none => ok (Sum.inl ())
-      | some b =>
-        let i ← value a
-        let i1 ← value b
-        let i2 ← i + i1
-        ok (Sum.inr (some i2))
-  match s with
-  | Sum.inl _ => ok none
-  | Sum.inr o1 => ok o1
+  match o with
+  | none => ok none
+  | some a =>
+    let o1 ← decode y owned
+    match o1 with
+    | none => ok none
+    | some b => let i ← value a
+                let i1 ← value b
+                let i2 ← i + i1
+                ok (some i2)
 
 /-- [join_shared_projections::test_sum]:
     Source: 'tests/src/join-shared-projections.rs', lines 43:0-46:1
@@ -82,13 +74,11 @@ def test_sum : Result Unit := do
                 | _ => ok false
   massert b
   let o1 ← sum 1#u32 2#u32 true
-  let b1 ←
-    match o1 with
-    | none => ok false
-    | some i => match i with
-                | 0#uscalar => ok true
-                | _ => ok false
-  massert b1
+  match o1 with
+  | none => fail panic
+  | some i => match i with
+              | 0#uscalar => ok ()
+              | _ => fail panic
 
 /- Unit test for [join_shared_projections::test_sum] -/
 #guard (test_sum).reducesTo ()

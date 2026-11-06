@@ -131,38 +131,34 @@ def let_else_chain
       | Class.Ctor =>
         let acc2 ← acc1 + 1#u32
         let r ← check c
-        let s : _root_.Sum (core.result.Result (Option Std.U32) Std.U32)
-          ((core.result.Result (Option Std.U32) Std.U32) × _) ←
-          match r with
-          | core.result.Result.Ok val =>
-            do
-            let s1 : _root_.Sum _ (core.result.Result (Option Std.U32) Std.U32)
-              ←
-              match w with
-              | Val.Neutral h1 _ =>
-                match h1 with
-                | Head.Var i => ok (Sum.inl i)
-                | Head.Const _ _ => ok (Sum.inr (core.result.Result.Err 7#u32))
-              | Val.Nat n =>
-                do
-                let r1 ← check n
-                match r1 with
-                | core.result.Result.Ok val1 => ok (Sum.inl val1)
-                | core.result.Result.Err e =>
-                  ok (Sum.inr (core.result.Result.Err e))
-              | Val.Sort => ok (Sum.inr (core.result.Result.Ok (some 0#u32)))
-            match s1 with
-            | Sum.inl y =>
-              let acc3 ← acc2 + 10#u32
-              let i ← val + y
-              let i1 ← i + sp
-              let i2 ← i1 + c
-              ok (Sum.inr (core.result.Result.Ok (some i2), acc3))
-            | Sum.inr r1 => ok (Sum.inl r1)
-          | core.result.Result.Err e => ok (Sum.inl (core.result.Result.Err e))
-        match s with
-        | Sum.inl r1 => ok (r1, acc2)
-        | Sum.inr p => ok p
+        match r with
+        | core.result.Result.Ok val =>
+          let s : _root_.Sum _ ((core.result.Result (Option Std.U32) Std.U32) ×
+            _) ←
+            match w with
+            | Val.Neutral h1 _ =>
+              match h1 with
+              | Head.Var i => ok (Sum.inl i)
+              | Head.Const _ _ =>
+                ok (Sum.inr (core.result.Result.Err 7#u32, acc2))
+            | Val.Nat n =>
+              do
+              let r1 ← check n
+              match r1 with
+              | core.result.Result.Ok val1 => ok (Sum.inl val1)
+              | core.result.Result.Err e =>
+                ok (Sum.inr (core.result.Result.Err e, acc2))
+            | Val.Sort =>
+              ok (Sum.inr (core.result.Result.Ok (some 0#u32), acc2))
+          match s with
+          | Sum.inl y =>
+            let acc3 ← acc2 + 10#u32
+            let i ← val + y
+            let i1 ← i + sp
+            let i2 ← i1 + c
+            ok (core.result.Result.Ok (some i2), acc3)
+          | Sum.inr p => ok p
+        | core.result.Result.Err e => ok (core.result.Result.Err e, acc2)
       | _ => ok (core.result.Result.Ok none, acc1)
   | _ => ok (core.result.Result.Ok none, acc1)
 
@@ -190,26 +186,24 @@ def all_return (v : Val) : Result Std.U32 := do
     Visibility: public -/
 def skip_to_outer
   (v : Val) (b : Bool) (x : Std.U32) : Result (Std.U32 × Std.U32) := do
-  let (x1, r) ←
-    if b
-    then
-      do
-      let (x2, r1) ←
-        match v with
-        | Val.Neutral _ _ => do
-                             let x3 ← x + 100#u32
-                             ok (x3, 0#u32)
-        | Val.Nat n => do
-                       let x3 ← x + n
-                       ok (x3, n)
-        | Val.Sort => ok (x, 1#u32)
-      let x3 ← x2 + 1#u32
-      ok (x3, r1)
-    else do
-         let x2 ← x + 2#u32
-         ok (x2, 0#u32)
-  let i ← x1 + r
-  ok (i, x1)
+  if b
+  then
+    match v with
+    | Val.Neutral _ _ =>
+      let x1 ← x + 100#u32
+      let x2 ← x1 + 1#u32
+      let i ← x2 + 0#u32
+      ok (i, x2)
+    | Val.Nat n => let x1 ← x + n
+                   let x2 ← x1 + 1#u32
+                   let i ← x2 + n
+                   ok (i, x2)
+    | Val.Sort => let x1 ← x + 1#u32
+                  let i ← x1 + 1#u32
+                  ok (i, x1)
+  else let x1 ← x + 2#u32
+       let i ← x1 + 0#u32
+       ok (i, x1)
 
 /-- [forward_scopes::scopes_in_loop]: loop body 0:
     Source: 'tests/src/forward-scopes.rs', lines 1:0-118:5
@@ -237,21 +231,21 @@ def scopes_in_loop_loop.body
               match cls with
               | Class.Def =>
                 if c > 50#u32
-                then ok (Sum.inr (Sum.inl ()))
+                then ok (Sum.inr (Sum.inr ()))
                 else do
                      let n1 ← n + 1#u32
                      ok (Sum.inl n1)
               | Class.Ctor => do
                               let n1 ← n + c
                               ok (Sum.inl n1)
-              | Class.Other => ok (Sum.inr (Sum.inr i2))
+              | Class.Other => ok (Sum.inr (Sum.inl i2))
             match s2 with
             | Sum.inl n1 => let n2 ← n1 + 1#u32
                             ok (Sum.inr (Sum.inl (n2, i2)))
             | Sum.inr s3 =>
               match s3 with
-              | Sum.inl _ => ok (Sum.inr (Sum.inr ()))
-              | Sum.inr i3 => ok (Sum.inl i3)
+              | Sum.inl i3 => ok (Sum.inl i3)
+              | Sum.inr _ => ok (Sum.inr (Sum.inr ()))
         | _ => ok (Sum.inl i2)
       match s1 with
       | Sum.inl i3 => ok (Sum.inr (n, i3))
@@ -356,18 +350,11 @@ def panic_or_return (v : Val) (x : Std.U32) : Result Std.U32 := do
                    massert (n < 50#u32)
                    ok (Sum.inl n)
     | Val.Sort => ok (Sum.inr x)
-  let s1 : _root_.Sum Std.U32 Std.U32 ←
-    match s with
-    | Sum.inl y =>
-      if y > x
-      then do
-           let z ← y - x
-           let x1 ← z + 1#u32
-           ok (Sum.inr x1)
-      else ok s
-    | Sum.inr i => ok (Sum.inl i)
-  match s1 with
-  | Sum.inl i => ok i
+  match s with
+  | Sum.inl y => if y > x
+                 then let z ← y - x
+                      z + 1#u32
+                 else ok y
   | Sum.inr i => ok i
 
 /-- [forward_scopes::loop_in_scope]: loop body 0:
@@ -385,28 +372,20 @@ def loop_in_scope_loop.body
     Source: 'tests/src/forward-scopes.rs', lines 167:12-169:13
     Visibility: public -/
 @[rust_loop]
-def loop_in_scope_loop
-  (m : Std.U32) (n : Std.U32) (m1 : Std.U32) (i : Std.U32) :
-  Result Std.U32
-  := do
+def loop_in_scope_loop (m : Std.U32) (i : Std.U32) : Result Std.U32 := do
   loop
-    (fun i1 => loop_in_scope_loop.body m1 i1)
+    (fun i1 => loop_in_scope_loop.body m i1)
     i
 
 /-- [forward_scopes::loop_in_scope]:
     Source: 'tests/src/forward-scopes.rs', lines 163:0-176:1
     Visibility: public -/
 def loop_in_scope (v : Val) (n : Std.U32) : Result Std.U32 := do
-  let s ←
-    match v with
-    | Val.Neutral _ _ => ok (Sum.inl 0#u32)
-    | Val.Nat m => do
-                   let k ← loop_in_scope_loop m n m 0#u32
-                   ok (Sum.inl k)
-    | Val.Sort => ok (Sum.inr n)
-  match s with
-  | Sum.inl k => k + n
-  | Sum.inr i => ok i
+  match v with
+  | Val.Neutral _ _ => 0#u32 + n
+  | Val.Nat m => let k ← loop_in_scope_loop m 0#u32
+                 k + n
+  | Val.Sort => ok n
 
 /-- [forward_scopes::live_borrow]:
     Source: 'tests/src/forward-scopes.rs', lines 180:0-198:1
@@ -417,35 +396,32 @@ def live_borrow
   := do
   let (r, index_mut_back) ← Array.index_mut_usize a 0#usize
   let r1 ← r + 1#u32
-  let s ←
-    match v with
-    | Val.Nat n =>
-      do
-      let r2 ← r1 + n
-      let s1 ←
-        match w with
-        | Val.Neutral _ _ => ok (Sum.inl 1#u32)
-        | Val.Nat m => ok (Sum.inl m)
-        | Val.Sort =>
-          do
-          let r3 ← r2 + 100#u32
-          ok (Sum.inr (0#u32, r3, index_mut_back))
-      match s1 with
-      | Sum.inl m =>
-        let r3 ← r2 + m
-        let a1 := index_mut_back r3
-        let i ← Array.index_usize a1 1#usize
-        let i1 ← i + r3
-        let a2 ← Array.update a1 1#usize i1
-        let r4 ← Array.index_usize a2 1#usize
-        ok (Sum.inr (r4, a2))
-      | Sum.inr t => ok (Sum.inl t)
-    | _ => ok (Sum.inl (r1, r1, index_mut_back))
-  match s with
-  | Sum.inl t => let (i, r2, back) := t
-                 let a1 := back r2
-                 ok (i, a1)
-  | Sum.inr p => ok p
+  match v with
+  | Val.Nat n =>
+    let r2 ← r1 + n
+    match w with
+    | Val.Neutral _ _ =>
+      let r3 ← r2 + 1#u32
+      let a1 := index_mut_back r3
+      let i ← Array.index_usize a1 1#usize
+      let i1 ← i + r3
+      let a2 ← Array.update a1 1#usize i1
+      let r4 ← Array.index_usize a2 1#usize
+      ok (r4, a2)
+    | Val.Nat m =>
+      let r3 ← r2 + m
+      let a1 := index_mut_back r3
+      let i ← Array.index_usize a1 1#usize
+      let i1 ← i + r3
+      let a2 ← Array.update a1 1#usize i1
+      let r4 ← Array.index_usize a2 1#usize
+      ok (r4, a2)
+    | Val.Sort =>
+      let r3 ← r2 + 100#u32
+      let a1 := index_mut_back r3
+      ok (0#u32, a1)
+  | _ => let a1 := index_mut_back r1
+         ok (r1, a1)
 
 /-- [forward_scopes::live_borrow_rev]:
     Source: 'tests/src/forward-scopes.rs', lines 201:0-216:1
@@ -458,22 +434,24 @@ def live_borrow_rev
   let r1 ← r + 1#u32
   match v with
   | Val.Nat n =>
-    let a1 ←
-      match n with
-      | 0#uscalar =>
-        do
-        let r2 ← r1 + 3#u32
-        let a2 := index_mut_back r2
-        let i ← Array.index_usize a2 1#usize
-        let i1 ← i + 1#u32
-        Array.update a2 1#usize i1
-      | _ => do
-             let r2 ← r1 + n
-             ok (index_mut_back r2)
-    let i ← Array.index_usize a1 0#usize
-    let i1 ← Array.index_usize a1 1#usize
-    let r2 ← i + i1
-    ok (r2, a1)
+    match n with
+    | 0#uscalar =>
+      let r2 ← r1 + 3#u32
+      let a1 := index_mut_back r2
+      let i ← Array.index_usize a1 1#usize
+      let i1 ← i + 1#u32
+      let a2 ← Array.update a1 1#usize i1
+      let i2 ← Array.index_usize a2 0#usize
+      let i3 ← Array.index_usize a2 1#usize
+      let r3 ← i2 + i3
+      ok (r3, a2)
+    | _ =>
+      let r2 ← r1 + n
+      let a1 := index_mut_back r2
+      let i ← Array.index_usize a1 0#usize
+      let i1 ← Array.index_usize a1 1#usize
+      let r3 ← i + i1
+      ok (r3, a1)
   | _ => let r2 ← r1 + 2#u32
          let a1 := index_mut_back r2
          ok (r2, a1)
@@ -497,21 +475,15 @@ def shared_from_call
   (a : Array Std.U32 2#usize) (v : Val) (k : Std.U32) :
   Result (Std.U32 × (Array Std.U32 2#usize))
   := do
-  let s ←
-    match v with
-    | Val.Neutral _ _ =>
-      do
-      let s1 ← Array.index_usize a 1#usize
-      ok (Sum.inl (s1, a))
-    | Val.Nat _ => do
-                   let (s1, a1) ← bump_and_get a k
-                   ok (Sum.inl (s1, a1))
-    | Val.Sort => ok (Sum.inr (0#u32, a))
-  match s with
-  | Sum.inl p => let (s1, back) := p
-                 let i ← s1 + 1#u32
-                 ok (i, back)
-  | Sum.inr p => ok p
+  match v with
+  | Val.Neutral _ _ =>
+    let s ← Array.index_usize a 1#usize
+    let i ← s + 1#u32
+    ok (i, a)
+  | Val.Nat _ => let (s, a1) ← bump_and_get a k
+                 let i ← s + 1#u32
+                 ok (i, a1)
+  | Val.Sort => ok (0#u32, a)
 
 /-- [forward_scopes::conditional_referent]:
     Source: 'tests/src/forward-scopes.rs', lines 235:0-242:1
@@ -520,12 +492,12 @@ def conditional_referent
   (a : Array Std.U32 2#usize) (v : Val) :
   Result (Std.U32 × (Array Std.U32 2#usize))
   := do
-  let i ←
-    match v with
-    | Val.Neutral _ _ => Array.index_usize a 1#usize
-    | Val.Nat _ => Array.index_usize a 0#usize
-    | Val.Sort => ok 0#u32
-  ok (i, a)
+  match v with
+  | Val.Neutral _ _ => let s ← Array.index_usize a 1#usize
+                       ok (s, a)
+  | Val.Nat _ => let s ← Array.index_usize a 0#usize
+                 ok (s, a)
+  | Val.Sort => ok (0#u32, a)
 
 /-- [forward_scopes::loop_live_borrow]: loop body 0:
     Source: 'tests/src/forward-scopes.rs', lines 1:0-261:5
@@ -604,21 +576,11 @@ def call_then_maybe_call
   Result ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec Std.U32))
   := do
   let (r, v1) ← push_checked v 0#u32
-  let s ←
-    match r with
-    | core.result.Result.Ok val =>
-      if b
-      then
-        do
-        let (r1, v2) ← push_checked v1 val
-        match r1 with
-        | core.result.Result.Ok _ => ok (Sum.inr (r1, v2))
-        | core.result.Result.Err _ => ok (Sum.inl (r1, v2))
-      else ok (Sum.inr (r, v1))
-    | core.result.Result.Err _ => ok (Sum.inl (r, v1))
-  match s with
-  | Sum.inl p => ok p
-  | Sum.inr p => ok p
+  match r with
+  | core.result.Result.Ok val => if b
+                                 then push_checked v1 val
+                                 else ok (r, v1)
+  | core.result.Result.Err _ => ok (r, v1)
 
 /-- [forward_scopes::get_or_zero]:
     Source: 'tests/src/forward-scopes.rs', lines 286:0-291:1
@@ -639,19 +601,11 @@ def contains_zero_loop.body
   Result (ControlFlow (core.slice.iter.Iter Std.U32) Bool)
   := do
   let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
-  let s ←
-    match o with
-    | none => ok (Sum.inr (Sum.inr false))
-    | some x =>
-      if x = 0#u32
-      then ok (Sum.inl ())
-      else ok (Sum.inr (Sum.inl iter1))
-  match s with
-  | Sum.inl _ => ok (done true)
-  | Sum.inr s1 =>
-    match s1 with
-    | Sum.inl i => ok (cont i)
-    | Sum.inr b => ok (done b)
+  match o with
+  | none => ok (done false)
+  | some x => if x = 0#u32
+              then ok (done true)
+              else ok (cont iter1)
 
 /-- [forward_scopes::contains_zero]: loop 0:
     Source: 'tests/src/forward-scopes.rs', lines 295:14-301:1
@@ -680,11 +634,11 @@ def first_plus (v : Slice Std.U32) (c : Bool) : Result (Option Std.U32) := do
       0#usize
   match o with
   | some val =>
-    let r ← if c
-            then ok 1#u32
-            else ok 2#u32
-    let i ← val + r
-    ok (some i)
+    if c
+    then let i ← val + 1#u32
+         ok (some i)
+    else let i ← val + 2#u32
+         ok (some i)
   | none => ok none
 
 /-- [forward_scopes::test_let_else_chain]:
@@ -730,17 +684,15 @@ def test_let_else_chain : Result Unit := do
   let (r3, acc2) ←
     let_else_chain (Val.Neutral (Head.Const 5#u32 Class.Ctor) 2#u32) Val.Sort
       acc1
-  let b3 ←
-    match r3 with
-    | core.result.Result.Ok o =>
-      match o with
-      | none => ok false
-      | some i1 => match i1 with
-                   | 0#uscalar => ok true
-                   | _ => ok false
-    | core.result.Result.Err _ => ok false
-  massert b3
-  massert (acc2 = 17#u32)
+  match r3 with
+  | core.result.Result.Ok o =>
+    match o with
+    | none => fail panic
+    | some i1 =>
+      match i1 with
+      | 0#uscalar => massert (acc2 = 17#u32)
+      | _ => fail panic
+  | core.result.Result.Err _ => fail panic
 
 /- Unit test for [forward_scopes::test_let_else_chain] -/
 #guard (test_let_else_chain).reducesTo ()
@@ -947,16 +899,13 @@ def test_call_then_maybe_call : Result Unit := do
   let i := alloc.vec.Vec.len v
   massert (i = 2#usize)
   let (r1, v1) ← call_then_maybe_call v false
-  let b1 ←
-    match r1 with
-    | core.result.Result.Ok i1 =>
-      match i1 with
-      | 1#uscalar => ok true
-      | _ => ok false
-    | core.result.Result.Err _ => ok false
-  massert b1
-  let i1 := alloc.vec.Vec.len v1
-  massert (i1 = 3#usize)
+  match r1 with
+  | core.result.Result.Ok i1 =>
+    match i1 with
+    | 1#uscalar => let i2 := alloc.vec.Vec.len v1
+                   massert (i2 = 3#usize)
+    | _ => fail panic
+  | core.result.Result.Err _ => fail panic
 
 /- Unit test for [forward_scopes::test_call_then_maybe_call] -/
 #guard (test_call_then_maybe_call).reducesTo ()

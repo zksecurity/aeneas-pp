@@ -67,18 +67,18 @@ def is_short (a : Slice Std.U32) : Result (Bool × (Slice Std.U32)) := do
 def bump_first_if_long
   (a : Slice Std.U32) : Result (Std.U32 × (Slice Std.U32)) := do
   let (o, first_mut_if_long_back) ← first_mut_if_long a
-  let (a1, n) ←
-    match o with
-    | none => let a2 := first_mut_if_long_back none
-              ok (a2, 0#u32)
-    | some x =>
-      do
-      let x1 ← x + 1#u32
-      let a2 := first_mut_if_long_back (some x1)
-      ok (a2, x1)
-  let i ← Slice.index_usize a1 0#usize
-  let i1 ← n + i
-  ok (i1, a1)
+  match o with
+  | none =>
+    let a1 := first_mut_if_long_back none
+    let i ← Slice.index_usize a1 0#usize
+    let i1 ← 0#u32 + i
+    ok (i1, a1)
+  | some x =>
+    let x1 ← x + 1#u32
+    let a1 := first_mut_if_long_back (some x1)
+    let i ← Slice.index_usize a1 0#usize
+    let i1 ← x1 + i
+    ok (i1, a1)
 
 /-- [call_borrow_joins::test_get_or_zero]:
     Source: 'tests/src/call-borrow-joins.rs', lines 38:0-42:1

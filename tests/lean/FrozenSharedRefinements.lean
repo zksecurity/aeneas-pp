@@ -38,16 +38,20 @@ structure Eng where
     Source: 'tests/src/frozen-shared-refinements.rs', lines 24:4-27:5
     Visibility: public -/
 def Eng.pick (self : Eng) (b : Bool) : Result Std.U32 := do
-  let x ←
-    if b
-    then
+  if b
+  then
+    let x ←
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
         self.s.v 0#usize
-    else ok self.s.n
-  let i ←
-    alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
-      self.s.v 1#usize
-  x + i
+    let i ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+        self.s.v 1#usize
+    x + i
+  else
+    let i ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+        self.s.v 1#usize
+    self.s.n + i
 
 /-- [frozen_shared_refinements::{frozen_shared_refinements::Eng<'a>}::sum]: loop body 0:
     Source: 'tests/src/frozen-shared-refinements.rs', lines 32:8-35:9
@@ -90,39 +94,25 @@ def Eng.sum (self : Eng) (i : Std.Usize) : Result Std.U32 := do
 @[rust_loop_body]
 def Eng.find_loop.body
   (self : Eng) (x : Std.U32) (i : Std.Usize) :
-  Result (ControlFlow (Std.U32 × Std.Usize) (Option Std.Usize))
+  Result (ControlFlow Std.Usize (Option Std.Usize))
   := do
   let i1 := alloc.vec.Vec.len self.s.v
-  let s : _root_.Sum _ (_root_.Sum _ (Option Std.Usize)) ←
-    if i < i1
-    then
-      do
-      let i2 ←
+  if i < i1
+  then
+    let i2 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+        self.s.v i
+    if i2 = x
+    then ok (done (some i))
+    else
+      let i3 ←
         alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
-          self.s.v i
-      let s1 ←
-        if i2 = x
-        then ok (Sum.inl ())
-        else
-          do
-          let i3 ←
-            alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
-              self.env.v 0#usize
-          if i3 = x
-          then ok (Sum.inl ())
-          else let i4 ← i + 1#usize
-               ok (Sum.inr (x, i4))
-      match s1 with
-      | Sum.inl _ => ok (Sum.inr (Sum.inr (some i)))
-      | Sum.inr p => ok (Sum.inr (Sum.inl p))
-    else ok (Sum.inl ())
-  match s with
-  | Sum.inl _ => ok (done none)
-  | Sum.inr s1 =>
-    match s1 with
-    | Sum.inl p => let (i2, i3) := p
-                   ok (cont (i2, i3))
-    | Sum.inr o => ok (done o)
+          self.env.v 0#usize
+      if i3 = x
+      then ok (done (some i))
+      else let i4 ← i + 1#usize
+           ok (cont i4)
+  else ok (done none)
 
 /-- [frozen_shared_refinements::{frozen_shared_refinements::Eng<'a>}::find]: loop 0:
     Source: 'tests/src/frozen-shared-refinements.rs', lines 43:8-50:5
@@ -131,8 +121,8 @@ def Eng.find_loop.body
 def Eng.find_loop
   (self : Eng) (x : Std.U32) (i : Std.Usize) : Result (Option Std.Usize) := do
   loop
-    (fun (x1, i1) => Eng.find_loop.body self x1 i1)
-    (x, i)
+    (fun i1 => Eng.find_loop.body self x i1)
+    i
 
 /-- [frozen_shared_refinements::{frozen_shared_refinements::Eng<'a>}::find]:
     Source: 'tests/src/frozen-shared-refinements.rs', lines 41:4-50:5
@@ -146,23 +136,34 @@ def Eng.find (self : Eng) (x : Std.U32) : Result (Option Std.Usize) := do
     Visibility: public -/
 def read_join_then_write
   (e : Eng) (b : Bool) : Result (Std.U32 × Eng × (Eng → Eng)) := do
-  let x ←
-    if b
-    then
+  if b
+  then
+    let x ←
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) 
         e.s.v 0#usize
-    else ok e.s.n
-  let i ← x + 1#u32
-  let (_, index_mut_back) ←
-    alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Std.U32)
-      e.s.v 0#usize
-  let v := index_mut_back i
-  let i1 ←
-    alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v
-      0#usize
-  let i2 ← i1 + x
-  let back := fun (e1 : Eng) => { e with s := e1.s }
-  ok (i2, { e with s := { v, n := x } }, back)
+    let i ← x + 1#u32
+    let (_, index_mut_back) ←
+      alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Std.U32)
+        e.s.v 0#usize
+    let v := index_mut_back i
+    let i1 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v
+        0#usize
+    let i2 ← i1 + x
+    let back := fun (e1 : Eng) => { e with s := e1.s }
+    ok (i2, { e with s := { v, n := x } }, back)
+  else
+    let i ← e.s.n + 1#u32
+    let (_, index_mut_back) ←
+      alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Std.U32)
+        e.s.v 0#usize
+    let v := index_mut_back i
+    let i1 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v
+        0#usize
+    let i2 ← i1 + e.s.n
+    let back := fun (e1 : Eng) => { e with s := e1.s }
+    ok (i2, { e with s := { e.s with v } }, back)
 
 /-- [frozen_shared_refinements::sum_then_write]:
     Source: 'tests/src/frozen-shared-refinements.rs', lines 64:0-70:1
@@ -170,41 +171,47 @@ def read_join_then_write
 def sum_then_write
   (e : Eng) (i : Std.Usize) : Result (Std.U32 × Eng × (Eng → Eng)) := do
   let acc ← Eng.sum e i
-  let (e1, n) ← if acc > 10#u32
-                then ok (e, e.s.n)
-                else ok (e, e.env.n)
-  let i1 ← acc + n
-  let back := fun (e2 : Eng) => { e with s := e2.s }
-  ok (i1, { e1 with s := { e1.s with n := i1 } }, back)
+  if acc > 10#u32
+  then
+    let i1 ← acc + e.s.n
+    let back := fun (e1 : Eng) => { e with s := e1.s }
+    ok (i1, { e with s := { e.s with n := i1 } }, back)
+  else
+    let i1 ← acc + e.env.n
+    let back := fun (e1 : Eng) => { e with s := e1.s }
+    ok (i1, { e with s := { e.s with n := i1 } }, back)
 
 /-- [frozen_shared_refinements::local_write]:
     Source: 'tests/src/frozen-shared-refinements.rs', lines 73:0-78:1
     Visibility: public -/
 def local_write
   (st : Store) (env : Store) (b : Bool) : Result (Std.U32 × Store) := do
-  let (s, x) ←
-    if b
-    then do
-         let x1 ← Eng.pick { s := st, env } true
-         ok (st, x1)
-    else ok (st, st.n)
-  let i ← x + 2#u32
-  ok (i, { s with n := i })
+  if b
+  then
+    let x ← Eng.pick { s := st, env } true
+    let i ← x + 2#u32
+    ok (i, { st with n := i })
+  else let i ← st.n + 2#u32
+       ok (i, { st with n := i })
 
 /-- [frozen_shared_refinements::pick2]:
     Source: 'tests/src/frozen-shared-refinements.rs', lines 81:0-84:1
     Visibility: public -/
 def pick2 (x : Store) (b : Bool) : Result Std.U32 := do
-  let y ←
-    if b
-    then
+  if b
+  then
+    let y ←
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) 
         x.v 0#usize
-    else ok x.n
-  let i ←
-    alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) 
-      x.v 1#usize
-  y + i
+    let i ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) 
+        x.v 1#usize
+    y + i
+  else
+    let i ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) 
+        x.v 1#usize
+    x.n + i
 
 /-- [frozen_shared_refinements::store]:
     Source: 'tests/src/frozen-shared-refinements.rs', lines 86:0-91:1 -/
@@ -242,14 +249,13 @@ def test_reads : Result Unit := do
                  | _ => ok false
   massert b1
   let o2 ← Eng.find { s := st, env } 8#u32
-  let b2 ← match o2 with
-           | none => ok true
-           | some _ => ok false
-  massert b2
-  let i3 ← pick2 env true
-  massert (i3 = 11#u32)
-  let i4 ← pick2 env false
-  massert (i4 = 7#u32)
+  match o2 with
+  | none =>
+    let i3 ← pick2 env true
+    massert (i3 = 11#u32)
+    let i4 ← pick2 env false
+    massert (i4 = 7#u32)
+  | some _ => fail panic
 
 /- Unit test for [frozen_shared_refinements::test_reads] -/
 #guard (test_reads).reducesTo ()

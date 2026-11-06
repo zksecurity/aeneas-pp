@@ -36,23 +36,20 @@ def Eng.guarded
   Result ((core.result.Result T Std.U32) × Eng × (Eng → Eng))
   := do
   let i ← self.d + 1#u32
-  let (r, e, back) ←
-    if i > 3#u32
-    then
-      do
-      let i1 ← i - 1#u32
-      ok (core.result.Result.Err i1, { self with d := i1 }, fun v => v)
-    else
-      do
-      let (r1, self1, call_once_back) ←
-        coreopsfunctionFnOnceT2TupleMutAEngResultTU32Inst.call_once f
-          { self with d := i }
-      let i1 ← self1.d - 1#u32
-      ok (r1, { self1 with d := i1 },
-        fun v => (call_once_back { self1 with t := v }).t)
-  let back'a := fun (self1 : Eng) => let v := back self1.t
-                                     { self with t := v }
-  ok (r, e, back'a)
+  if i > 3#u32
+  then
+    let i1 ← i - 1#u32
+    let back'a := fun (self1 : Eng) => { self with t := self1.t }
+    ok (core.result.Result.Err i1, { self with d := i1 }, back'a)
+  else
+    let (r, self1, call_once_back) ←
+      coreopsfunctionFnOnceT2TupleMutAEngResultTU32Inst.call_once f
+        { self with d := i }
+    let i1 ← self1.d - 1#u32
+    let back'a :=
+      fun (self2 : Eng) =>
+        { self with t := (call_once_back { self1 with t := self2.t }).t }
+    ok (r, { self1 with d := i1 }, back'a)
 
 /-- [closures_mut_args::{closures_mut_args::Eng<'a>}::under]:
     Source: 'tests/src/closures-mut-args.rs', lines 25:4-30:5 -/
@@ -206,22 +203,23 @@ def Eng.work
     Eng.guarded
       Eng.work.closure.Insts.CoreOpsFunctionFnOnceTupleMut3EngResultU32U32 self
       x
-  let (r1, self2, back) ←
-    match r with
-    | core.result.Result.Ok val =>
-      do
-      let (r2, self3, under_back) ←
-        Eng.under
-          Eng.work.closure_1.Insts.CoreOpsFunctionFnOncePairMut2EngU32ResultU32U32
-          self1 val ()
-      ok (r2, self3,
-        fun e => (guarded_back { self1 with t := (under_back e).t }).t)
-    | core.result.Result.Err _ => ok (r, self1, fun e => (guarded_back e).t)
-  let back'a :=
-    fun (self3 : Eng) =>
-      let v := back { self2 with t := self3.t }
-      { self with t := v }
-  ok (r1, self2, back'a)
+  match r with
+  | core.result.Result.Ok val =>
+    let (r1, self2, under_back) ←
+      Eng.under
+        Eng.work.closure_1.Insts.CoreOpsFunctionFnOncePairMut2EngU32ResultU32U32
+        self1 val ()
+    let back'a :=
+      fun self3 =>
+        {
+          self
+            with
+            t := (guarded_back { self1 with t := (under_back self3).t }).t
+        }
+    ok (r1, self2, back'a)
+  | core.result.Result.Err _ =>
+    let back'a := fun self2 => { self with t := (guarded_back self2).t }
+    ok (r, self1, back'a)
 
 /-- [closures_mut_args::{closures_mut_args::Eng<'a>}::push::{closure}]
     Source: 'tests/src/closures-mut-args.rs', lines 55:18-55:33 -/
@@ -610,14 +608,12 @@ def test_nest : Result Unit := do
     Eng.guarded
       test_nest.closure.Insts.CoreOpsFunctionFnOnceTupleMut1EngResultU32U32
       { t, d := 0#u32 } ()
-  let b1 ←
-    match r1 with
-    | core.result.Result.Ok i =>
-      match i with
-      | 2#uscalar => ok true
-      | _ => ok false
-    | core.result.Result.Err _ => ok false
-  massert b1
+  match r1 with
+  | core.result.Result.Ok i =>
+    match i with
+    | 2#uscalar => ok ()
+    | _ => fail panic
+  | core.result.Result.Err _ => fail panic
 
 /- Unit test for [closures_mut_args::test_nest] -/
 #guard (test_nest).reducesTo ()

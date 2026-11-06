@@ -62,22 +62,13 @@ def first_quote_loop.body
     core.cmp.PartialEq.ne.trait_default
       (core.option.Option.Insts.CoreCmpPartialEqOption
       (core.cmp.PartialEqShared core.cmp.PartialEqU8)) o (some 34#u8)
-  let s : _root_.Sum _ (_root_.Sum _ ((core.result.Result Std.U32 Unit) × _)) ←
-    if b
-    then ok (Sum.inr (Sum.inr (core.result.Result.Err (), cursor)))
-    else
-      do
-      let cursor1 ← cursor + 1#usize
-      if cursor1 > 3#usize
-      then ok (Sum.inl cursor1)
-      else ok (Sum.inr (Sum.inl cursor1))
-  match s with
-  | Sum.inl cursor1 => ok (done (core.result.Result.Ok 0#u32, cursor1))
-  | Sum.inr s1 =>
-    match s1 with
-    | Sum.inl i => ok (cont i)
-    | Sum.inr p => let (r, i) := p
-                   ok (done (r, i))
+  if b
+  then ok (done (core.result.Result.Err (), cursor))
+  else
+    let cursor1 ← cursor + 1#usize
+    if cursor1 > 3#usize
+    then ok (done (core.result.Result.Ok 0#u32, cursor1))
+    else ok (cont cursor1)
 
 /-- [loop_promoted_shared_refs::first_quote]: loop 0:
     Source: 'tests/src/loop-promoted-shared-refs.rs', lines 10:8-19:1

@@ -127,13 +127,11 @@ def test_class : Result Unit := do
   let i2 ← «class» s2 2#usize
   massert (i2 = 0#u32)
   let o ← first 3#u32
-  let b ←
-    match o with
-    | none => ok false
-    | some i3 => match i3 with
-                 | 3#uscalar => ok true
-                 | _ => ok false
-  massert b
+  match o with
+  | none => fail panic
+  | some i3 => match i3 with
+               | 3#uscalar => ok ()
+               | _ => fail panic
 
 /- Unit test for [closure_region_requirements::test_class] -/
 #guard (test_class).reducesTo ()

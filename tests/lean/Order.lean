@@ -520,13 +520,11 @@ def test_wrap_ref_partial_cmp : Result Unit := do
   let o ←
     core.cmp.impls.PartialOrdShared.partial_cmp
       Wrap.Insts.CoreCmpPartialOrdWrap 1#u64 2#u64
-  let b ←
-    match o with
-    | none => ok false
-    | some o1 => match o1 with
-                 | Ordering.lt => ok true
-                 | _ => ok false
-  massert b
+  match o with
+  | none => fail panic
+  | some o1 => match o1 with
+               | Ordering.lt => ok ()
+               | _ => fail panic
 
 /- Unit test for [order::test_wrap_ref_partial_cmp] -/
 #guard (test_wrap_ref_partial_cmp).reducesTo ()

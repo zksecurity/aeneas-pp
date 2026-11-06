@@ -40,32 +40,20 @@ inductive Node where
 /-- [join_shared_borrow_instances::node_eq]:
     Source: 'tests/src/join-shared-borrow-instances.rs', lines 24:0-29:1 -/
 def node_eq (a : Node) (b : Node) : Result Bool := do
-  let s ←
-    match a with
-    | Node.Bound a1 =>
-      match b with
-      | Node.Bound b1 => ok (Sum.inl (a1, b1))
-      | _ => ok (Sum.inr ())
-    | Node.Free a1 =>
-      match b with
-      | Node.Free b1 => ok (Sum.inl (a1, b1))
-      | _ => ok (Sum.inr ())
-    | Node.Sort a1 =>
-      match b with
-      | Node.Sort b1 => ok (Sum.inl (a1, b1))
-      | _ => ok (Sum.inr ())
-    | _ => ok (Sum.inr ())
-  let s1 ←
-    match s with
-    | Sum.inl p =>
-      do
-      let (a1, b1) := p
-      let b2 ← lift (core.cmp.impls.PartialEqU32.eq a1 b1)
-      ok (Sum.inr b2)
-    | Sum.inr _ => ok (Sum.inl ())
-  match s1 with
-  | Sum.inl _ => ok false
-  | Sum.inr b1 => ok b1
+  match a with
+  | Node.Bound a1 =>
+    match b with
+    | Node.Bound b1 => lift (core.cmp.impls.PartialEqU32.eq a1 b1)
+    | _ => ok false
+  | Node.Free a1 =>
+    match b with
+    | Node.Free b1 => lift (core.cmp.impls.PartialEqU32.eq a1 b1)
+    | _ => ok false
+  | Node.Sort a1 =>
+    match b with
+    | Node.Sort b1 => lift (core.cmp.impls.PartialEqU32.eq a1 b1)
+    | _ => ok false
+  | _ => ok false
 
 /-- [join_shared_borrow_instances::same]:
     Source: 'tests/src/join-shared-borrow-instances.rs', lines 31:0-47:1
@@ -86,65 +74,63 @@ def same
       | Node.App x y =>
         match right with
         | Node.App u v => ok (Sum.inl (x, y, u, v))
-        | _ => ok (Sum.inr (Sum.inr (left, right)))
+        | _ => do
+               let b1 ← node_eq left right
+               ok (Sum.inr b1)
       | Node.Lam x y =>
         match right with
         | Node.Lam u v => ok (Sum.inl (x, y, u, v))
-        | _ => ok (Sum.inr (Sum.inr (left, right)))
+        | _ => do
+               let b1 ← node_eq left right
+               ok (Sum.inr b1)
       | Node.Pi x y =>
         match right with
         | Node.Pi u v => ok (Sum.inl (x, y, u, v))
-        | _ => ok (Sum.inr (Sum.inr (left, right)))
+        | _ => do
+               let b1 ← node_eq left right
+               ok (Sum.inr b1)
       | Node.Let x y z =>
         match right with
         | Node.Let u v w =>
           do
           let b1 ← same nodes x u
-          let b2 ←
-            if b1
-            then
-              do
-              let b3 ← same nodes y v
-              if b3
-              then same nodes z w
-              else ok false
-            else ok false
-          ok (Sum.inr (Sum.inl b2))
-        | _ => ok (Sum.inr (Sum.inr (left, right)))
+          if b1
+          then
+            let b2 ← same nodes y v
+            if b2
+            then let b3 ← same nodes z w
+                 ok (Sum.inr b3)
+            else ok (Sum.inr false)
+          else ok (Sum.inr false)
+        | _ => do
+               let b1 ← node_eq left right
+               ok (Sum.inr b1)
       | Node.Proj n i2 x =>
         match right with
         | Node.Proj m j y =>
           do
           let b1 ← lift (core.cmp.impls.PartialEqU32.eq n m)
-          let b2 ←
-            if b1
-            then
-              do
-              let b3 ← lift (core.cmp.impls.PartialEqU32.eq i2 j)
-              if b3
-              then same nodes x y
-              else ok false
-            else ok false
-          ok (Sum.inr (Sum.inl b2))
-        | _ => ok (Sum.inr (Sum.inr (left, right)))
-      | _ => ok (Sum.inr (Sum.inr (left, right)))
-    let s1 ←
-      match s with
-      | Sum.inl t =>
-        do
-        let (x, y, u, v) := t
-        let b1 ← same nodes x u
-        if b1
-        then let b2 ← same nodes y v
-             ok (Sum.inr b2)
-        else ok (Sum.inr false)
-      | Sum.inr s2 =>
-        match s2 with
-        | Sum.inl b1 => ok (Sum.inr b1)
-        | Sum.inr p => ok (Sum.inl p)
-    match s1 with
-    | Sum.inl p => let (left1, right1) := p
-                   node_eq left1 right1
+          if b1
+          then
+            let b2 ← lift (core.cmp.impls.PartialEqU32.eq i2 j)
+            if b2
+            then let b3 ← same nodes x y
+                 ok (Sum.inr b3)
+            else ok (Sum.inr false)
+          else ok (Sum.inr false)
+        | _ => do
+               let b1 ← node_eq left right
+               ok (Sum.inr b1)
+      | _ => do
+             let b1 ← node_eq left right
+             ok (Sum.inr b1)
+    match s with
+    | Sum.inl t =>
+      let (x, y, u, v) := t
+      let b1 ← same nodes x u
+      if b1
+      then same nodes y v
+      else ok false
     | Sum.inr b1 => ok b1
 partial_fixpoint
 

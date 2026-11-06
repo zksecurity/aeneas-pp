@@ -24,24 +24,21 @@ namespace bool_comparisons
     Source: 'tests/src/bool-comparisons.rs', lines 6:0-12:1
     Visibility: public -/
 def first (o : Option Std.U64) (d : Bool) (n : Std.U32) : Result Bool := do
-  let b ← match o with
-          | none => ok (decide (n = 0#u32))
-          | some _ => ok d
-  ok (¬ b)
+  match o with
+  | none => ok (¬ (decide (n = 0#u32)))
+  | some _ => ok (¬ d)
 
 /-- [bool_comparisons::pair]:
     Source: 'tests/src/bool-comparisons.rs', lines 14:0-20:1
     Visibility: public -/
 def pair
   (o : Option Std.U64) (d : Bool) (n : Std.U32) : Result (Bool × Std.U32) := do
-  let (b, m) ←
-    match o with
-    | none => ok (decide (n < 3#u32), n)
-    | some _ => do
-                let i ← n + 1#u32
-                ok (d, i)
-  let i ← m + 1#u32
-  ok (b, i)
+  match o with
+  | none => let i ← n + 1#u32
+            ok (decide (n < 3#u32), i)
+  | some _ => let m ← n + 1#u32
+              let i ← m + 1#u32
+              ok (d, i)
 
 /-- [bool_comparisons::test_comparisons]:
     Source: 'tests/src/bool-comparisons.rs', lines 23:0-28:1
@@ -60,13 +57,10 @@ def test_comparisons : Result Unit := do
     else ok false
   massert b3
   let (b4, i1) ← pair (some 0#u64) false 2#u32
-  let b5 ←
-    if b4
-    then ok false
-    else match i1 with
-         | 4#uscalar => ok true
-         | _ => ok false
-  massert b5
+  massert (¬ b4)
+  match i1 with
+  | 4#uscalar => ok ()
+  | _ => fail panic
 
 /- Unit test for [bool_comparisons::test_comparisons] -/
 #guard (test_comparisons).reducesTo ()

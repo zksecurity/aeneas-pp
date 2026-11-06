@@ -40,7 +40,9 @@ def f : Result Unit := do
     Visibility: public -/
 def assert_or (b0 : Bool) (b1 : Bool) : Result Unit := do
   massert (b0 || b1)
-  f
+  if b0
+  then f
+  else f
 
 /-- [assert_cfg::assert_and]:
     Source: 'tests/src/assert-cfg.rs', lines 20:0-23:1
@@ -63,28 +65,36 @@ def assert_not_or (b0 : Bool) (b1 : Bool) : Result Unit := do
     Visibility: public -/
 def assert_not_and (b0 : Bool) (b1 : Bool) : Result Unit := do
   massert ((¬ b0) || (¬ b1))
-  f
+  if b0
+  then f
+  else f
 
 /-- [assert_cfg::assert_not_b0_or_b1]:
     Source: 'tests/src/assert-cfg.rs', lines 35:0-38:1
     Visibility: public -/
 def assert_not_b0_or_b1 (b0 : Bool) (b1 : Bool) : Result Unit := do
   massert ((¬ b0) || b1)
-  f
+  if b0
+  then f
+  else f
 
 /-- [assert_cfg::assert_b0_or_not_b1]:
     Source: 'tests/src/assert-cfg.rs', lines 40:0-43:1
     Visibility: public -/
 def assert_b0_or_not_b1 (b0 : Bool) (b1 : Bool) : Result Unit := do
   massert (b0 || (¬ b1))
-  f
+  if b0
+  then f
+  else f
 
 /-- [assert_cfg::assert_not_b0_or_not_b1]:
     Source: 'tests/src/assert-cfg.rs', lines 45:0-48:1
     Visibility: public -/
 def assert_not_b0_or_not_b1 (b0 : Bool) (b1 : Bool) : Result Unit := do
   massert ((¬ b0) || (¬ b1))
-  f
+  if b0
+  then f
+  else f
 
 /-- [assert_cfg::assert_not_b0_and_b1]:
     Source: 'tests/src/assert-cfg.rs', lines 50:0-53:1
@@ -116,11 +126,10 @@ def assert_not_b0_and_not_b1 (b0 : Bool) (b1 : Bool) : Result Unit := do
 def assert_or_call : Result Unit := do
   let b ← get_b0
   if b
-  then ok ()
-  else do
-       let b1 ← get_b1
+  then f
+  else let b1 ← get_b1
        massert b1
-  f
+       f
 
 /-- [assert_cfg::assert_and_call]:
     Source: 'tests/src/assert-cfg.rs', lines 72:0-75:1
@@ -148,11 +157,10 @@ def assert_not_or_call : Result Unit := do
 def assert_not_and_call : Result Unit := do
   let b ← get_b0
   if b
-  then do
-       let b1 ← get_b1
+  then let b1 ← get_b1
        massert (¬ b1)
-  else ok ()
-  f
+       f
+  else f
 
 /-- [assert_cfg::assert_not_b0_or_b1_call]:
     Source: 'tests/src/assert-cfg.rs', lines 87:0-90:1
@@ -160,11 +168,10 @@ def assert_not_and_call : Result Unit := do
 def assert_not_b0_or_b1_call : Result Unit := do
   let b ← get_b0
   if b
-  then do
-       let b1 ← get_b1
+  then let b1 ← get_b1
        massert b1
-  else ok ()
-  f
+       f
+  else f
 
 /-- [assert_cfg::assert_b0_or_not_b1_call]:
     Source: 'tests/src/assert-cfg.rs', lines 92:0-95:1
@@ -172,11 +179,10 @@ def assert_not_b0_or_b1_call : Result Unit := do
 def assert_b0_or_not_b1_call : Result Unit := do
   let b ← get_b0
   if b
-  then ok ()
-  else do
-       let b1 ← get_b1
+  then f
+  else let b1 ← get_b1
        massert (¬ b1)
-  f
+       f
 
 /-- [assert_cfg::assert_not_b0_or_not_b1_call]:
     Source: 'tests/src/assert-cfg.rs', lines 97:0-100:1
@@ -184,11 +190,10 @@ def assert_b0_or_not_b1_call : Result Unit := do
 def assert_not_b0_or_not_b1_call : Result Unit := do
   let b ← get_b0
   if b
-  then do
-       let b1 ← get_b1
+  then let b1 ← get_b1
        massert (¬ b1)
-  else ok ()
-  f
+       f
+  else f
 
 /-- [assert_cfg::assert_not_b0_and_b1_call]:
     Source: 'tests/src/assert-cfg.rs', lines 102:0-105:1

@@ -272,19 +272,13 @@ def two_borrowers
     Source: 'tests/src/join-dead-locals.rs', lines 36:0-45:1
     Visibility: public -/
 def maybe_owned (v : Slice Std.U8) (b : Bool) : Result Std.Usize := do
-  let s ←
-    if b
-    then
-      do
-      let s1 ← alloc.slice.Slice.to_vec core.clone.CloneU8 v
-      let i := alloc.vec.Vec.len s1
-      if i > 2#usize
-      then let i1 := alloc.vec.Vec.len s1
-           ok (Sum.inr i1)
-      else ok (Sum.inl ())
-    else ok (Sum.inl ())
-  match s with
-  | Sum.inl _ => ok 0#usize
-  | Sum.inr i => ok i
+  if b
+  then
+    let s ← alloc.slice.Slice.to_vec core.clone.CloneU8 v
+    let i := alloc.vec.Vec.len s
+    if i > 2#usize
+    then ok (alloc.vec.Vec.len s)
+    else ok 0#usize
+  else ok 0#usize
 
 end join_dead_locals

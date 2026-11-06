@@ -134,7 +134,7 @@ def HashMap.len {T : Type _} (self : HashMap T) : Result Std.Usize := do
     Source: 'tests/src/hashmap.rs', lines 1:0-129:9 -/
 @[rust_loop]
 def HashMap.insert_in_list_loop
-  {T : Type _} (key : Std.Usize) (value : T) (ls : AList T) :
+  {T : Type _} (value : T) (key : Std.Usize) (ls : AList T) :
   Result (Bool × (AList T))
   := do
   match ls with
@@ -142,7 +142,7 @@ def HashMap.insert_in_list_loop
     if ckey = key
     then ok (false, AList.Cons ckey value tl)
     else
-      let (b, back) ← HashMap.insert_in_list_loop key value tl
+      let (b, back) ← HashMap.insert_in_list_loop value key tl
       let back1 := AList.Cons ckey cvalue back
       ok (b, back1)
   | AList.Nil => ok (true, AList.Cons key value AList.Nil)
@@ -155,7 +155,7 @@ def HashMap.insert_in_list
   {T : Type _} (key : Std.Usize) (value : T) (ls : AList T) :
   Result (Bool × (AList T))
   := do
-  HashMap.insert_in_list_loop key value ls
+  HashMap.insert_in_list_loop value key ls
 
 /-- [hashmap::{hashmap::HashMap<T>}::insert_no_resize]:
     Source: 'tests/src/hashmap.rs', lines 133:4-141:5 -/

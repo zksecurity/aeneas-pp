@@ -25,17 +25,13 @@ namespace sum_annotations
     Visibility: public -/
 def first_large
   (x : Std.U32) (y : Std.U32) (z : Std.U32) : Result (Option Std.U32) := do
-  let s : _root_.Sum _ (Option Std.U32) ←
-    if x > 10#u32
-    then if y > 10#u32
-         then ok (Sum.inr none)
-         else ok (Sum.inl (x, y))
-    else ok (Sum.inl (z, x))
-  match s with
-  | Sum.inl p => let (a, b) := p
-                 let i ← a + b
-                 ok (some i)
-  | Sum.inr o => ok o
+  if x > 10#u32
+  then if y > 10#u32
+       then ok none
+       else let i ← x + y
+            ok (some i)
+  else let i ← z + x
+       ok (some i)
 
 /-- [sum_annotations::test_first_large]:
     Source: 'tests/src/sum-annotations.rs', lines 19:0-23:1 -/
@@ -54,13 +50,11 @@ def test_first_large : Result Unit := do
                 | _ => ok false
   massert b1
   let o2 ← first_large 1#u32 1#u32 5#u32
-  let b2 ←
-    match o2 with
-    | none => ok false
-    | some i => match i with
-                | 6#uscalar => ok true
-                | _ => ok false
-  massert b2
+  match o2 with
+  | none => fail panic
+  | some i => match i with
+              | 6#uscalar => ok ()
+              | _ => fail panic
 
 /- Unit test for [sum_annotations::test_first_large] -/
 #guard (test_first_large).reducesTo ()

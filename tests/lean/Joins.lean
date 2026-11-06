@@ -23,10 +23,9 @@ namespace joins
 /-- [joins::opt_add_1]:
     Source: 'tests/src/joins.rs', lines 4:0-7:1 -/
 def opt_add_1 (b : Bool) (x : Std.U32) : Result Std.U32 := do
-  let y ← if b
-          then ok 1#u32
-          else ok 0#u32
-  x + y
+  if b
+  then x + 1#u32
+  else x + 0#u32
 
 /-- [joins::opt_add_2]:
     Source: 'tests/src/joins.rs', lines 9:0-13:1 -/
@@ -34,8 +33,11 @@ def opt_add_2 (b : Bool) (x : Std.U32) : Result Std.U32 := do
   let y ← if b
           then ok 1#u32
           else ok 0#u32
-  let i ← x + y
-  i + y
+  if b
+  then let i ← x + y
+       i + 1#u32
+  else let i ← x + y
+       i + 0#u32
 
 /-- [joins::opt_add_1_or_panic]:
     Source: 'tests/src/joins.rs', lines 15:0-18:1 -/
@@ -46,12 +48,10 @@ def opt_add_1_or_panic (b : Bool) (x : Std.U32) : Result Std.U32 := do
 /-- [joins::opt_add_switch_1]:
     Source: 'tests/src/joins.rs', lines 20:0-27:1 -/
 def opt_add_switch_1 (a : Std.U32) (x : Std.U32) : Result Std.U32 := do
-  let y ←
-    match a with
-    | 0#uscalar => ok 0#u32
-    | 1#uscalar => ok 1#u32
-    | _ => fail panic
-  x + y
+  match a with
+  | 0#uscalar => x + 0#u32
+  | 1#uscalar => x + 1#u32
+  | _ => fail panic
 
 /-- [joins::opt_add_switch_2]:
     Source: 'tests/src/joins.rs', lines 29:0-35:1 -/
@@ -71,23 +71,20 @@ inductive Enum where
 /-- [joins::use_enum]:
     Source: 'tests/src/joins.rs', lines 43:0-51:1 -/
 def use_enum (e : Enum) (x : Std.U32) : Result Std.U32 := do
-  let y ←
-    match e with
-    | Enum.V0 => ok 0#u32
-    | Enum.V1 => ok 1#u32
-    | Enum.V2 => ok 2#u32
-  x + y
+  match e with
+  | Enum.V0 => x + 0#u32
+  | Enum.V1 => x + 1#u32
+  | Enum.V2 => x + 2#u32
 
 /-- [joins::call_choose]:
     Source: 'tests/src/joins.rs', lines 53:0-56:1 -/
 def call_choose
   (b : Bool) (x : Std.U32) (y : Std.U32) : Result (Std.U32 × Std.U32) := do
-  let (z, back) ←
-    if b
-    then ok (x, fun i => (i, y))
-    else ok (y, fun i => (x, i))
-  let z1 ← z + 1#u32
-  ok (back z1)
+  if b
+  then let z ← x + 1#u32
+       ok (z, y)
+  else let z ← y + 1#u32
+       ok (x, z)
 
 /-- [joins::SharedBool]
     Source: 'tests/src/joins.rs', lines 58:0-60:1 -/

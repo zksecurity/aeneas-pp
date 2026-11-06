@@ -149,17 +149,14 @@ def test_try : Result Unit := do
                         | _ => ok false
   massert b3
   let r4 ← converted_error 400#u32
-  let b4 ←
-    match r4 with
-    | core.result.Result.Ok _ => ok false
-    | core.result.Result.Err e =>
-      match e with
-      | Error.Message i =>
-        match i with
-        | 200#uscalar => ok true
-        | _ => ok false
-      | Error.Code _ => ok false
-  massert b4
+  match r4 with
+  | core.result.Result.Ok _ => fail panic
+  | core.result.Result.Err e =>
+    match e with
+    | Error.Message i => match i with
+                         | 200#uscalar => ok ()
+                         | _ => fail panic
+    | Error.Code _ => fail panic
 
 /- Unit test for [try_operator::test_try] -/
 #guard (test_try).reducesTo ()

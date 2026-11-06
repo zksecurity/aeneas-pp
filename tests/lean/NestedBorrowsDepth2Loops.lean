@@ -35,61 +35,44 @@ def Engine.eval
   Result ((core.result.Result Std.U32 Unit) × Engine × (Engine → Engine))
   := do
   let i ← self.t + e
-  let r ←
-    if e > 100#u32
-    then ok (core.result.Result.Err ())
-    else ok (core.result.Result.Ok i)
-  ok (r, { self with t := i }, fun self1 => self1)
+  if e > 100#u32
+  then ok (core.result.Result.Err (), { self with t := i }, fun self1 => self1)
+  else ok (core.result.Result.Ok i, { self with t := i }, fun self1 => self1)
 
 /-- [nested_borrows_depth2_loops::{nested_borrows_depth2_loops::Engine<'a>}::eval_nonzero]: loop body 0:
     Source: 'tests/src/nested-borrows-depth2-loops.rs', lines 26:16-33:5
     Visibility: public -/
 @[rust_loop_body]
 def Engine.eval_nonzero_loop.body
-  (back : Engine → (Std.U32 × Std.U32)) (self : Engine) (e : Std.U32) :
-  Result (ControlFlow ((Engine → (Std.U32 × Std.U32)) × Engine × Std.U32)
+  (e : Std.U32) (back : Engine → (Std.U32 × Std.U32)) (self : Engine) :
+  Result (ControlFlow (Std.U32 × (Engine → (Std.U32 × Std.U32)) × Engine)
     ((core.result.Result Std.U32 Unit) × Engine × (Engine → (Std.U32 ×
     Std.U32))))
   := do
   let (r, self1, eval_back) ← Engine.eval self e
-  let s : _root_.Sum _ (_root_.Sum ((Engine → (Std.U32 × Std.U32)) × _ × _) (_
-    × _ × (Engine → (Std.U32 × Std.U32)))) ←
-    match r with
-    | core.result.Result.Ok val =>
-      if val = 0#u32
-      then
-        ok (Sum.inr (Sum.inl (fun e1 => let e2 := eval_back e1
-                                        back e2, self1, 1#u32)))
-      else ok (Sum.inl (val, self1))
-    | core.result.Result.Err _ =>
-      ok (Sum.inr (Sum.inr (r, self1,
-        fun e1 => let e2 := eval_back e1
-                  back e2)))
-  match s with
-  | Sum.inl p =>
-    let (i, self2) := p
-    ok (done (core.result.Result.Ok i, self2,
-      fun e1 => let e2 := eval_back e1
-                back e2))
-  | Sum.inr s1 =>
-    match s1 with
-    | Sum.inl t => let (f, e1, i) := t
-                   ok (cont (f, e1, i))
-    | Sum.inr t => let (r1, e1, f) := t
-                   ok (done (r1, e1, f))
+  match r with
+  | core.result.Result.Ok val =>
+    if val = 0#u32
+    then ok (cont (1#u32, fun e1 => let e2 := eval_back e1
+                                    back e2, self1))
+    else ok (done (r, self1, fun e1 => let e2 := eval_back e1
+                                       back e2))
+  | core.result.Result.Err _ =>
+    ok (done (r, self1, fun e1 => let e2 := eval_back e1
+                                  back e2))
 
 /-- [nested_borrows_depth2_loops::{nested_borrows_depth2_loops::Engine<'a>}::eval_nonzero]: loop 0:
     Source: 'tests/src/nested-borrows-depth2-loops.rs', lines 26:16-33:5
     Visibility: public -/
 @[rust_loop]
 def Engine.eval_nonzero_loop
-  (back : Engine → (Std.U32 × Std.U32)) (self : Engine) (e : Std.U32) :
+  (e : Std.U32) (back : Engine → (Std.U32 × Std.U32)) (self : Engine) :
   Result ((core.result.Result Std.U32 Unit) × Engine × (Engine → (Std.U32 ×
     Std.U32)))
   := do
   loop
-    (fun (back1, self1, e1) => Engine.eval_nonzero_loop.body back1 self1 e1)
-    (back, self, e)
+    (fun (e1, back1, self1) => Engine.eval_nonzero_loop.body e1 back1 self1)
+    (e, back, self)
 
 /-- [nested_borrows_depth2_loops::{nested_borrows_depth2_loops::Engine<'a>}::eval_nonzero]:
     Source: 'tests/src/nested-borrows-depth2-loops.rs', lines 24:4-33:5
@@ -99,7 +82,7 @@ def Engine.eval_nonzero
   Result ((core.result.Result Std.U32 Unit) × Engine × (Engine → Engine))
   := do
   let (r, e1, back) ←
-    Engine.eval_nonzero_loop (fun (e2 : Engine) => (e2.t, e2.s)) self e
+    Engine.eval_nonzero_loop e (fun (e2 : Engine) => (e2.t, e2.s)) self
   let back'a :=
     fun self1 => let (i, i1) := back self1
                  ({ t := i, s := i1 } : Engine)
@@ -110,54 +93,41 @@ def Engine.eval_nonzero
     Visibility: public -/
 @[rust_loop_body]
 def Engine.run_loop.body
-  (back : Std.U32 → Std.U32 → (Std.U32 × Std.U32)) (e : Engine) (n : Std.U32) :
-  Result (ControlFlow ((Std.U32 → Std.U32 → (Std.U32 × Std.U32)) × Engine ×
-    Std.U32) ((core.result.Result Std.U32 Unit) × Engine × (Engine → (Std.U32 ×
+  (n : Std.U32) (back : Std.U32 → Std.U32 → (Std.U32 × Std.U32)) (e : Engine) :
+  Result (ControlFlow (Std.U32 × (Std.U32 → Std.U32 → (Std.U32 × Std.U32)) ×
+    Engine) ((core.result.Result Std.U32 Unit) × Engine × (Engine → (Std.U32 ×
     Std.U32))))
   := do
   let (r, self, eval_back) ← Engine.eval e n
-  let s : _root_.Sum _ (_root_.Sum ((Std.U32 → Std.U32 → (Std.U32 × Std.U32)) ×
-    _ × _) (_ × _ × (Engine → (Std.U32 × Std.U32)))) ←
-    match r with
-    | core.result.Result.Ok val =>
-      do
-      let i ← self.s + val
-      if n = 0#u32
-      then ok (Sum.inl (val, { self with s := i }))
-      else
-        let n1 ← n - 1#u32
-        ok (Sum.inr (Sum.inl
-          (fun i1 i2 => let e1 := eval_back { t := i1, s := i2 }
-                        back e1.t e1.s, { self with s := i }, n1)))
-    | core.result.Result.Err _ =>
-      ok (Sum.inr (Sum.inr (r, self,
+  match r with
+  | core.result.Result.Ok val =>
+    let i ← self.s + val
+    if n = 0#u32
+    then
+      ok (done (r, { self with s := i },
         fun e1 => let e2 := eval_back e1
-                  back e2.t e2.s)))
-  match s with
-  | Sum.inl p =>
-    let (i, e1) := p
-    ok (done (core.result.Result.Ok i, e1,
-      fun e2 => let e3 := eval_back e2
-                back e3.t e3.s))
-  | Sum.inr s1 =>
-    match s1 with
-    | Sum.inl t => let (f, e1, i) := t
-                   ok (cont (f, e1, i))
-    | Sum.inr t => let (r1, e1, f) := t
-                   ok (done (r1, e1, f))
+                  back e2.t e2.s))
+    else
+      let n1 ← n - 1#u32
+      ok (cont (n1,
+        fun i1 i2 => let e1 := eval_back { t := i1, s := i2 }
+                     back e1.t e1.s, { self with s := i }))
+  | core.result.Result.Err _ =>
+    ok (done (r, self, fun e1 => let e2 := eval_back e1
+                                 back e2.t e2.s))
 
 /-- [nested_borrows_depth2_loops::{nested_borrows_depth2_loops::Engine<'a>}::run]: loop 0:
     Source: 'tests/src/nested-borrows-depth2-loops.rs', lines 38:16-45:5
     Visibility: public -/
 @[rust_loop]
 def Engine.run_loop
-  (back : Std.U32 → Std.U32 → (Std.U32 × Std.U32)) (e : Engine) (n : Std.U32) :
+  (n : Std.U32) (back : Std.U32 → Std.U32 → (Std.U32 × Std.U32)) (e : Engine) :
   Result ((core.result.Result Std.U32 Unit) × Engine × (Engine → (Std.U32 ×
     Std.U32)))
   := do
   loop
-    (fun (back1, e1, n1) => Engine.run_loop.body back1 e1 n1)
-    (back, e, n)
+    (fun (n1, back1, e1) => Engine.run_loop.body n1 back1 e1)
+    (n, back, e)
 
 /-- [nested_borrows_depth2_loops::{nested_borrows_depth2_loops::Engine<'a>}::run]:
     Source: 'tests/src/nested-borrows-depth2-loops.rs', lines 36:4-45:5
@@ -166,7 +136,7 @@ def Engine.run
   (self : Engine) (n : Std.U32) :
   Result ((core.result.Result Std.U32 Unit) × Engine × (Engine → Engine))
   := do
-  let (r, e, back) ← Engine.run_loop (fun i i1 => (i, i1)) self n
+  let (r, e, back) ← Engine.run_loop n (fun i i1 => (i, i1)) self
   let back'a :=
     fun self1 => let (i, i1) := back self1
                  ({ t := i, s := i1 } : Engine)
@@ -177,55 +147,40 @@ def Engine.run
     Visibility: public -/
 @[rust_loop_body]
 def run_swap_loop.body
-  (back : Std.U32 → Std.U32 → (Std.U32 × Std.U32)) (n : Std.U32) (e : Engine) :
-  Result (ControlFlow ((Std.U32 → Std.U32 → (Std.U32 × Std.U32)) × Std.U32 ×
+  (n : Std.U32) (back : Std.U32 → Std.U32 → (Std.U32 × Std.U32)) (e : Engine) :
+  Result (ControlFlow (Std.U32 × (Std.U32 → Std.U32 → (Std.U32 × Std.U32)) ×
     Engine) ((core.result.Result Std.U32 Unit) × Std.U32 × Std.U32))
   := do
   let (r, e1, eval_back) ← Engine.eval e n
-  let s : _root_.Sum (_ × Engine × (Std.U32 → Std.U32 → (Std.U32 × Std.U32)))
-    (_root_.Sum ((Std.U32 → Std.U32 → (Std.U32 × Std.U32)) × _ × Engine) _) ←
-    match r with
-    | core.result.Result.Ok val =>
-      do
-      let i ← e1.s + 10#u32
-      if n = 0#u32
-      then
-        ok (Sum.inl (val, ({ t := i, s := e1.t } : Engine),
-          fun i1 i2 => let e2 := eval_back { t := i2, s := i1 }
-                       (e2.t, e2.s)))
-      else
-        let n1 ← n - 1#u32
-        ok (Sum.inr (Sum.inl
-          (fun i1 i2 => let e2 := eval_back { t := i2, s := i1 }
-                        back e2.t e2.s, n1, ({ t := i, s := e1.t } : Engine))))
-    | core.result.Result.Err _ =>
-      let e2 := eval_back e1
+  match r with
+  | core.result.Result.Ok _ =>
+    let i ← e1.s + 10#u32
+    if n = 0#u32
+    then
+      let e2 := eval_back { e1 with s := i }
       let (a, b) := back e2.t e2.s
-      ok (Sum.inr (Sum.inr (r, a, b)))
-  match s with
-  | Sum.inl t =>
-    let (i, e2, back1) := t
-    let (i1, i2) := back1 e2.t e2.s
-    let (a, b) := back i1 i2
-    ok (done (core.result.Result.Ok i, a, b))
-  | Sum.inr s1 =>
-    match s1 with
-    | Sum.inl t => let (f, i, e2) := t
-                   ok (cont (f, i, e2))
-    | Sum.inr t => let (r1, i, i1) := t
-                   ok (done (r1, i, i1))
+      ok (done (r, a, b))
+    else
+      let n1 ← n - 1#u32
+      ok (cont (n1,
+        fun i1 i2 => let e2 := eval_back { t := i2, s := i1 }
+                     back e2.t e2.s, { t := i, s := e1.t }))
+  | core.result.Result.Err _ =>
+    let e2 := eval_back e1
+    let (a, b) := back e2.t e2.s
+    ok (done (r, a, b))
 
 /-- [nested_borrows_depth2_loops::run_swap]: loop 0:
     Source: 'tests/src/nested-borrows-depth2-loops.rs', lines 52:12-60:1
     Visibility: public -/
 @[rust_loop]
 def run_swap_loop
-  (back : Std.U32 → Std.U32 → (Std.U32 × Std.U32)) (n : Std.U32) (e : Engine) :
+  (n : Std.U32) (back : Std.U32 → Std.U32 → (Std.U32 × Std.U32)) (e : Engine) :
   Result ((core.result.Result Std.U32 Unit) × Std.U32 × Std.U32)
   := do
   loop
-    (fun (back1, n1, e1) => run_swap_loop.body back1 n1 e1)
-    (back, n, e)
+    (fun (n1, back1, e1) => run_swap_loop.body n1 back1 e1)
+    (n, back, e)
 
 /-- [nested_borrows_depth2_loops::run_swap]:
     Source: 'tests/src/nested-borrows-depth2-loops.rs', lines 49:0-60:1
@@ -235,7 +190,7 @@ def run_swap
   (a : Std.U32) (b : Std.U32) (n : Std.U32) :
   Result ((core.result.Result Std.U32 Unit) × Std.U32 × Std.U32)
   := do
-  run_swap_loop (fun i i1 => (i, i1)) n { t := a, s := b }
+  run_swap_loop n (fun i i1 => (i, i1)) { t := a, s := b }
 
 /-- [nested_borrows_depth2_loops::run_engine]:
     Source: 'tests/src/nested-borrows-depth2-loops.rs', lines 62:0-71:1
@@ -274,16 +229,14 @@ def swap_engine : Result (Std.U32 × Std.U32 × Std.U32) := do
     Visibility: public -/
 def test_run_engine : Result Unit := do
   let (i, i1, i2) ← run_engine
-  let b ←
-    match i with
-    | 7#uscalar =>
-      match i1 with
-      | 7#uscalar => match i2 with
-                     | 124#uscalar => ok true
-                     | _ => ok false
-      | _ => ok false
-    | _ => ok false
-  massert b
+  match i with
+  | 7#uscalar =>
+    match i1 with
+    | 7#uscalar => match i2 with
+                   | 124#uscalar => ok ()
+                   | _ => fail panic
+    | _ => fail panic
+  | _ => fail panic
 
 /- Unit test for [nested_borrows_depth2_loops::test_run_engine] -/
 #guard (test_run_engine).reducesTo ()
@@ -293,13 +246,11 @@ def test_run_engine : Result Unit := do
     Visibility: public -/
 def test_nonzero_engine : Result Unit := do
   let (i, i1) ← nonzero_engine
-  let b ←
-    match i with
-    | 1#uscalar => match i1 with
-                   | 1#uscalar => ok true
-                   | _ => ok false
-    | _ => ok false
-  massert b
+  match i with
+  | 1#uscalar => match i1 with
+                 | 1#uscalar => ok ()
+                 | _ => fail panic
+  | _ => fail panic
 
 /- Unit test for [nested_borrows_depth2_loops::test_nonzero_engine] -/
 #guard (test_nonzero_engine).reducesTo ()
@@ -309,16 +260,14 @@ def test_nonzero_engine : Result Unit := do
     Visibility: public -/
 def test_swap_engine : Result Unit := do
   let (i, i1, i2) ← swap_engine
-  let b ←
-    match i with
-    | 122#uscalar =>
-      match i1 with
-      | 25#uscalar => match i2 with
-                      | 122#uscalar => ok true
-                      | _ => ok false
-      | _ => ok false
-    | _ => ok false
-  massert b
+  match i with
+  | 122#uscalar =>
+    match i1 with
+    | 25#uscalar => match i2 with
+                    | 122#uscalar => ok ()
+                    | _ => fail panic
+    | _ => fail panic
+  | _ => fail panic
 
 /- Unit test for [nested_borrows_depth2_loops::test_swap_engine] -/
 #guard (test_swap_engine).reducesTo ()

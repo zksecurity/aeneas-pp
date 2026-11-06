@@ -149,53 +149,47 @@ def chain
     Source: 'tests/src/switch-early-returns.rs', lines 32:0-42:1
     Visibility: public -/
 def early_return_if (x : Std.U32) (b : Bool) (c : Bool) : Result Std.U32 := do
-  let s ←
-    if b
-    then if c
-         then ok (Sum.inr 0#u32)
-         else do
-              let y ← x + 1#u32
-              ok (Sum.inl y)
-    else do
-         let y ← x + 2#u32
-         ok (Sum.inl y)
-  match s with
-  | Sum.inl y => y * 2#u32
-  | Sum.inr i => ok i
+  if b
+  then if c
+       then ok 0#u32
+       else let y ← x + 1#u32
+            y * 2#u32
+  else let y ← x + 2#u32
+       y * 2#u32
 
 /-- [switch_early_returns::nested]:
     Source: 'tests/src/switch-early-returns.rs', lines 45:0-56:1
     Visibility: public -/
 def nested (v : V) (w : V) : Result (core.result.Result Std.U32 Std.U32) := do
-  let s ←
-    match v with
-    | V.A x =>
-      match w with
-      | V.A y =>
-        do
-        let i ← x + y
-        let r ← check i
-        match r with
-        | core.result.Result.Ok val => ok (Sum.inl val)
-        | core.result.Result.Err _ => ok (Sum.inr r)
-      | V.B y =>
-        do
-        let r ← check y
-        match r with
-        | core.result.Result.Ok val => ok (Sum.inl val)
-        | core.result.Result.Err _ => ok (Sum.inr r)
-      | V.C _ => ok (Sum.inl x)
-    | V.B x =>
-      do
-      let r ← check x
+  match v with
+  | V.A x =>
+    match w with
+    | V.A y =>
+      let i ← x + y
+      let r ← check i
       match r with
-      | core.result.Result.Ok val => ok (Sum.inl val)
-      | core.result.Result.Err _ => ok (Sum.inr r)
-    | V.C x => ok (Sum.inl x)
-  match s with
-  | Sum.inl a => let i ← a + 1#u32
-                 ok (core.result.Result.Ok i)
-  | Sum.inr r => ok r
+      | core.result.Result.Ok val =>
+        let i1 ← val + 1#u32
+        ok (core.result.Result.Ok i1)
+      | core.result.Result.Err _ => ok r
+    | V.B y =>
+      let r ← check y
+      match r with
+      | core.result.Result.Ok val =>
+        let i ← val + 1#u32
+        ok (core.result.Result.Ok i)
+      | core.result.Result.Err _ => ok r
+    | V.C _ => let i ← x + 1#u32
+               ok (core.result.Result.Ok i)
+  | V.B x =>
+    let r ← check x
+    match r with
+    | core.result.Result.Ok val =>
+      let i ← val + 1#u32
+      ok (core.result.Result.Ok i)
+    | core.result.Result.Err _ => ok r
+  | V.C x => let i ← x + 1#u32
+             ok (core.result.Result.Ok i)
 
 /-- [switch_early_returns::update_then_error]:
     Source: 'tests/src/switch-early-returns.rs', lines 60:0-69:1
@@ -205,42 +199,33 @@ def update_then_error
   Result ((core.result.Result Std.U32 Std.U32) × Std.U32)
   := do
   let acc1 ← acc + 1#u32
-  let s ←
-    match v with
-    | V.A x =>
-      do
-      let r ← check x
-      match r with
-      | core.result.Result.Ok val => ok (Sum.inl val)
-      | core.result.Result.Err _ => ok (Sum.inr (r, acc1))
-    | V.B x =>
-      do
-      let i ← x + 1#u32
-      let r ← check i
-      match r with
-      | core.result.Result.Ok val => ok (Sum.inl val)
-      | core.result.Result.Err _ => ok (Sum.inr (r, acc1))
-    | V.C x => ok (Sum.inl x)
-  match s with
-  | Sum.inl x => let acc2 ← acc1 + 10#u32
-                 ok (core.result.Result.Ok x, acc2)
-  | Sum.inr p => ok p
+  match v with
+  | V.A x =>
+    let r ← check x
+    match r with
+    | core.result.Result.Ok _ => let acc2 ← acc1 + 10#u32
+                                 ok (r, acc2)
+    | core.result.Result.Err _ => ok (r, acc1)
+  | V.B x =>
+    let i ← x + 1#u32
+    let r ← check i
+    match r with
+    | core.result.Result.Ok _ => let acc2 ← acc1 + 10#u32
+                                 ok (r, acc2)
+    | core.result.Result.Err _ => ok (r, acc1)
+  | V.C x => let acc2 ← acc1 + 10#u32
+             ok (core.result.Result.Ok x, acc2)
 
 /-- [switch_early_returns::panic_or_return]:
     Source: 'tests/src/switch-early-returns.rs', lines 72:0-82:1
     Visibility: public -/
 def panic_or_return (v : V) : Result Std.U32 := do
-  let s ←
-    match v with
-    | V.A x => ok (Sum.inl x)
-    | V.B x => do
-               massert (x < 50#u32)
-               let x1 ← x + 1#u32
-               ok (Sum.inl x1)
-    | V.C _ => ok (Sum.inr 7#u32)
-  match s with
-  | Sum.inl x => x + 1#u32
-  | Sum.inr i => ok i
+  match v with
+  | V.A x => x + 1#u32
+  | V.B x => massert (x < 50#u32)
+             let x1 ← x + 1#u32
+             x1 + 1#u32
+  | V.C _ => ok 7#u32
 
 /-- [switch_early_returns::Ck]
     Source: 'tests/src/switch-early-returns.rs', lines 84:0-87:1
@@ -272,49 +257,43 @@ def struct_calls
   Result ((core.result.Result Std.U32 Std.U32) × (alloc.vec.Vec Std.U32) ×
     (alloc.vec.Vec Std.U32))
   := do
-  let s1 : _root_.Sum (Ck × _ × (Ck → ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec
-    Std.U32)))) _ ←
-    match v with
-    | V.A x =>
-      do
-      let (r, ck, push_back) ← Ck.push { t, s } x
-      match r with
-      | core.result.Result.Ok val =>
-        ok (Sum.inl (ck, val, fun c => let c1 := push_back c
-                                       (c1.t, c1.s)))
+  match v with
+  | V.A x =>
+    let (r, ck, push_back) ← Ck.push { t, s } x
+    match r with
+    | core.result.Result.Ok val =>
+      let (r1, ck1, push_back1) ← Ck.push ck val
+      let c := push_back1 ck1
+      let c1 := push_back c
+      let c2 := push_back c
+      ok (r1, c1.t, c2.s)
+    | core.result.Result.Err _ => let c := push_back ck
+                                  ok (r, c.t, c.s)
+  | V.B x =>
+    let (r, ck, push_back) ← Ck.push { t, s } x
+    match r with
+    | core.result.Result.Ok val =>
+      let (r1, ck1, push_back1) ← Ck.push ck val
+      match r1 with
+      | core.result.Result.Ok val1 =>
+        let (r2, ck2, push_back2) ← Ck.push ck1 val1
+        let c := push_back2 ck2
+        let c1 := push_back1 c
+        let c2 := push_back c1
+        let c3 := push_back1 c
+        let c4 := push_back c3
+        ok (r2, c2.t, c4.s)
       | core.result.Result.Err _ =>
-        let c := push_back ck
-        ok (Sum.inr (r, c.t, c.s))
-    | V.B x =>
-      do
-      let (r, ck, push_back) ← Ck.push { t, s } x
-      match r with
-      | core.result.Result.Ok val =>
-        let (r1, ck1, push_back1) ← Ck.push ck val
-        match r1 with
-        | core.result.Result.Ok val1 =>
-          ok (Sum.inl (ck1, val1,
-            fun c => let c1 := push_back1 c
-                     let c2 := push_back c1
-                     (c2.t, c2.s)))
-        | core.result.Result.Err _ =>
-          let c := push_back1 ck1
-          let c1 := push_back c
-          let c2 := push_back c
-          ok (Sum.inr (r1, c1.t, c2.s))
-      | core.result.Result.Err _ =>
-        let c := push_back ck
-        ok (Sum.inr (r, c.t, c.s))
-    | V.C x => ok (Sum.inl (({ t, s } : Ck), x, fun (c : Ck) => (c.t, c.s)))
-  match s1 with
-  | Sum.inl t1 =>
-    let (ck, x, back) := t1
-    let (r, c, push_back) ← Ck.push ck x
-    let c1 := push_back c
-    let (t2, _) := back c1
-    let (_, s2) := back c1
-    ok (r, t2, s2)
-  | Sum.inr t1 => ok t1
+        let c := push_back1 ck1
+        let c1 := push_back c
+        let c2 := push_back c
+        ok (r1, c1.t, c2.s)
+    | core.result.Result.Err _ => let c := push_back ck
+                                  ok (r, c.t, c.s)
+  | V.C x =>
+    let (r, ck, push_back) ← Ck.push { t, s } x
+    let c := push_back ck
+    ok (r, c.t, c.s)
 
 /-- [switch_early_returns::inner_loop]: loop body 0:
     Source: 'tests/src/switch-early-returns.rs', lines 116:8-121:9
@@ -331,8 +310,7 @@ def inner_loop_loop.body
     Source: 'tests/src/switch-early-returns.rs', lines 116:8-121:9
     Visibility: public -/
 @[rust_loop]
-def inner_loop_loop
-  (b : Bool) (n : Std.U32) (i : Std.U32) : Result Std.U32 := do
+def inner_loop_loop (n : Std.U32) (i : Std.U32) : Result Std.U32 := do
   loop
     (fun i1 => inner_loop_loop.body n i1)
     i
@@ -341,10 +319,11 @@ def inner_loop_loop
     Source: 'tests/src/switch-early-returns.rs', lines 113:0-127:1
     Visibility: public -/
 def inner_loop (b : Bool) (n : Std.U32) : Result Std.U32 := do
-  let x ← if b
-          then inner_loop_loop b n 0#u32
-          else n + 1#u32
-  x * 2#u32
+  if b
+  then let x ← inner_loop_loop n 0#u32
+       x * 2#u32
+  else let x ← n + 1#u32
+       x * 2#u32
 
 /-- [switch_early_returns::test_chain]:
     Source: 'tests/src/switch-early-returns.rs', lines 130:0-133:1
@@ -364,14 +343,12 @@ def test_chain : Result Unit := do
   let r1 ←
     chain (V.A 1#u32) (V.A 200#u32) (V.C 0#u32) (V.A 2#u32) (V.C 0#u32) (V.B
       0#u32)
-  let b1 ←
-    match r1 with
-    | core.result.Result.Ok _ => ok false
-    | core.result.Result.Err i =>
-      match i with
-      | 200#uscalar => ok true
-      | _ => ok false
-  massert b1
+  match r1 with
+  | core.result.Result.Ok _ => fail panic
+  | core.result.Result.Err i =>
+    match i with
+    | 200#uscalar => ok ()
+    | _ => fail panic
 
 /- Unit test for [switch_early_returns::test_chain] -/
 #guard (test_chain).reducesTo ()
@@ -422,14 +399,12 @@ def test_nested : Result Unit := do
     | core.result.Result.Err _ => ok false
   massert b2
   let r3 ← nested (V.C 5#u32) (V.C 0#u32)
-  let b3 ←
-    match r3 with
-    | core.result.Result.Ok i =>
-      match i with
-      | 6#uscalar => ok true
-      | _ => ok false
-    | core.result.Result.Err _ => ok false
-  massert b3
+  match r3 with
+  | core.result.Result.Ok i =>
+    match i with
+    | 6#uscalar => ok ()
+    | _ => fail panic
+  | core.result.Result.Err _ => fail panic
 
 /- Unit test for [switch_early_returns::test_nested] -/
 #guard (test_nested).reducesTo ()
@@ -451,17 +426,12 @@ def test_update_then_error : Result Unit := do
   massert b
   massert (acc = 1#u32)
   let (r1, acc1) ← update_then_error (V.C 3#u32) acc
-  let (b1, acc2) ←
-    match r1 with
-    | core.result.Result.Ok i1 =>
-      do
-      let b2 ← match i1 with
-               | 3#uscalar => ok true
-               | _ => ok false
-      ok (b2, acc1)
-    | core.result.Result.Err _ => ok (false, acc1)
-  massert b1
-  massert (acc2 = 12#u32)
+  match r1 with
+  | core.result.Result.Ok i1 =>
+    match i1 with
+    | 3#uscalar => massert (acc1 = 12#u32)
+    | _ => fail panic
+  | core.result.Result.Err _ => fail panic
 
 /- Unit test for [switch_early_returns::test_update_then_error] -/
 #guard (test_update_then_error).reducesTo ()

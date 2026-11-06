@@ -523,16 +523,13 @@ def loop_hidden_static_mut1 (x : Std.U32) (n : Std.U32) : Result Std.U32 := do
     Source: 'tests/src/static.rs', lines 303:0-306:1 -/
 def branch_hidden_static_mut
   (s : StaticMut) (b : Bool) : Result StaticMut := do
-  let (sm, back) ←
-    if b
-    then
-      do
-      let (s1, id_hidden_static_mut_back) ← id_hidden_static_mut s
-      ok (s1, fun i => (id_hidden_static_mut_back { x := i }).x)
-    else ok (s, fun i => i)
-  let i ← sm.x + 1#u32
-  let i1 := back i
-  ok { x := i1 }
+  if b
+  then
+    let (s1, id_hidden_static_mut_back) ← id_hidden_static_mut s
+    let i ← s1.x + 1#u32
+    ok (id_hidden_static_mut_back { x := i })
+  else let i ← s.x + 1#u32
+       ok { x := i }
 
 /-- [static::loop_hidden_static_ref]: loop body 0:
     Source: 'tests/src/static.rs', lines 312:4-316:5 -/
@@ -881,10 +878,9 @@ def copy_in_branch_static
          | none => ok 0#u32
          | some x => ok x
     else ok 0#u32
-  let x ← match o with
-          | none => ok 0#u32
-          | some x1 => ok x1
-  acc + x
+  match o with
+  | none => acc + 0#u32
+  | some x => acc + x
 
 /-- [static::WithStaticRef]
     Source: 'tests/src/static.rs', lines 531:0-531:43

@@ -80,22 +80,18 @@ def Eng.guarded
   Result ((core.result.Result Std.U32 Std.U32) × Eng × (Eng → Eng))
   := do
   let i ← self.depth + 1#u32
-  let (r, e, back) ←
-    if i > 2#u32
-    then
-      do
-      let i1 ← i - 1#u32
-      ok (core.result.Result.Err x, { self with depth := i1 }, fun v => v)
-    else
-      do
-      let (self1, record_back) ← Eng.record { self with depth := i } x
-      let i1 ← self1.depth - 1#u32
-      ok (core.result.Result.Ok x, { self1 with depth := i1 },
-        fun v => (record_back { self1 with log := v }).log)
-  let back'a :=
-    fun (self1 : Eng) => let v := back self1.log
-                         { self with log := v }
-  ok (r, e, back'a)
+  if i > 2#u32
+  then
+    let i1 ← i - 1#u32
+    let back'a := fun (self1 : Eng) => { self with log := self1.log }
+    ok (core.result.Result.Err x, { self with depth := i1 }, back'a)
+  else
+    let (self1, record_back) ← Eng.record { self with depth := i } x
+    let i1 ← self1.depth - 1#u32
+    let back'a :=
+      fun (self2 : Eng) =>
+        { self with log := (record_back { self1 with log := self2.log }).log }
+    ok (core.result.Result.Ok x, { self1 with depth := i1 }, back'a)
 
 /-- [join_struct_outputs::{join_struct_outputs::Eng<'a>}::odd_node]:
     Source: 'tests/src/join-struct-outputs.rs', lines 59:4-65:5
@@ -104,70 +100,53 @@ def Eng.odd_node
   (self : Eng) (i : Std.U32) : Result (Bool × Eng × (Eng → Eng)) := do
   let v ← Eng.view self
   let o ← View.node v i
-  let (b, i1) ←
-    match o with
-    | none => ok (false, self.steps)
-    | some n =>
-      do
-      let i2 ← self.steps + n
-      let i3 ← n % 2#u32
-      ok (decide (i3 = 1#u32), i2)
-  let back'a := fun (self1 : Eng) => { self with log := self1.log }
-  ok (b, { self with steps := i1 }, back'a)
+  match o with
+  | none =>
+    let back'a := fun (self1 : Eng) => { self with log := self1.log }
+    ok (false, self, back'a)
+  | some n =>
+    let i1 ← self.steps + n
+    let i2 ← n % 2#u32
+    let back'a := fun (self1 : Eng) => { self with log := self1.log }
+    ok (decide (i2 = 1#u32), { self with steps := i1 }, back'a)
 
 /-- [join_struct_outputs::{join_struct_outputs::Eng<'a>}::walk]: loop body 0:
     Source: 'tests/src/join-struct-outputs.rs', lines 69:16-78:5
     Visibility: public -/
 @[rust_loop_body]
 def Eng.walk_loop.body
-  (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) (e : Eng)
-  (i : Std.U32) :
-  Result (ControlFlow ((alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) × Eng ×
-    Std.U32) ((core.result.Result Std.U32 Std.U32) × Eng × (alloc.vec.Vec
-    Std.U32 → alloc.vec.Vec Std.U32)))
+  (i : Std.U32) (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)
+  (e : Eng) :
+  Result (ControlFlow (Std.U32 × (alloc.vec.Vec Std.U32 → alloc.vec.Vec
+    Std.U32) × Eng) ((core.result.Result Std.U32 Std.U32) × Eng ×
+    (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)))
   := do
   let o ← Eng.node e i
-  let s : _root_.Sum (_ × _ × (alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32))
-    (_root_.Sum ((alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) × _ × _)
-    ((core.result.Result Std.U32 Std.U32) × _ × _)) ←
-    match o with
-    | none => ok (Sum.inr (Sum.inr (core.result.Result.Err i, e, back)))
-    | some n =>
-      do
-      let (self, record_back) ← Eng.record e n
-      if n = 0#u32
-      then
-        ok (Sum.inl (self.steps, self,
-          fun v => (record_back { self with log := v }).log))
-      else
-        ok (Sum.inr (Sum.inl
-          (fun v => back (record_back { self with log := v }).log, self, n)))
-  match s with
-  | Sum.inl t =>
-    let (i1, e1, back1) := t
-    ok (done (core.result.Result.Ok i1, e1,
-      fun v => let v1 := back1 v
-               back v1))
-  | Sum.inr s1 =>
-    match s1 with
-    | Sum.inl t => let (f, e1, i1) := t
-                   ok (cont (f, e1, i1))
-    | Sum.inr t => let (r, e1, f) := t
-                   ok (done (r, e1, f))
+  match o with
+  | none => ok (done (core.result.Result.Err i, e, back))
+  | some n =>
+    let (self, record_back) ← Eng.record e n
+    if n = 0#u32
+    then
+      ok (done (core.result.Result.Ok self.steps, self,
+        fun v => back (record_back { self with log := v }).log))
+    else
+      ok (cont (n, fun v => back (record_back { self with log := v }).log,
+        self))
 
 /-- [join_struct_outputs::{join_struct_outputs::Eng<'a>}::walk]: loop 0:
     Source: 'tests/src/join-struct-outputs.rs', lines 69:16-78:5
     Visibility: public -/
 @[rust_loop]
 def Eng.walk_loop
-  (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32) (e : Eng)
-  (i : Std.U32) :
+  (i : Std.U32) (back : alloc.vec.Vec Std.U32 → alloc.vec.Vec Std.U32)
+  (e : Eng) :
   Result ((core.result.Result Std.U32 Std.U32) × Eng × (alloc.vec.Vec Std.U32 →
     alloc.vec.Vec Std.U32))
   := do
   loop
-    (fun (back1, e1, i1) => Eng.walk_loop.body back1 e1 i1)
-    (back, e, i)
+    (fun (i1, back1, e1) => Eng.walk_loop.body i1 back1 e1)
+    (i, back, e)
 
 /-- [join_struct_outputs::{join_struct_outputs::Eng<'a>}::walk]:
     Source: 'tests/src/join-struct-outputs.rs', lines 67:4-78:5
@@ -176,7 +155,7 @@ def Eng.walk
   (self : Eng) (i : Std.U32) :
   Result ((core.result.Result Std.U32 Std.U32) × Eng × (Eng → Eng))
   := do
-  let (r, e, back) ← Eng.walk_loop (fun v => v) self i
+  let (r, e, back) ← Eng.walk_loop i (fun v => v) self
   let back'a :=
     fun (self1 : Eng) => let v := back self1.log
                          { self with log := v }
@@ -204,23 +183,21 @@ def test_guarded : Result Unit := do
     | core.result.Result.Err _ => ok false
   massert b
   let (r1, e1, _) ← Eng.guarded { e with depth := 2#u32 } 6#u32
-  let b1 ←
-    match r1 with
-    | core.result.Result.Ok _ => ok false
-    | core.result.Result.Err i =>
-      match i with
-      | 6#uscalar => ok true
-      | _ => ok false
-  massert b1
-  massert (e1.depth = 2#u32)
-  massert (e1.steps = 1#u32)
-  let (b2, e2, _) ← Eng.odd_node e1 0#u32
-  massert b2
-  let (b3, e3, _) ← Eng.odd_node e2 1#u32
-  massert (¬ b3)
-  let (b4, e4, _) ← Eng.odd_node e3 5#u32
-  massert (¬ b4)
-  massert (e4.steps = 4#u32)
+  match r1 with
+  | core.result.Result.Ok _ => fail panic
+  | core.result.Result.Err i =>
+    match i with
+    | 6#uscalar =>
+      massert (e1.depth = 2#u32)
+      massert (e1.steps = 1#u32)
+      let (b1, e2, _) ← Eng.odd_node e1 0#u32
+      massert b1
+      let (b2, e3, _) ← Eng.odd_node e2 1#u32
+      massert (¬ b2)
+      let (b3, e4, _) ← Eng.odd_node e3 5#u32
+      massert (¬ b3)
+      massert (e4.steps = 4#u32)
+    | _ => fail panic
 
 /- Unit test for [join_struct_outputs::test_guarded] -/
 #guard (test_guarded).reducesTo ()
@@ -247,14 +224,12 @@ def test_walk : Result Unit := do
     | core.result.Result.Err _ => ok false
   massert b
   let (r1, _, _) ← Eng.walk e 7#u32
-  let b1 ←
-    match r1 with
-    | core.result.Result.Ok _ => ok false
-    | core.result.Result.Err i =>
-      match i with
-      | 7#uscalar => ok true
-      | _ => ok false
-  massert b1
+  match r1 with
+  | core.result.Result.Ok _ => fail panic
+  | core.result.Result.Err i =>
+    match i with
+    | 7#uscalar => ok ()
+    | _ => fail panic
 
 /- Unit test for [join_struct_outputs::test_walk] -/
 #guard (test_walk).reducesTo ()

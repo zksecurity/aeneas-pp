@@ -42,7 +42,7 @@ def f
 @[rust_loop_body]
 def the_loop_loop.body
   (s : S) (next_in : Slice Std.U8) :
-  Result (ControlFlow (S × (Slice Std.U8)) (S × (Slice Std.U8) × Bool))
+  Result (ControlFlow (S × (Slice Std.U8)) (Bool × S × (Slice Std.U8)))
   := do
   let (s1, to_slice_mut_back) ← lift (Array.to_slice_mut s.y)
   let ((done1, n), i, s2) ← f s.x next_in s1
@@ -53,13 +53,13 @@ def the_loop_loop.body
   if done1
   then
     let a := to_slice_mut_back s2
-    ok (done ({ x := i, y := a }, next_in1, done1))
+    ok (done (done1, { x := i, y := a }, next_in1))
   else
     let b ← core.slice.Slice.is_empty next_in1
     if b
     then
       let a := to_slice_mut_back s2
-      ok (done ({ x := i, y := a }, next_in1, done1))
+      ok (done (done1, { x := i, y := a }, next_in1))
     else let a := to_slice_mut_back s2
          ok (cont ({ x := i, y := a }, next_in1))
 
@@ -68,7 +68,7 @@ def the_loop_loop.body
     Visibility: public -/
 @[rust_loop]
 def the_loop_loop
-  (s : S) (next_in : Slice Std.U8) : Result (S × (Slice Std.U8) × Bool) := do
+  (s : S) (next_in : Slice Std.U8) : Result (Bool × S × (Slice Std.U8)) := do
   loop
     (fun (s1, next_in1) => the_loop_loop.body s1 next_in1)
     (s, next_in)
@@ -76,9 +76,9 @@ def the_loop_loop
 /-- [issue_789_loop_ctx_match::the_loop]:
     Source: 'tests/src/issue-789-loop-ctx-match.rs', lines 13:0-23:1
     Visibility: public -/
+@[reducible]
 def the_loop
   (s : S) (next_in : Slice Std.U8) : Result (Bool × S × (Slice Std.U8)) := do
-  let (s1, next_in1, done1) ← the_loop_loop s next_in
-  ok (done1, s1, next_in1)
+  the_loop_loop s next_in
 
 end issue_789_loop_ctx_match

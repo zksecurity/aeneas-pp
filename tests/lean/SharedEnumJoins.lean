@@ -64,11 +64,11 @@ def get (t : F) : Result Std.U32 := do
     Source: 'tests/src/shared-enum-joins.rs', lines 42:0-48:1
     Visibility: public -/
 def get_twice (t : F) : Result Std.U32 := do
-  let n ← match t with
-          | F.A n1 => ok n1
-          | F.B x => ok x
-  let i ← get t
-  n + i
+  match t with
+  | F.A n => let i ← get t
+             n + i
+  | F.B x => let i ← get t
+             x + i
 
 /-- [shared_enum_joins::test_shared_enum_joins]:
     Source: 'tests/src/shared-enum-joins.rs', lines 51:0-59:1

@@ -216,10 +216,9 @@ def test_arc : Result Unit := do
                  | _ => ok false
   massert b4
   let o2 ← first (alloc.vec.Vec.new Std.U32)
-  let b5 ← match o2 with
-           | none => ok true
-           | some _ => ok false
-  massert b5
+  match o2 with
+  | none => ok ()
+  | some _ => fail panic
 
 /- Unit test for [arc::test_arc] -/
 #guard (test_arc).reducesTo ()

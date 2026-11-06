@@ -315,13 +315,11 @@ def test_fn_items : Result Unit := do
   let b2 ← zero_first (some 0#u32)
   massert b2
   let o ← first_inner (some { v := 3#u32 })
-  let b3 ←
-    match o with
-    | none => ok false
-    | some i1 => match i1 with
-                 | 3#uscalar => ok true
-                 | _ => ok false
-  massert b3
+  match o with
+  | none => fail panic
+  | some i1 => match i1 with
+               | 3#uscalar => ok ()
+               | _ => fail panic
 
 /- Unit test for [fn_items_late_bound::test_fn_items] -/
 #guard (test_fn_items).reducesTo ()
