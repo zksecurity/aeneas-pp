@@ -120,25 +120,6 @@ let assign_to_place (config : config) (span : Meta.span) (rv : tvalue)
   (* Return *)
   (ctx, cc)
 
-(** Evaluate an assertion, when the scrutinee is not symbolic *)
-let eval_assertion_concrete (config : config) (span : Meta.span)
-    (assertion : assertion) : st_cm_fun =
- fun ctx ->
-  (* There won't be any symbolic expansions: fully evaluate the operand *)
-  let v, ctx, eval_op = eval_operand config span assertion.cond ctx in
-  let st =
-    match v.value with
-    | VLiteral (VBool b) ->
-        (* Branch *)
-        if b = assertion.expected then Unit else Panic
-    | _ ->
-        [%craise] span
-          ("Expected a boolean, got: "
-          ^ tvalue_to_string ~span:(Some span) ctx v)
-  in
-  (* Compose and apply *)
-  ((ctx, st), eval_op)
-
 (** Evaluates an assertion.
 
     In the case the boolean under scrutinee is symbolic, we synthesize a call to
@@ -158,9 +139,8 @@ let eval_assertion (config : config) (span : Meta.span) (assertion : assertion)
      * even if we are in symbolic mode. Note that this case should be
      * extremely rare... *)
     match v.value with
-    | VLiteral (VBool _) ->
-        (* Delegate to the concrete evaluation function *)
-        eval_assertion_concrete config span assertion ctx
+    | VLiteral (VBool b) ->
+        ((ctx, if b = assertion.expected then Unit else Panic), fun e -> e)
     | VSymbolic sv ->
         [%sanity_check] span (config.mode = SymbolicMode);
         [%sanity_check] span (sv.sv_ty = TScalar TBool);
