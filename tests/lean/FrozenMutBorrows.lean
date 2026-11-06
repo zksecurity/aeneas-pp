@@ -270,7 +270,7 @@ def Eval.iota.closure.Insts.CoreOpsFunctionFnPairShared2EvalU32Bool.call
   (c : Eval.iota.closure) (tupled_args : (Eval × Std.U32)) : Result Bool := do
   let (e, v) := tupled_args
   let i ← Eval.val e v
-  ok (i = 0#u32)
+  ok (decide (i = 0#u32))
 
 /-- [frozen_mut_borrows::{frozen_mut_borrows::Eval<'a>}::iota]:
     Source: 'tests/src/frozen-mut-borrows.rs', lines 109:4-124:5

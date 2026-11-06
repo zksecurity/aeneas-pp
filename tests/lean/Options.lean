@@ -148,7 +148,7 @@ def
   (c : test_is_some_and_true.closure) (tupled_args : Std.U32) :
   Result Bool
   := do
-  ok (tupled_args > 1#u32)
+  ok (decide (tupled_args > 1#u32))
 
 /-- Trait implementation: [options::test_is_some_and_true::{impl core::ops::function::FnOnce<(u32,), bool> for options::test_is_some_and_true::{closure}}]
     Source: 'tests/src/options.rs', lines 46:35-46:44 -/
@@ -184,7 +184,7 @@ def
   (c : test_is_some_and_false.closure) (tupled_args : Std.U32) :
   Result Bool
   := do
-  ok (tupled_args > 1#u32)
+  ok (decide (tupled_args > 1#u32))
 
 /-- Trait implementation: [options::test_is_some_and_false::{impl core::ops::function::FnOnce<(u32,), bool> for options::test_is_some_and_false::{closure}}]
     Source: 'tests/src/options.rs', lines 51:36-51:45 -/

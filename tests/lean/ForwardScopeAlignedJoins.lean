@@ -66,14 +66,14 @@ def Engine.is_zero (self : Engine) (v : Std.U32) : Result Bool := do
   match v1 with
   | Val.Const c i =>
     match i with
-    | 0#uscalar => ok (c = self.known.zero)
+    | 0#uscalar => ok (decide (c = self.known.zero))
     | _ => ok false
   | Val.Nat i =>
     let i1 ← lift (UScalar.cast .Usize i)
     let i2 ←
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
         self.nats i1
-    ok (i2 = 0#u32)
+    ok (decide (i2 = 0#u32))
 
 /-- [forward_scope_aligned_joins::test_is_zero]:
     Source: 'tests/src/forward-scope-aligned-joins.rs', lines 43:0-50:1

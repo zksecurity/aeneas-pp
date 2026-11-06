@@ -23,7 +23,7 @@ namespace fn_items_late_bound
 /-- [fn_items_late_bound::is_zero]:
     Source: 'tests/src/fn-items-late-bound.rs', lines 7:0-9:1 -/
 def is_zero (x : Std.U32) : Result Bool := do
-  ok (x = 0#u32)
+  ok (decide (x = 0#u32))
 
 /-- [fn_items_late_bound::{impl core::ops::function::Fn<(&'_0 u32,), bool> for for<'_0_1> fn_items_late_bound::is_zero<'_0_1>}::call]:
     Source: 'tests/src/fn-items-late-bound.rs', lines 7:0-9:1 -/

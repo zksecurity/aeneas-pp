@@ -173,7 +173,7 @@ def ScalarEnum.Insts.CoreCmpPartialEqScalarEnum.eq
   (self : ScalarEnum) (other : ScalarEnum) : Result Bool := do
   let self1 := read_discriminant self
   let other1 := read_discriminant other
-  ok (self1 = other1)
+  ok (decide (self1 = other1))
 
 /-- Trait implementation: [derive::{impl core::cmp::PartialEq<derive::ScalarEnum> for derive::ScalarEnum}]
     Source: 'tests/src/derive.rs', lines 8:22-8:31 -/
@@ -882,9 +882,10 @@ def Struct6Fields.Insts.CoreCmpPartialEqStruct6Fields.eq
       if self.c = other.c
       then
         if self.d = other.d
-        then if self.e = other.e
-             then ok (self.f = other.f)
-             else ok false
+        then
+          if self.e = other.e
+          then ok (decide (self.f = other.f))
+          else ok false
         else ok false
       else ok false
     else ok false

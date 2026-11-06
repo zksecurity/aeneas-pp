@@ -126,7 +126,7 @@ def
   Result (Bool × exactly.closure)
   := do
   let i ← core.str.Str.len tupled_args
-  ok (i = 0#usize, ())
+  ok (decide (i = 0#usize), ())
 
 /-- [shared_borrows_reborrowed_at_joins::exactly::{impl core::ops::function::FnOnce<(&'_0 &'_1 str,), bool> for shared_borrows_reborrowed_at_joins::exactly::{closure}<'_0, '_1>}::call_once]:
     Source: 'tests/src/shared-borrows-reborrowed-at-joins.rs', lines 54:51-54:67 -/

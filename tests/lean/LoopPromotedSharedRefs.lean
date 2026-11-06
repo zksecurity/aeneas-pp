@@ -52,8 +52,8 @@ impl_def core.option.Option.Insts.CoreCmpPartialEqOption {T : Type _}
 @[rust_loop_body]
 def first_quote_loop.body
   (bytes : Slice Std.U8) (cursor : Std.Usize) :
-  Result (ControlFlow ((Slice Std.U8) × Std.Usize) ((core.result.Result
-    Std.U32 Unit) × Std.Usize))
+  Result (ControlFlow ((Slice Std.U8) × Std.Usize) ((core.result.Result Std.U32
+    Unit) × Std.Usize))
   := do
   let o ←
     core.slice.Slice.get (core.slice.index.SliceIndexUsizeSlice Std.U8) bytes
@@ -63,8 +63,8 @@ def first_quote_loop.body
       (core.option.Option.Insts.CoreCmpPartialEqOption
       (core.cmp.PartialEqShared core.cmp.PartialEqU8)) o (some 34#u8)
   let s : _root_.Sum Std.Usize (_root_.Sum ((Slice Std.U8) × Std.Usize)
-    ((core.result.Result Std.U32 Unit) × (Slice Std.U8) × Std.Usize ×
-    (Option Std.U8))) ←
+    ((core.result.Result Std.U32 Unit) × (Slice Std.U8) × Std.Usize × (Option
+    Std.U8))) ←
     if b
     then
       ok (Sum.inr (Sum.inr (core.result.Result.Err (), bytes, cursor, some
