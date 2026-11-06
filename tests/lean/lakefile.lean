@@ -28,6 +28,7 @@ package «tests» {}
 @[default_target] lean_lib CastSigned
 @[default_target] lean_lib CharCasts
 @[default_target] lean_lib ChunksExact
+@[default_target] lean_lib ClosureMutArgMono
 @[default_target] lean_lib ClosureRecursion
 @[default_target] lean_lib ClosureRecursionOpaque
 @[default_target] lean_lib ClosureRegionRequirements
