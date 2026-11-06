@@ -172,9 +172,10 @@ let passes :
     ( None,
       "simplify_aggregates_unchanged_fields",
       simplify_aggregates_unchanged_fields );
-    (* Simplify the matches whose branches are all the same (introduced by the
-       let-bindings which may return, once the aggregates are simplified) *)
-    (None, "simplify_constant_matches", simplify_constant_matches);
+    (* Merge the branches of the matches which evaluate the same expression
+       (the branches of a wildcard pattern, or the branches forwarding the
+       output of a nested let-binding once the aggregates are simplified) *)
+    (None, "merge_identical_match_branches", merge_identical_match_branches);
     (* Simplify the lambdas again *)
     (None, "simplify_lambdas (pass 2)", simplify_lambdas);
     (* Simplify the let-bindings - some simplifications may have been unlocked by

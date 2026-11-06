@@ -194,35 +194,56 @@ let intro_massert = lift_expr_map_visitor intro_massert_visitor
     assignments, simplify this further. *)
 let simplify_decompose_struct_visitor (ctx : ctx) (def : fun_decl) =
   let span = def.item_meta.span in
-  object
+  (* We deconstruct an ADT with a single let-binding in two situations:
+     - if the ADT is an enumeration (which must have exactly one branch)
+     - if we forbid using field projectors *)
+  let use_let_with_cons (adt_id : TypeDeclId.id) : bool =
+    let tdef = TypeDeclId.Map.find adt_id ctx.trans_ctx.type_ctx.type_decls in
+    TypesUtils.type_decl_is_enum tdef
+    || !Config.dont_use_field_projectors
+    (* Also, there is a special case when the ADT is to be extracted as
+       a tuple, because it is a structure with unnamed fields. Some backends
+       like Lean have projectors for tuples (like so: `x.3`), but others
+       like Coq don't, in which case we have to deconstruct the whole ADT
+       at once (`let (a, b, c) = x in`) *)
+    || TypesUtils.type_decl_from_decl_id_is_tuple_struct
+         ctx.trans_ctx.type_ctx.type_infos adt_id
+       && not !Config.use_tuple_projectors
+  in
+  (* Replace the structure patterns of a pattern, at the top-level if [top] or
+     inside tuples, with variables: return the updated pattern, and the
+     let-bindings destructuring the variables *)
+  let rec lift_struct_pats (top : bool) (pat : tpat) :
+      tpat * (texpr -> texpr) =
+    match (pat.pat, pat.ty) with
+    | PAdt _, TAdt (TAdtId adt_id, _) when top && not (use_let_with_cons adt_id)
+      ->
+        let fv = mk_fresh_fvar ctx pat.ty in
+        ( mk_tpat_from_fvar None fv,
+          mk_opened_let false pat (mk_texpr_from_fvar fv) )
+    | PAdt { variant_id; fields }, TAdt (TTuple, _) ->
+        let fields, lets = List.split (List.map (lift_struct_pats true) fields) in
+        ( { pat with pat = PAdt { variant_id; fields } },
+          fun e -> List.fold_right (fun f e -> f e) lets e )
+    | _ -> (pat, Fun.id)
+  in
+  object (self)
     inherit [_] map_expr as super
+
+    (* A lambda destructuring structures in its input binds them to variables,
+       which the body destructures like let-bindings *)
+    method! visit_Lambda env (pat : tpat) (body : texpr) =
+      let pat, lets = lift_struct_pats true pat in
+      Lambda (pat, self#visit_texpr env (lets body))
 
     method! visit_Let env (monadic : bool) (lv : tpat) (scrutinee : texpr)
         (next : texpr) =
       match (lv.pat, lv.ty) with
+      | PAdt _, TAdt (TTuple, _) ->
+          let lv, lets = lift_struct_pats false lv in
+          super#visit_Let env monadic lv scrutinee (lets next)
       | PAdt adt_pat, TAdt (TAdtId adt_id, generics) ->
-          (* Detect if this is an enumeration or not *)
-          let tdef =
-            TypeDeclId.Map.find adt_id ctx.trans_ctx.type_ctx.type_decls
-          in
-          let is_enum = TypesUtils.type_decl_is_enum tdef in
-          (* We deconstruct the ADT with a single let-binding in two situations:
-               - if the ADT is an enumeration (which must have exactly one branch)
-               - if we forbid using field projectors
-            *)
-          let use_let_with_cons =
-            is_enum
-            || !Config.dont_use_field_projectors
-            (* Also, there is a special case when the ADT is to be extracted as
-                 a tuple, because it is a structure with unnamed fields. Some backends
-                 like Lean have projectors for tuples (like so: `x.3`), but others
-                 like Coq don't, in which case we have to deconstruct the whole ADT
-                 at once (`let (a, b, c) = x in`) *)
-            || TypesUtils.type_decl_from_decl_id_is_tuple_struct
-                 ctx.trans_ctx.type_ctx.type_infos adt_id
-               && not !Config.use_tuple_projectors
-          in
-          if use_let_with_cons then
+          if use_let_with_cons adt_id then
             super#visit_Let env monadic lv scrutinee next
           else
             (* This is not an enumeration: introduce let-bindings for every
@@ -2192,43 +2213,111 @@ let simplify_aggregates_unchanged_fields =
   lift_expr_map_visitor_with_state simplify_aggregates_unchanged_fields_visitor
     { expand_map = ExprMap.empty; expanded = [] }
 
-(** Simplify the matches whose branches are all the same expression, which
-    doesn't use the variables bound by the patterns.
+(** Merge the branches of a match which evaluate the same expression, without
+    using the variables bound by their patterns, into a single wildcard branch.
+    If all the branches are the same, the match simplifies to their expression.
 
     Ex.:
     {[
       match x with
-      | inl _ => ok x
-      | inr _ => ok x
+      | A => e0
+      | B y => e1
+      | C _ => e0
 
         ~~>
 
-      ok x
+      match x with
+      | B y => e1
+      | _ => e0
     ]}
 
-    Such expressions are introduced when a let-binding whose bound expression
-    may return directly forwards the output of a nested one (see
+    The symbolic execution expands the scrutinee of a match into one branch per
+    variant: this recovers the wildcard patterns of the source, as well as the
+    branches which merely forward the output of a nested let-binding (see
     {!SymbolicToPureExpressions.translate_let}). *)
-let simplify_constant_matches_visitor (_ctx : ctx) (_def : fun_decl) =
+let merge_identical_match_branches_visitor (_ctx : ctx) (def : fun_decl) =
+  let span = def.item_meta.span in
+  (* The expression of a branch, up to the names of the variables it binds *)
+  let normalize (e : texpr) : texpr =
+    let visitor =
+      object
+        inherit [_] map_expr
+        method! visit_PBound _ (v : var) _ = PBound ({ v with basename = None }, None)
+      end
+    in
+    visitor#visit_texpr () (close_all_texpr span e)
+  in
+  (* The patterns of the branches must be disjoint, so that we can reorder the
+     branches: we only merge the branches of matches over the variants of an
+     enumeration or over constants *)
+  let is_flat_pat (p : tpat) : bool =
+    match p.pat with
+    | PAdt { variant_id = Some _; fields } ->
+        List.for_all
+          (fun (p : tpat) ->
+            match p.pat with
+            | POpen _ | PIgnored -> true
+            | _ -> false)
+          fields
+    | PConstant _ -> true
+    | _ -> false
+  in
   object
     inherit [_] map_expr as super
 
     method! visit_Switch env scrut switch =
       match super#visit_Switch env scrut switch with
-      | Switch (_, Match (b0 :: branches)) as e ->
-          let is_constant (b : match_branch) =
-            b.branch = b0.branch
-            && FVarId.Set.disjoint (tpat_get_fvars b.pat)
-                 (texpr_get_fvars b.branch)
+      | Switch (scrut, Match branches) as e
+        when List.for_all (fun (b : match_branch) -> is_flat_pat b.pat) branches
+        ->
+          (* The normalized expression of the branches which don't use the
+             variables bound by their pattern *)
+          let keys =
+            List.map
+              (fun ({ pat; branch } : match_branch) ->
+                if FVarId.Set.disjoint (tpat_get_fvars pat) (texpr_get_fvars branch)
+                then Some (normalize branch)
+                else None)
+              branches
           in
-          if is_constant b0 && List.for_all is_constant branches then
-            b0.branch.e
-          else e
+          (* Pick the expression shared by the most branches *)
+          let count k = List.length (List.filter (( = ) (Some k)) keys) in
+          let best =
+            List.fold_left
+              (fun best k ->
+                match (best, k) with
+                | _, None -> best
+                | Some (_, n), Some k when count k <= n -> best
+                | _, Some k -> Some (k, count k))
+              None keys
+          in
+          begin
+            match best with
+            | Some (k, n) when n = List.length branches ->
+                (List.nth branches
+                   (Option.get (List.find_index (( = ) (Some k)) keys)))
+                  .branch
+                  .e
+            | Some (k, n) when n >= 2 ->
+                let kept, merged =
+                  List.partition
+                    (fun (_, key) -> key <> Some k)
+                    (List.combine branches keys)
+                in
+                let wildcard : match_branch =
+                  {
+                    pat = mk_ignored_pat scrut.ty;
+                    branch = (fst (List.hd merged)).branch;
+                  }
+                in
+                Switch (scrut, Match (List.map fst kept @ [ wildcard ]))
+            | _ -> e
+          end
       | e -> e
   end
 
-let simplify_constant_matches =
-  lift_expr_map_visitor simplify_constant_matches_visitor
+let merge_identical_match_branches =
+  lift_expr_map_visitor merge_identical_match_branches_visitor
 
 (** Convert the unit variables to [()] if they are used as right-values or [_]
     if they are used as left values in patterns. *)

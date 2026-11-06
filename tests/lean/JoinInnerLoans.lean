@@ -124,10 +124,7 @@ def Engine.equal
   let b ← Table.contains t key
   let (r, self1, back) ←
     if b
-    then
-      ok (core.result.Result.Ok true, self,
-        fun (e : Engine) => let ⟨ s, _ ⟩ := e
-                            s)
+    then ok (core.result.Result.Ok true, self, fun (e : Engine) => e.s)
     else
       do
       let (r1, self2, step_back) ← Engine.step self x y
@@ -139,9 +136,7 @@ def Engine.equal
           let t2 ← Table.insert t1 key
           let a := index_mut_back t2
           ok (r1, { self2 with s := { self2.s with equal := a } },
-            fun (e : Engine) =>
-              let ⟨ s, _ ⟩ := e
-              (step_back { self2 with s }).s)
+            fun (e : Engine) => (step_back { self2 with s := e.s }).s)
         else
           if budget > 0#u32
           then
@@ -150,9 +145,7 @@ def Engine.equal
             let t2 ← Table.insert t1 key
             let a := index_mut_back t2
             ok (r1, { self2 with s := { self2.s with unequal := a } },
-              fun (e : Engine) =>
-                let ⟨ s, _ ⟩ := e
-                (step_back { self2 with s }).s)
+              fun (e : Engine) => (step_back { self2 with s := e.s }).s)
           else ok (r1, self2, fun e => (step_back e).s)
       | core.result.Result.Err _ => ok (r1, self2, fun e => (step_back e).s)
   let back'a :=

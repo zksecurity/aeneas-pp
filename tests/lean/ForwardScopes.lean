@@ -151,7 +151,6 @@ def let_else_chain
     | Head.Var _ => ok (core.result.Result.Ok none, acc1)
     | Head.Const c c1 =>
       match c1 with
-      | Class.Def => ok (core.result.Result.Ok none, acc1)
       | Class.Ctor =>
         let acc2 ← acc1 + 1#u32
         let r ← check c
@@ -198,9 +197,8 @@ def let_else_chain
         match s with
         | Sum.inl r1 => ok (r1, acc2)
         | Sum.inr p => ok p
-      | Class.Other => ok (core.result.Result.Ok none, acc1)
-  | Val.Nat _ => ok (core.result.Result.Ok none, acc1)
-  | Val.Sort => ok (core.result.Result.Ok none, acc1)
+      | _ => ok (core.result.Result.Ok none, acc1)
+  | _ => ok (core.result.Result.Ok none, acc1)
 
 /-- [forward_scopes::all_return]:
     Source: 'tests/src/forward-scopes.rs', lines 54:0-71:1
@@ -215,8 +213,7 @@ def all_return (v : Val) : Result Std.U32 := do
       | Class.Def => if c > 3#u32
                      then ok 1#u32
                      else ok 2#u32
-      | Class.Ctor => ok 3#u32
-      | Class.Other => ok 3#u32
+      | _ => ok 3#u32
   | Val.Nat n => if n = 0#u32
                  then ok 4#u32
                  else ok 5#u32
@@ -291,8 +288,7 @@ def scopes_in_loop_loop.body
               match s3 with
               | Sum.inl i3 => ok (Sum.inr (Sum.inr i3))
               | Sum.inr i3 => ok (Sum.inl i3)
-        | Val.Nat _ => ok (Sum.inl i2)
-        | Val.Sort => ok (Sum.inl i2)
+        | _ => ok (Sum.inl i2)
       match s1 with
       | Sum.inl i3 => ok (Sum.inr (a, n, i3))
       | Sum.inr s2 =>
@@ -463,7 +459,6 @@ def live_borrow
   let s : _root_.Sum (Std.U32 × Std.U32 × (Std.U32 → Array Std.U32 2#usize))
     (Std.U32 × (Array Std.U32 2#usize)) ←
     match v with
-    | Val.Neutral _ _ => ok (Sum.inl (r1, r1, index_mut_back))
     | Val.Nat n =>
       do
       let r2 ← r1 + n
@@ -486,7 +481,7 @@ def live_borrow
         let r4 ← Array.index_usize a2 1#usize
         ok (Sum.inr (r4, a2))
       | Sum.inr t => ok (Sum.inl t)
-    | Val.Sort => ok (Sum.inl (r1, r1, index_mut_back))
+    | _ => ok (Sum.inl (r1, r1, index_mut_back))
   match s with
   | Sum.inl t => let (i, r2, back) := t
                  let a1 := back r2
@@ -503,10 +498,6 @@ def live_borrow_rev
   let (r, index_mut_back) ← Array.index_mut_usize a 0#usize
   let r1 ← r + 1#u32
   match v with
-  | Val.Neutral _ _ =>
-    let r2 ← r1 + 2#u32
-    let a1 := index_mut_back r2
-    ok (r2, a1)
   | Val.Nat n =>
     let a1 ←
       match n with
@@ -524,9 +515,9 @@ def live_borrow_rev
     let i1 ← Array.index_usize a1 1#usize
     let r2 ← i + i1
     ok (r2, a1)
-  | Val.Sort => let r2 ← r1 + 2#u32
-                let a1 := index_mut_back r2
-                ok (r2, a1)
+  | _ => let r2 ← r1 + 2#u32
+         let a1 := index_mut_back r2
+         ok (r2, a1)
 
 /-- [forward_scopes::bump_and_get]:
     Source: 'tests/src/forward-scopes.rs', lines 218:0-221:1 -/

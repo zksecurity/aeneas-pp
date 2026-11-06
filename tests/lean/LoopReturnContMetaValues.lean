@@ -195,14 +195,6 @@ def Engine.eval_let_loop.body
       let v ← Engine.view self2
       let n ← View.node v body
       match n with
-      | Node.Var _ =>
-        let (r1, self3, eval_back1) ← Engine.eval self2 env1 body
-        ok (Sum.inl (r1, self3, env1, self1.nodes, self1.d,
-          fun e => let e1 := eval_back1 e
-                   (e1.t, e1.s),
-          fun t1 s4 =>
-            let e := extend_back { self2 with t := t1, s := s4 }
-            (e.t, e.s)))
       | Node.Let v1 b =>
         ok (Sum.inr (Sum.inl
           (fun t1 s4 =>
@@ -210,7 +202,7 @@ def Engine.eval_let_loop.body
              let e1 := eval_back { self1 with t := e.t, s := e.s }
              back e1.t e1.s, self2.t, self2.nodes, self2.s, self2.d, env1, v1,
           b, s2)))
-      | Node.App _ _ =>
+      | _ =>
         let (r1, self3, eval_back1) ← Engine.eval self2 env1 body
         ok (Sum.inl (r1, self3, env1, self1.nodes, self1.d,
           fun e => let e1 := eval_back1 e
@@ -231,12 +223,11 @@ def Engine.eval_let_loop.body
     let (r1, self2, _, s4, i1, back1, back2) := t1
     ok (done (r1, self2,
       fun (self3 : Engine) =>
-        let ⟨ t2, _, s5, _ ⟩ := { self2 with t := self3.t, s := self3.s }
-        let (t3, s6) := back1 { self2 with t := t2, s := s5 }
-        let (t4, s7) := back2 t3 s6
-        let e := eval_back { t := t4, nodes := s4, s := s7, d := i1 }
-        let (t5, s8) := back e.t e.s
-        { self with t := t5, s := s8 }))
+        let (t2, s5) := back1 { self2 with t := self3.t, s := self3.s }
+        let (t3, s6) := back2 t2 s5
+        let e := eval_back { t := t3, nodes := s4, s := s6, d := i1 }
+        let (t4, s7) := back e.t e.s
+        { self with t := t4, s := s7 }))
   | Sum.inr s4 =>
     match s4 with
     | Sum.inl t1 =>

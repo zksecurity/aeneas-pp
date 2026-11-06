@@ -95,10 +95,7 @@ def helper_in_one_branch
       let (r1, ck1, helper_back) ← helper { t, e, s } 1#u32
       ok (ck1, r1, fun c => let c1 := helper_back c
                             (c1.t, c1.s))
-    else
-      ok (({ t, e, s } : Ck), 2#u32,
-        fun (c : Ck) => let ⟨ v, _, v1 ⟩ := c
-                        (v, v1))
+    else ok (({ t, e, s } : Ck), 2#u32, fun (c : Ck) => (c.t, c.s))
   let (i, c, helper_back) ← helper ck r
   let c1 := helper_back c
   let (t1, _) := back { c1 with e := ck.e }
@@ -120,10 +117,7 @@ def method_in_one_branch
       let (r1, ck1, push_both_back) ← Ck.push_both { t, e, s } 1#u32
       ok (ck1, r1, fun c => let c1 := push_both_back c
                             (c1.t, c1.s))
-    else
-      ok (({ t, e, s } : Ck), 2#u32,
-        fun (c : Ck) => let ⟨ v, _, v1 ⟩ := c
-                        (v, v1))
+    else ok (({ t, e, s } : Ck), 2#u32, fun (c : Ck) => (c.t, c.s))
   let (i, c, push_both_back) ← Ck.push_both ck r
   let c1 := push_both_back c
   let (t1, _) := back { c1 with e := ck.e }

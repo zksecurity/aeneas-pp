@@ -461,8 +461,7 @@ def Eng.shifted_below
       let (self2, _, _) := c
       ok (b2, self2, fun e => let (⟨ v, _ ⟩, _, _) := all_back (e, a, b)
                               v)
-    else ok (false, self, fun (e : Eng) => let ⟨ v, _ ⟩ := e
-                                           v)
+    else ok (false, self, fun (e : Eng) => e.t)
   let back'a :=
     fun (self2 : Eng) =>
       let v := back { self1 with t := self2.t }

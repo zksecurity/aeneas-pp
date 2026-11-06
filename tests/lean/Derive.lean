@@ -284,26 +284,20 @@ def CopyEnum.Insts.CoreCmpPartialEqCopyEnum.eq
     | CopyEnum.Variant0 => ok true
     | CopyEnum.Variant1 __self_0 =>
       match other with
-      | CopyEnum.Variant0 => ok true
       | CopyEnum.Variant1 __arg1_0 =>
         core.cmp.impls.PartialEqBool.eq __self_0 __arg1_0
-      | CopyEnum.Variant2 _ => ok true
-      | CopyEnum.Variant3 _ => ok true
+      | _ => ok true
     | CopyEnum.Variant2 __self_0 =>
       match other with
-      | CopyEnum.Variant0 => ok true
-      | CopyEnum.Variant1 _ => ok true
       | CopyEnum.Variant2 __arg1_0 =>
         lift (core.cmp.impls.PartialEqU32.eq __self_0 __arg1_0)
-      | CopyEnum.Variant3 _ => ok true
+      | _ => ok true
     | CopyEnum.Variant3 __self_0 =>
       match other with
-      | CopyEnum.Variant0 => ok true
-      | CopyEnum.Variant1 _ => ok true
-      | CopyEnum.Variant2 _ => ok true
       | CopyEnum.Variant3 __arg1_0 =>
         core.cmp.impls.PartialEqShared.eq corecmpPartialEqInst __self_0
           __arg1_0
+      | _ => ok true
   else ok false
 
 /-- Trait implementation: [derive::{impl core::cmp::PartialEq<derive::CopyEnum<T>> for derive::CopyEnum<T>}]
@@ -429,38 +423,26 @@ def Enum.Insts.CoreCmpPartialEqEnum.eq
     | Enum.Variant0 => ok true
     | Enum.Variant1 __self_0 =>
       match other with
-      | Enum.Variant0 => ok true
       | Enum.Variant1 __arg1_0 =>
         core.cmp.impls.PartialEqBool.eq __self_0 __arg1_0
-      | Enum.Variant2 _ => ok true
-      | Enum.Variant3 _ => ok true
-      | Enum.Variant4 _ => ok true
+      | _ => ok true
     | Enum.Variant2 __self_0 =>
       match other with
-      | Enum.Variant0 => ok true
-      | Enum.Variant1 _ => ok true
       | Enum.Variant2 __arg1_0 =>
         lift (core.cmp.impls.PartialEqU32.eq __self_0 __arg1_0)
-      | Enum.Variant3 _ => ok true
-      | Enum.Variant4 _ => ok true
+      | _ => ok true
     | Enum.Variant3 __self_0 =>
       match other with
-      | Enum.Variant0 => ok true
-      | Enum.Variant1 _ => ok true
-      | Enum.Variant2 _ => ok true
       | Enum.Variant3 __arg1_0 =>
         core.cmp.impls.PartialEqShared.eq corecmpPartialEqInst __self_0
           __arg1_0
-      | Enum.Variant4 _ => ok true
+      | _ => ok true
     | Enum.Variant4 __self_0 =>
       match other with
-      | Enum.Variant0 => ok true
-      | Enum.Variant1 _ => ok true
-      | Enum.Variant2 _ => ok true
-      | Enum.Variant3 _ => ok true
       | Enum.Variant4 __arg1_0 =>
         alloc.vec.partial_eq.PartialEqVec.eq corecmpPartialEqInst __self_0
           __arg1_0
+      | _ => ok true
   else ok false
 
 /-- Trait implementation: [derive::{impl core::cmp::PartialEq<derive::Enum<T>> for derive::Enum<T>}]

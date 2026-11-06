@@ -523,11 +523,9 @@ def test_wrap_ref_partial_cmp : Result Unit := do
   let b ←
     match o with
     | none => ok false
-    | some o1 =>
-      match o1 with
-      | Ordering.lt => ok true
-      | Ordering.eq => ok false
-      | Ordering.gt => ok false
+    | some o1 => match o1 with
+                 | Ordering.lt => ok true
+                 | _ => ok false
   massert b
 
 /- Unit test for [order::test_wrap_ref_partial_cmp] -/

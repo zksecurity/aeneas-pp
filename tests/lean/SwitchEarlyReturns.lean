@@ -418,11 +418,7 @@ def struct_calls
             Std.U32 (core.convert.FromSame Std.U32) residual
         let c := push_back ck
         ok (Sum.inr (r1, c.t, c.s))
-    | V.C x =>
-      ok (Sum.inl (({ t, s } : Ck), x,
-        fun (c : Ck) => let v1 := c.t
-                        let v2 := c.s
-                        (v1, v2)))
+    | V.C x => ok (Sum.inl (({ t, s } : Ck), x, fun (c : Ck) => (c.t, c.s)))
   match s1 with
   | Sum.inl t1 =>
     let (ck, x, back) := t1

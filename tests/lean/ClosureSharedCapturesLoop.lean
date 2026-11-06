@@ -118,9 +118,7 @@ def Checker.telescope_loop.body
             ((alloc.vec.Vec Std.U32) × Std.U32) (core.convert.FromSame Unit)
             residual
         ok (Sum.inr (Sum.inr (r1, self1, next1, fun c => (call_mut_back c).t)))
-    | Node.Other =>
-      ok (Sum.inl (self, next, fun (c : Checker) => let ⟨ t, _ ⟩ := c
-                                                    t))
+    | Node.Other => ok (Sum.inl (self, next, fun (c : Checker) => c.t))
   let s1 : _root_.Sum ((core.result.Result ((alloc.vec.Vec Std.U32) × Std.U32)
     Unit) × Checker × T1 × (Checker → Terms)) (_root_.Sum ((Checker → Terms) ×
     Checker × Std.U32 × T1 × (alloc.vec.Vec Std.U32) × Std.U32)
@@ -189,8 +187,7 @@ def Checker.telescope
   let (r, t, v, back) ←
     Checker.telescope_loop
       coreopsfunctionFnMutT1TupleMutACheckerUsizeU32ResultOptionU32TupleInst
-      (fun (c : Checker) => let ⟨ t1, _ ⟩ := c
-                            t1) self e next (alloc.vec.Vec.new Std.U32) e
+      (fun (c : Checker) => c.t) self e next (alloc.vec.Vec.new Std.U32) e
   let back'a :=
     fun (self1 : Checker) => let t1 := back self1.t
                              { self with t := t1 }
@@ -214,8 +211,7 @@ def
       let i2 ←
         alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v
           count
-      ok (i2, c, c1, fun (c3 : Checker) => let ⟨ t, _ ⟩ := c3
-                                           t)
+      ok (i2, c, c1, fun (c3 : Checker) => c3.t)
     else
       do
       let b1 ← if a = 3#u32
@@ -291,9 +287,7 @@ def Checker.telescope01generateclosure_loop.body
     | Node.Other =>
       ok (Sum.inl (self, next,
         fun (c : generate.closure) => let (_, _, b) := c
-                                      b,
-        fun (c : Checker) => let ⟨ t, _ ⟩ := c
-                             t))
+                                      b, fun (c : Checker) => c.t))
   let s1 : _root_.Sum ((core.result.Result ((alloc.vec.Vec Std.U32) × Std.U32)
     Unit) × Checker × generate.closure × (generate.closure → Bool) × (Checker →
     Terms)) (_root_.Sum ((Checker → Terms) × (generate.closure → Bool) ×
@@ -361,9 +355,7 @@ def Checker.telescope01generateclosure
   := do
   let (i, v, _) := next
   let (r, t, v1, back, back1) ←
-    Checker.telescope01generateclosure_loop
-      (fun (c : Checker) => let ⟨ t1, _ ⟩ := c
-                            t1)
+    Checker.telescope01generateclosure_loop (fun (c : Checker) => c.t)
       (fun (c : generate.closure) => let (_, _, b) := c
                                      b) self e next (alloc.vec.Vec.new Std.U32)
       e i v

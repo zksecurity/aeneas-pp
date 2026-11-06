@@ -75,11 +75,8 @@ def Engine.eval_nonzero_loop.body
   | Sum.inl p =>
     let (i, self2) := p
     ok (done (core.result.Result.Ok i, self2,
-      fun (e1 : Engine) =>
-        let i1 := e1.t
-        let i2 := e1.s
-        let e2 := eval_back { t := i1, s := i2 }
-        back e2))
+      fun e1 => let e2 := eval_back e1
+                back e2))
   | Sum.inr s1 =>
     match s1 with
     | Sum.inl t => let (f, e1, i) := t
@@ -108,10 +105,7 @@ def Engine.eval_nonzero
   Result ((core.result.Result Std.U32 Unit) × Engine × (Engine → Engine))
   := do
   let (r, e1, back) ←
-    Engine.eval_nonzero_loop
-      (fun (e2 : Engine) => let i := e2.t
-                            let i1 := e2.s
-                            (i, i1)) self e
+    Engine.eval_nonzero_loop (fun (e2 : Engine) => (e2.t, e2.s)) self e
   let back'a :=
     fun self1 => let (i, i1) := back self1
                  ({ t := i, s := i1 } : Engine)
@@ -156,11 +150,8 @@ def Engine.run_loop.body
   | Sum.inl p =>
     let (i2, e) := p
     ok (done (core.result.Result.Ok i2, e,
-      fun (e1 : Engine) =>
-        let i3 := e1.t
-        let i4 := e1.s
-        let e2 := eval_back { t := i3, s := i4 }
-        back e2.t e2.s))
+      fun e1 => let e2 := eval_back e1
+                back e2.t e2.s))
   | Sum.inr s1 =>
     match s1 with
     | Sum.inl t => let (f, i2, i3, i4) := t

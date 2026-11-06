@@ -123,8 +123,7 @@ def steps_loop0.body
         Std.U32 × Std.U32 × Std.U32 × Std.U32 × Std.U32 × (core.result.Result
         Std.U32 Unit) × Std.U32 × (Engine → Std.U32)) ←
         steps_loop0_loop0 { start := 0#u32, «end» := i }
-          (fun (e1 : Engine) => let ⟨ i2, _ ⟩ := e1
-                                i2) e k i x i1 e.bound
+          (fun (e1 : Engine) => e1.total) e k i x i1 e.bound
       match s1 with
       | Sum.inl t =>
         let (i2, i3, _, _, x1, _, _, _, _, back1) := t
@@ -200,8 +199,7 @@ def steps
   Result ((core.result.Result Std.U32 Unit) × Engine × (Engine → Engine))
   := do
   let (r, i1, i2, back) ←
-    steps_loop0 (fun (e1 : Engine) => let ⟨ i3, _ ⟩ := e1
-                                      i3) e k i 0#u32
+    steps_loop0 (fun (e1 : Engine) => e1.total) e k i 0#u32
       { start := 0#u32, «end» := k } e.bound
   let back1 :=
     fun (e1 : Engine) => let i3 := back e1.total
