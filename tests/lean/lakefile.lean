@@ -95,6 +95,7 @@ package «tests» {}
 @[default_target] lean_lib IteratorsArray
 @[default_target] lean_lib IteratorsScalar
 @[default_target] lean_lib JoinCallAbsParents
+@[default_target] lean_lib JoinCallEndedOuterBorrow
 @[default_target] lean_lib JoinCommonCalls
 @[default_target] lean_lib JoinCommonDummies
 @[default_target] lean_lib JoinDeadLocals

@@ -464,9 +464,18 @@ let eoutput_to_pat (ctx : bs_ctx) (fvar_to_texpr : texpr V.AbsFVarId.Map.t ref)
         abs_fvar_id_to_tpat ctx fvar_to_texpr rids ~filter afid output.ty
     | V.EBorrow bc -> (
         match bc with
-        | V.EIgnoredMutBorrow _
-        | V.EEndedMutBorrow _
-        | V.EEndedIgnoredMutBorrow _ -> [%internal_error] span
+        | V.EIgnoredMutBorrow _ | V.EEndedMutBorrow _ -> [%internal_error] span
+        | V.EEndedIgnoredMutBorrow { child; given_back; given_back_meta = _ } ->
+            (* The values given back to the inner borrows are inputs of the
+               backward function (see
+               {!InterpAbs.abs_cont_destructure_input_output_levels}): what
+               remains of the outer borrow gives back nothing, and its child is
+               the output (see {!InterpAbs.bind_outputs_from_output_input}) *)
+            [%cassert] span
+              (ValuesUtils.is_eignored_adt given_back
+              || not (TypesUtils.ty_has_mut_borrows type_infos given_back.ty))
+              "Unimplemented";
+            to_pat ~filter current_level ctx child
         | V.EMutBorrow (pm, bid, child) ->
             [%sanity_check] span (pm = PNone);
             [%sanity_check] span (ValuesUtils.is_eignored child.value);
