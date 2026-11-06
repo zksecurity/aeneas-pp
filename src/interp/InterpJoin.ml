@@ -2337,10 +2337,13 @@ and match_ctx_with_target_aux (config : config) (span : Meta.span)
     "- tgt_ctx after simplify_ended_shared_loans:\n"
     ^ eval_ctx_to_string tgt_ctx];
 
-  (* Reduce the context - TODO: generalize the join so that we don't need to do this *)
+  (* Reduce the context - TODO: generalize the join so that we don't need to do this.
+     The join keeps the dummy values common to all the joined contexts (see
+     {!join_ctxs}): those stay dummy values in the target as well. *)
   let tgt_ctx =
     reduce_ctx config span ~with_abs_conts:true fresh_abs_kind preserved_aids
-      fixed_dids tgt_ctx
+      (DummyVarId.Set.union fixed_dids (ctx_get_dummy_var_ids src_ctx))
+      tgt_ctx
   in
   [%ltrace "- tgt_ctx after reduce_ctx:\n" ^ eval_ctx_to_string tgt_ctx];
 
